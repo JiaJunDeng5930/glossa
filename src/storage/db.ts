@@ -1,0 +1,133 @@
+import type { AnkiCard, GlossaSettings, GlossItem, VocabularyRecord } from "../shared/types";
+import { DEFAULT_SETTINGS } from "../shared/types";
+
+export interface KeyValueStore<T> {
+  get(key: string): Promise<T | undefined>;
+  put(key: string, value: T): Promise<void>;
+}
+
+export interface LexiconStore {
+  get(key: string): Promise<VocabularyRecord | undefined>;
+  put(record: VocabularyRecord): Promise<void>;
+}
+
+export interface SettingsStore {
+  get(): Promise<GlossaSettings>;
+  set(value: GlossaSettings): Promise<void>;
+}
+
+export interface ExtensionStorage {
+  settings: SettingsStore;
+  lexicon: LexiconStore;
+  glossCache: KeyValueStore<GlossItem>;
+  cardCache: KeyValueStore<AnkiCard & { noteId?: number }>;
+}
+
+type StoreName = "lexicon" | "glossCache" | "cardCache";
+
+export function createExtensionStorage(): ExtensionStorage {
+  return {
+    settings: createChromeSettingsStore(),
+    lexicon: createLexiconStore(),
+    glossCache: createIndexedStore<GlossItem>("glossCache"),
+    cardCache: createIndexedStore<AnkiCard & { noteId?: number }>("cardCache")
+  };
+}
+
+function createChromeSettingsStore(): SettingsStore {
+  return {
+    async get() {
+      const runtimeSettings = await readChromeLocal<Partial<GlossaSettings>>("settings");
+      return mergeSettings(runtimeSettings);
+    },
+    async set(value) {
+      await writeChromeLocal("settings", value);
+    }
+  };
+}
+
+function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...value,
+    ai: { ...DEFAULT_SETTINGS.ai, ...value?.ai },
+    anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
+  };
+}
+
+function readChromeLocal<T>(key: string): Promise<T | undefined> {
+  if (!globalThis.chrome?.storage?.local) {
+    return Promise.resolve(undefined);
+  }
+  return new Promise((resolve) => {
+    chrome.storage.local.get(key, (result) => resolve(result[key] as T | undefined));
+  });
+}
+
+function writeChromeLocal<T>(key: string, value: T): Promise<void> {
+  if (!globalThis.chrome?.storage?.local) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ [key]: value }, () => resolve());
+  });
+}
+
+function createIndexedStore<T>(name: StoreName): KeyValueStore<T> {
+  return {
+    async get(key) {
+      const db = await openDatabase();
+      return requestToPromise<T | undefined>(db.transaction(name, "readonly").objectStore(name).get(key));
+    },
+    async put(key, value) {
+      const db = await openDatabase();
+      const tx = db.transaction(name, "readwrite");
+      tx.objectStore(name).put(value, key);
+      await transactionDone(tx);
+    }
+  };
+}
+
+function createLexiconStore(): LexiconStore {
+  const store = createIndexedStore<VocabularyRecord>("lexicon");
+  return {
+    get: store.get,
+    put(record) {
+      return store.put(record.key, record);
+    }
+  };
+}
+
+let databasePromise: Promise<IDBDatabase> | undefined;
+
+function openDatabase(): Promise<IDBDatabase> {
+  databasePromise ??= new Promise((resolve, reject) => {
+    const request = indexedDB.open("glossa", 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      for (const store of ["lexicon", "glossCache", "cardCache"] satisfies StoreName[]) {
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store);
+        }
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  return databasePromise;
+}
+
+function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function transactionDone(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}

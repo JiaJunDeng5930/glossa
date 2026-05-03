@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Glossa Options</title>
+    <link rel="stylesheet" href="../assets/options.css">
+  </head>
+  <body>
+    <main>
+      <h1>Glossa</h1>
+      <form id="settings-form">
+        <label>
+          Target language
+          <input name="targetLang" autocomplete="off">
+        </label>
+        <label>
+          Selection shortcut key
+          <input name="shortcutKey" autocomplete="off">
+        </label>
+        <label>
+          Learning window days
+          <input name="learningWindowDays" type="number" min="1" step="1">
+        </label>
+        <label>
+          AI provider
+          <select name="provider">
+            <option value="openai-responses">OpenAI Responses API</option>
+            <option value="glossa-backend">Glossa backend</option>
+          </select>
+        </label>
+        <label>
+          AI endpoint
+          <input name="aiEndpoint" autocomplete="off">
+        </label>
+        <label>
+          AI API key
+          <input name="apiKey" type="password" autocomplete="off">
+        </label>
+        <label>
+          Model
+          <input name="modelVersion" autocomplete="off">
+        </label>
+        <label>
+          AnkiConnect endpoint
+          <input name="ankiEndpoint" autocomplete="off">
+        </label>
+        <label>
+          Anki deck
+          <input name="ankiDeck" autocomplete="off">
+        </label>
+        <div class="actions">
+          <button type="submit">Save</button>
+          <button id="test-ai" type="button">Test AI</button>
+          <button id="test-anki" type="button">Test Anki</button>
+        </div>
+      </form>
+      <output id="status" role="status"></output>
+    </main>
+    <script type="module" src="../options.js"></script>
+  </body>
+</html>

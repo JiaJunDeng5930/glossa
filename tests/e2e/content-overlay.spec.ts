@@ -1,0 +1,52 @@
+import { expect, test } from "@playwright/test";
+import { resolve } from "node:path";
+
+test("content bundle renders inline glosses and captures shortcut word selection", async ({ page }) => {
+  const messages: unknown[] = [];
+  await page.setContent(`
+    <main>
+      <p>Press the submit button to finish.</p>
+      <button id="save">Save draft</button>
+      <script>
+        window.buttonClicks = 0;
+        document.querySelector("#save").addEventListener("click", () => { window.buttonClicks += 1; });
+      </script>
+    </main>
+  `);
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-default-known.txt",
+        sendMessage(message: { type: string }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          const response = message.type === "settings.get"
+            ? { type: "settings.response", settings: { shortcutKey: "Alt" } }
+            : message.type === "gloss.request"
+              ? { type: "gloss.response", items: [{ tokenId: "t1", targetText: "submit", display: "提交" }] }
+              : { type: "word.clicked.ok", noteId: 7 };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await expect(page.locator("#glossa-overlay")).toHaveCount(1);
+  await page.waitForFunction(() => {
+    const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+    return sent.some((message) => message.type === "gloss.request");
+  });
+  await page.keyboard.down("Alt");
+  await page.locator("#save").click();
+  await page.keyboard.up("Alt");
+
+  expect(await page.evaluate(() => Reflect.get(window, "buttonClicks"))).toBe(0);
+  messages.push(...await page.evaluate(() => Reflect.get(window, "__glossaMessages") as unknown[]));
+  expect(messages).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: "gloss.request" }),
+    expect.objectContaining({ type: "word.clicked" })
+  ]));
+});

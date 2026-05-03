@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Glossa",
+  "version": "0.1.0",
+  "description": "Inline contextual glosses for unfamiliar English words.",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options/options.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/default-known.txt", "assets/options.css"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "Glossa"
+  }
+}
