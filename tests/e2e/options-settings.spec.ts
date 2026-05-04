@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 
 test("options page captures shortcuts, previews style changes and saves prompts", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
-  await page.setContent(html.replace("<script type=\"module\" src=\"../options.js\"></script>", ""));
+  await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "").replace("<script type=\"module\" src=\"../options.js\"></script>", ""));
+  await page.addStyleTag({ path: resolve("dist/assets/options.css") });
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
     Reflect.set(window, "__glossaStore", store);
@@ -49,15 +50,28 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("color", "rgb(255, 85, 0)");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("font-size", "18px");
-  await expect(page.locator("#test-ai")).toHaveText("");
-  await expect(page.locator("#test-anki")).toHaveText("");
+  await expect(page.locator("#test-ai")).toHaveText("Test AI");
+  await expect(page.locator("#test-anki")).toHaveText("Test Anki");
+  const buttonPositions = await page.evaluate(() => {
+    const reasoning = document.querySelector("select[name=reasoningEffort]")!.getBoundingClientRect();
+    const testAi = document.querySelector("#test-ai")!.getBoundingClientRect();
+    const ankiDeck = document.querySelector("input[name=ankiDeck]")!.getBoundingClientRect();
+    const testAnki = document.querySelector("#test-anki")!.getBoundingClientRect();
+    return {
+      aiBelowReasoning: testAi.top >= reasoning.bottom,
+      ankiBelowDeck: testAnki.top >= ankiDeck.bottom
+    };
+  });
+  expect(buttonPositions).toEqual({ aiBelowReasoning: true, ankiBelowDeck: true });
 
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
+  await expect(page.locator("#test-ai")).toHaveText("AI connected");
   await expect(page.locator("#status")).toHaveText("");
 
   await page.locator("#test-anki").click();
   await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#test-anki")).toHaveText("Test Anki");
   await expect(page.locator("#status")).toContainText("AnkiConnect rejected the request");
 
   await page.locator("button[type=submit]").click();

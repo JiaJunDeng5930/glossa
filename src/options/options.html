@@ -8,22 +8,30 @@
   </head>
   <body>
     <main>
-      <h1>Glossa</h1>
+      <header class="page-hero">
+        <p>Glossa</p>
+        <h1>Reading settings</h1>
+      </header>
       <form id="settings-form">
-        <label>
-          Selection shortcut key
-          <input name="shortcutKey" type="hidden">
-          <button id="shortcut-capture" class="secondary" type="button"></button>
-        </label>
-        <label>
-          Learning window days
-          <input name="learningWindowDays" type="number" min="1" step="1">
-        </label>
-        <label>
-          Known word filter
-          <select name="knownWordList"></select>
-        </label>
-        <section aria-labelledby="appearance-heading">
+        <section class="settings-card" aria-labelledby="reading-heading">
+          <h2 id="reading-heading">Reading</h2>
+          <div class="field-grid">
+            <label>
+              Selection shortcut key
+              <input name="shortcutKey" type="hidden">
+              <button id="shortcut-capture" class="secondary" type="button"></button>
+            </label>
+            <label>
+              Learning window days
+              <input name="learningWindowDays" type="number" min="1" step="1">
+            </label>
+            <label>
+              Known word filter
+              <select name="knownWordList"></select>
+            </label>
+          </div>
+        </section>
+        <section class="settings-card" aria-labelledby="appearance-heading">
           <h2 id="appearance-heading">Gloss style</h2>
           <div class="style-grid">
             <label>
@@ -66,80 +74,69 @@
             ideas quickly.
           </div>
         </section>
-        <label>
-          AI provider
-          <select name="provider">
-            <option value="openai-responses">OpenAI Responses API</option>
-            <option value="openai-chat-completions">OpenAI Chat Completions API</option>
-            <option value="openai-completions">OpenAI Completions API</option>
-            <option value="glossa-backend">Glossa backend</option>
-          </select>
-        </label>
-        <label>
-          AI endpoint
-          <input name="aiEndpoint" autocomplete="off">
-        </label>
-        <label>
-          AI API key
-          <input name="apiKey" type="password" autocomplete="off">
-        </label>
-        <label>
-          Model
-          <input name="modelVersion" autocomplete="off">
-        </label>
-        <label>
-          Reasoning effort
-          <select name="reasoningEffort">
-            <option value="none">None</option>
-            <option value="minimal">Minimal</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="xhigh">XHigh</option>
-          </select>
-        </label>
-        <label>
-          AnkiConnect endpoint
-          <input name="ankiEndpoint" autocomplete="off">
-        </label>
-        <label>
-          Anki deck
-          <input name="ankiDeck" autocomplete="off">
-        </label>
-        <label>
-          Gloss prompt
-          <textarea name="glossPrompt" rows="5"></textarea>
-        </label>
-        <label>
-          Anki card prompt
-          <textarea name="ankiPrompt" rows="5"></textarea>
-        </label>
+        <div class="settings-grid">
+          <section class="settings-card" aria-labelledby="ai-heading">
+            <h2 id="ai-heading">AI</h2>
+            <label>
+              AI provider
+              <select name="provider">
+                <option value="openai-responses">OpenAI Responses API</option>
+                <option value="openai-chat-completions">OpenAI Chat Completions API</option>
+                <option value="openai-completions">OpenAI Completions API</option>
+                <option value="glossa-backend">Glossa backend</option>
+              </select>
+            </label>
+            <label>
+              AI endpoint
+              <input name="aiEndpoint" autocomplete="off">
+            </label>
+            <label>
+              AI API key
+              <input name="apiKey" type="password" autocomplete="off">
+            </label>
+            <label>
+              Model
+              <input name="modelVersion" autocomplete="off">
+            </label>
+            <label>
+              Reasoning effort
+              <select name="reasoningEffort">
+                <option value="none">None</option>
+                <option value="minimal">Minimal</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="xhigh">XHigh</option>
+              </select>
+            </label>
+            <button id="test-ai" class="test-button" type="button" data-state="idle">Test AI</button>
+          </section>
+          <section class="settings-card" aria-labelledby="anki-heading">
+            <h2 id="anki-heading">Anki</h2>
+            <label>
+              AnkiConnect endpoint
+              <input name="ankiEndpoint" autocomplete="off">
+            </label>
+            <label>
+              Anki deck
+              <input name="ankiDeck" autocomplete="off">
+            </label>
+            <button id="test-anki" class="test-button" type="button" data-state="idle">Test Anki</button>
+          </section>
+        </div>
+        <section class="settings-card" aria-labelledby="prompt-heading">
+          <h2 id="prompt-heading">Prompts</h2>
+          <label>
+            Gloss prompt
+            <textarea name="glossPrompt" rows="5"></textarea>
+          </label>
+          <label>
+            Anki card prompt
+            <textarea name="ankiPrompt" rows="5"></textarea>
+          </label>
+        </section>
         <div class="actions">
-          <button type="submit">Save</button>
-          <button id="test-ai" class="test-button" type="button" aria-label="Test AI connection" title="Test AI connection" data-state="idle">
-            <svg class="icon icon-idle" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>
-            </svg>
-            <span class="spinner" aria-hidden="true"></span>
-            <svg class="icon icon-success" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M20 6 9 17l-5-5"/>
-            </svg>
-            <svg class="icon icon-error" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
-            </svg>
-          </button>
-          <button id="test-anki" class="test-button" type="button" aria-label="Test Anki connection" title="Test Anki connection" data-state="idle">
-            <svg class="icon icon-idle" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M6 5h12v14H6zM9 8h6M9 12h6M9 16h4"/>
-            </svg>
-            <span class="spinner" aria-hidden="true"></span>
-            <svg class="icon icon-success" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M20 6 9 17l-5-5"/>
-            </svg>
-            <svg class="icon icon-error" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
-            </svg>
-          </button>
+          <button class="primary-action" type="submit">Save</button>
         </div>
       </form>
       <output id="status" role="status"></output>

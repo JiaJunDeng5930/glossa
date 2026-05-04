@@ -19,6 +19,8 @@ Settings contain `appearance` for inline label colors, opacity, font family, and
 
 Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip.
 
+The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no shadows, and a single blue Save action. Connection test buttons are text buttons placed directly below Reasoning effort and Anki deck.
+
 ## Commands
 
 - `npm run typecheck`: TypeScript contract check.

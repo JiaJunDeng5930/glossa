@@ -22,11 +22,21 @@ form.addEventListener("submit", (event) => {
 });
 
 testAiButton.addEventListener("click", () => {
-  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "AI");
+  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "AI", {
+    idle: "Test AI",
+    loading: "Testing AI",
+    success: "AI connected",
+    error: "Test AI"
+  });
 });
 
 testAnkiButton.addEventListener("click", () => {
-  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "AnkiConnect");
+  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "AnkiConnect", {
+    idle: "Test Anki",
+    loading: "Testing Anki",
+    success: "Anki connected",
+    error: "Test Anki"
+  });
 });
 
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
@@ -213,22 +223,35 @@ function isKnownWordList(value: unknown): value is KnownWordListId {
   return typeof value === "string" && KNOWN_WORD_LISTS.some((item) => item.id === value);
 }
 
-async function runConnectionTest(button: HTMLButtonElement, run: () => Promise<void>, serviceName: string): Promise<void> {
+interface TestButtonLabels {
+  idle: string;
+  loading: string;
+  success: string;
+  error: string;
+}
+
+async function runConnectionTest(
+  button: HTMLButtonElement,
+  run: () => Promise<void>,
+  serviceName: string,
+  labels: TestButtonLabels
+): Promise<void> {
   setStatus("");
-  setTestState(button, "loading");
+  setTestState(button, "loading", labels.loading);
   try {
     await run();
-    setTestState(button, "success");
+    setTestState(button, "success", labels.success);
   } catch (error) {
-    setTestState(button, "error");
+    setTestState(button, "error", labels.error);
     setStatus(friendlyConnectionError(serviceName, error));
   }
 }
 
 type TestState = "idle" | "loading" | "success" | "error";
 
-function setTestState(button: HTMLButtonElement, state: TestState): void {
+function setTestState(button: HTMLButtonElement, state: TestState, label: string): void {
   button.dataset.state = state;
+  button.textContent = label;
   button.disabled = state === "loading";
 }
 
