@@ -150,7 +150,7 @@ test("content bundle scans text added after boot", async ({ page }) => {
 });
 
 test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
-  await page.setContent("<main><p id=\"target\">Obscure archive terms appear here.</p></main>");
+  await page.setContent("<main><p id=\"target\">Obscure archive archive terms appear here.</p></main>");
   await page.evaluate(() => {
     const sent: unknown[] = [];
     Reflect.set(window, "__glossaMessages", sent);
@@ -209,12 +209,24 @@ test("content bundle lays out inline glosses without label or source overlap", a
   await page.waitForFunction(() => document.querySelectorAll("[data-glossa-token]").length === 2);
   const geometry = await page.evaluate(() => {
     const wrappers = Array.from(document.querySelectorAll<HTMLElement>("[data-glossa-token]"));
+    const paragraph = document.querySelector("#target")!;
+    const plainText = Array.from(paragraph.childNodes)
+      .find((node): node is Text => node.nodeType === Node.TEXT_NODE && (node.nodeValue ?? "").includes("archive terms"));
+    const plainRange = document.createRange();
+    if (!plainText) {
+      throw new Error("expected plain text after rendered gloss wrappers");
+    }
+    plainRange.setStart(plainText, 1);
+    plainRange.setEnd(plainText, 8);
+    const plainArchive = plainRange.getBoundingClientRect();
+    plainRange.detach();
     return wrappers.map((wrapper) => {
       const label = wrapper.querySelector<HTMLElement>("[data-glossa-token-label]")!.getBoundingClientRect();
       const surface = wrapper.querySelector<HTMLElement>("[data-glossa-token-surface]")!.getBoundingClientRect();
       return {
         label: rect(label),
-        surface: rect(surface)
+        surface: rect(surface),
+        plainArchive: rect(plainArchive)
       };
     });
 
@@ -238,6 +250,7 @@ test("content bundle lays out inline glosses without label or source overlap", a
     expect(Math.abs(item.label.centerX - item.surface.centerX)).toBeLessThan(0.5);
     expect(item.label.bottom).toBeLessThanOrEqual(item.surface.top);
   }
+  expect(Math.abs(second.surface.top - second.plainArchive.top)).toBeLessThan(1);
   expect(overlaps(first.label, second.label)).toBe(false);
   expect(overlaps(first.surface, second.surface)).toBe(false);
 });

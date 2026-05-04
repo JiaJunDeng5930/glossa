@@ -74,18 +74,22 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     inlineStyle.setAttribute("translate", "no");
     inlineStyle.textContent = `
       [data-glossa-token] {
-        display: inline-flex;
-        flex-direction: column;
-        align-items: center;
+        display: inline-block;
+        position: relative;
+        min-width: max-content;
+        padding-block-start: calc(var(--glossa-font-size) * 1.25 + 4px);
         vertical-align: baseline;
         max-width: max-content;
         white-space: nowrap;
         line-height: inherit;
         margin-inline: 1px;
+        text-align: center;
       }
       [data-glossa-token-label] {
         display: block;
-        flex: 0 0 auto;
+        position: absolute;
+        top: 0;
+        left: 50%;
         padding: 1px 4px;
         border-radius: 4px;
         background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
@@ -96,11 +100,22 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         white-space: nowrap;
         box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
         pointer-events: none;
+        transform: translateX(-50%);
       }
       [data-glossa-token-surface] {
-        display: block;
-        flex: 0 0 auto;
+        display: inline;
         line-height: inherit;
+      }
+      [data-glossa-token-width] {
+        display: block;
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        padding-inline: 4px;
+        font-family: var(--glossa-font-family);
+        font-size: var(--glossa-font-size);
+        line-height: 1.25;
+        white-space: nowrap;
       }
     `;
     if (root instanceof Document) {
@@ -222,13 +237,19 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     label.setAttribute("translate", "no");
     label.textContent = candidate.item.display;
 
+    const width = doc.createElement("span");
+    width.dataset.glossaOwned = "1";
+    width.dataset.glossaTokenWidth = candidate.item.tokenId;
+    width.setAttribute("translate", "no");
+    width.textContent = candidate.item.display;
+
     const surface = doc.createElement("span");
     surface.dataset.glossaOwned = "1";
     surface.dataset.glossaTokenSurface = candidate.item.tokenId;
     surface.setAttribute("translate", "no");
     surface.textContent = candidate.token.sourceText;
 
-    wrapper.append(label, surface);
+    wrapper.append(width, label, surface);
     return wrapper;
   }
 }
