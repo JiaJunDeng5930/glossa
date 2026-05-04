@@ -72,7 +72,7 @@ async function handleGlossRequest(
       });
       const cached = await deps.storage.glossCache.get(cacheKey);
       if (cached) {
-        items.push(cached);
+        items.push({ ...cached, tokenId: token.id, targetText: token.surface });
         await persistShownRecord(deps.storage, token, now);
       } else {
         misses.push(token);

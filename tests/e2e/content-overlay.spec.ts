@@ -66,3 +66,38 @@ test("content bundle renders inline glosses and captures shortcut word selection
     expect.objectContaining({ type: "word.clicked" })
   ]));
 });
+
+test("content bundle scans text added after boot", async ({ page }) => {
+  await page.setContent("<main id=\"app\"></main>");
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        sendMessage(message: { type: string; sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          const dynamicToken = message.sentences
+            ?.flatMap((sentence) => sentence.tokens)
+            .find((token) => token.surface.toLowerCase() === "dynamic");
+          const response = message.type === "settings.get"
+            ? { type: "settings.response", settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+            : message.type === "gloss.request" && dynamicToken
+              ? { type: "gloss.response", items: [{ tokenId: dynamicToken.id, targetText: dynamicToken.surface, display: "动态" }] }
+              : { type: "gloss.response", items: [] };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.locator("#app").evaluate((element) => {
+    element.textContent = "A dynamic paragraph appears after boot.";
+  });
+
+  await page.waitForFunction(() => {
+    const host = document.querySelector("#glossa-overlay");
+    return host?.shadowRoot?.querySelector(".label")?.textContent === "动态";
+  });
+});
