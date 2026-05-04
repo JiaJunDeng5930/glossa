@@ -22,7 +22,19 @@ test("content bundle renders inline glosses and captures shortcut word selection
         sendMessage(message: { type: string }, callback?: (response: unknown) => void) {
           sent.push(message);
           const response = message.type === "settings.get"
-            ? { type: "settings.response", settings: { shortcutKey: "Alt" } }
+            ? {
+              type: "settings.response",
+              settings: {
+                shortcutKey: "Alt",
+                appearance: {
+                  textColor: "#ff5500",
+                  backgroundColor: "#113355",
+                  backgroundOpacity: 0.65,
+                  fontFamily: "Georgia, Times New Roman, serif",
+                  fontSize: 18
+                }
+              }
+            }
             : message.type === "gloss.request"
               ? { type: "gloss.response", items: [{ tokenId: "t1", targetText: "submit", display: "提交" }] }
               : { type: "word.clicked.ok", noteId: 7 };
@@ -35,6 +47,9 @@ test("content bundle renders inline glosses and captures shortcut word selection
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await expect(page.locator("#glossa-overlay")).toHaveCount(1);
+  await expect(page.locator("#glossa-overlay")).toHaveCSS("--glossa-text-color", "#ff5500");
+  await expect(page.locator("#glossa-overlay")).toHaveCSS("--glossa-bg-alpha", "65%");
+  await expect(page.locator("#glossa-overlay")).toHaveCSS("--glossa-font-size", "18px");
   await page.waitForFunction(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
     return sent.some((message) => message.type === "gloss.request");

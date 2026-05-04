@@ -9,10 +9,13 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 - `src/core/*`: vocabulary state machine, lemma normalization, known-word filtering, and cache key construction.
 - `src/storage/db.ts`: minimal wrapper for `chrome.storage.local` settings and IndexedDB-backed lexicon/cache stores.
 - `src/options/*`: settings UI for target language, shortcut, AI endpoint, OpenAI Responses API key, and AnkiConnect endpoint.
+- `src/shared/shortcut.ts`: shared shortcut capture and matching rules for options and content selection mode.
 
 ## State Model
 
 Vocabulary records use one table keyed by `lang:lemma`. `candidate` records become `known` after a displayed gloss. A clicked word becomes `learning_active`, receives an `expiresAt`, and stays eligible for display until expiry. Expired `learning_active` records transition to `known`. `ignored` records stay hidden.
+
+Settings contain `appearance` for inline label colors, opacity, font family, and font size, plus `prompts.gloss` and `prompts.ankiCard`. Prompt text is included in cache versioning through a hash so prompt edits create fresh gloss/card cache entries.
 
 ## Commands
 

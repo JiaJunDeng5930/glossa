@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createBackgroundMessageHandler } from "../../src/background/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
-import type { GlossRequestMessage, UserWordClickMessage } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, type GlossRequestMessage, type UserWordClickMessage } from "../../src/shared/types";
 
 describe("background message handler", () => {
   it("serves gloss requests from state, cache and AI backend", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
+      ...DEFAULT_SETTINGS,
       targetLang: "zh-CN",
       shortcutKey: "Alt",
       learningWindowDays: 3,
@@ -56,12 +57,18 @@ describe("background message handler", () => {
     }
     expect(response.items).toEqual([{ tokenId: "t2", targetText: "submit", display: "提交", phrase: "submit button" }]);
     expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(ai.gloss).toHaveBeenCalledWith(expect.objectContaining({
+      settings: expect.objectContaining({
+        prompts: expect.objectContaining({ gloss: DEFAULT_SETTINGS.prompts.gloss })
+      })
+    }));
     expect(await storage.lexicon.get("en:submit")).toMatchObject({ state: "known", shownCount: 1 });
   });
 
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
+      ...DEFAULT_SETTINGS,
       targetLang: "zh-CN",
       shortcutKey: "Alt",
       learningWindowDays: 3,

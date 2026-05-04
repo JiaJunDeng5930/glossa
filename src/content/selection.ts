@@ -1,4 +1,5 @@
 import { normalizeLemma } from "../core/state";
+import { isShortcutRelease, matchesShortcut } from "../shared/shortcut";
 import type { TokenCandidate } from "../shared/types";
 
 export interface WordSelection {
@@ -24,13 +25,13 @@ export function createSelectionController(options: SelectionControllerOptions): 
   const doc = options.document;
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === options.shortcutKey) {
+    if (matchesShortcut(event, options.shortcutKey)) {
       active = true;
       doc.documentElement.dataset.glossaSelecting = "true";
     }
   };
   const onKeyUp = (event: KeyboardEvent) => {
-    if (event.key === options.shortcutKey) {
+    if (active && isShortcutRelease(event, options.shortcutKey)) {
       active = false;
       delete doc.documentElement.dataset.glossaSelecting;
     }

@@ -1,4 +1,4 @@
-import type { GlossItem } from "../shared/types";
+import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossItem } from "../shared/types";
 import type { ScannedToken } from "./scanner";
 import { rectForToken } from "./range";
 
@@ -7,9 +7,10 @@ export interface GlossOverlay {
   clear(): void;
 }
 
-export function createGlossOverlay(doc: Document): GlossOverlay {
+export function createGlossOverlay(doc: Document, appearance: AppearanceSettings = DEFAULT_SETTINGS.appearance): GlossOverlay {
   const host = doc.createElement("div");
   host.id = "glossa-overlay";
+  applyAppearance(host, appearance);
   const shadow = host.attachShadow({ mode: "open" });
   const style = doc.createElement("style");
   style.textContent = `
@@ -19,16 +20,16 @@ export function createGlossOverlay(doc: Document): GlossOverlay {
       inset: 0;
       pointer-events: none;
       z-index: 2147483647;
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: var(--glossa-font-family);
     }
     .label {
       position: fixed;
       transform: translateY(-100%);
       padding: 1px 4px;
       border-radius: 4px;
-      background: rgba(15, 23, 42, 0.9);
-      color: white;
-      font-size: 11px;
+      background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
+      color: var(--glossa-text-color);
+      font-size: var(--glossa-font-size);
       line-height: 1.25;
       white-space: nowrap;
       box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
@@ -61,4 +62,12 @@ export function createGlossOverlay(doc: Document): GlossOverlay {
       layer.replaceChildren();
     }
   };
+}
+
+function applyAppearance(host: HTMLElement, appearance: AppearanceSettings): void {
+  host.style.setProperty("--glossa-text-color", appearance.textColor);
+  host.style.setProperty("--glossa-bg-color", appearance.backgroundColor);
+  host.style.setProperty("--glossa-bg-alpha", `${Math.round(appearance.backgroundOpacity * 100)}%`);
+  host.style.setProperty("--glossa-font-family", appearance.fontFamily);
+  host.style.setProperty("--glossa-font-size", `${appearance.fontSize}px`);
 }

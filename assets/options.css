@@ -21,6 +21,17 @@ form {
   gap: 14px;
 }
 
+section {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -29,6 +40,7 @@ label {
 
 input,
 select,
+textarea,
 button {
   box-sizing: border-box;
   min-height: 36px;
@@ -43,6 +55,46 @@ button {
   background: #111827;
   color: white;
   border-color: #111827;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+input[type="color"] {
+  padding: 4px;
+}
+
+.secondary {
+  justify-self: start;
+  min-width: 180px;
+  background: white;
+  color: #111827;
+}
+
+.style-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gloss-preview {
+  justify-self: start;
+  display: inline-grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+}
+
+.gloss-preview span {
+  font-size: 16px;
+  opacity: 0.72;
+}
+
+.gloss-preview strong {
+  font-size: inherit;
 }
 
 .actions {

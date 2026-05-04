@@ -31,6 +31,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         sentence: input.sentence,
         tokens: input.tokens,
         targetLang: input.settings.targetLang,
+        prompt: input.settings.prompts.gloss,
         promptVersion: input.settings.promptVersion,
         modelVersion: input.settings.modelVersion
       });
@@ -43,6 +44,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         sentence: input.sentence,
         token: input.token,
         targetLang: input.settings.targetLang,
+        prompt: input.settings.prompts.ankiCard,
         promptVersion: input.settings.promptVersion,
         modelVersion: input.settings.modelVersion
       });
@@ -53,6 +55,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
 async function callOpenAiResponsesForGloss(fetchImpl: typeof fetch, input: GlossBackendInput): Promise<GlossBackendOutput> {
   const output = await callOpenAiResponses(fetchImpl, input.settings, {
     task: "gloss",
+    prompt: input.settings.prompts.gloss,
     targetLang: input.settings.targetLang,
     sentence: input.sentence,
     tokens: input.tokens
@@ -63,6 +66,7 @@ async function callOpenAiResponsesForGloss(fetchImpl: typeof fetch, input: Gloss
 async function callOpenAiResponsesForCard(fetchImpl: typeof fetch, input: AnkiCardInput): Promise<AnkiCard> {
   const output = await callOpenAiResponses(fetchImpl, input.settings, {
     task: "anki-card",
+    prompt: input.settings.prompts.ankiCard,
     targetLang: input.settings.targetLang,
     sentence: input.sentence,
     token: input.token
@@ -76,7 +80,7 @@ async function callOpenAiResponses(fetchImpl: typeof fetch, settings: GlossaSett
     input: [
       {
         role: "system",
-        content: "Return strict JSON only. For gloss return {\"items\":[{\"tokenId\":\"...\",\"targetText\":\"...\",\"display\":\"...\",\"phrase\":\"...\"}]}. For anki-card return {\"front\":\"...\",\"back\":\"...\",\"examples\":[\"...\"]}."
+        content: "Return strict JSON only. For gloss return {\"items\":[{\"tokenId\":\"...\",\"targetText\":\"...\",\"display\":\"...\",\"phrase\":\"...\"}]}. For anki-card return {\"front\":\"...\",\"back\":\"...\",\"examples\":[\"...\"]}. Follow the prompt field in the user payload."
       },
       {
         role: "user",

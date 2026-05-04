@@ -1,7 +1,12 @@
+import { formatShortcutFromEvent } from "../shared/shortcut";
 import { DEFAULT_SETTINGS, type AiSettings, type GlossaSettings } from "../shared/types";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
+const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-capture")!;
+const glossPreview = document.querySelector<HTMLElement>("#gloss-preview")!;
+let capturingShortcut = false;
+let pendingShortcut = "";
 
 void loadSettings();
 
@@ -24,17 +29,59 @@ document.querySelector<HTMLButtonElement>("#test-anki")!.addEventListener("click
   );
 });
 
+shortcutCapture.addEventListener("click", () => {
+  capturingShortcut = true;
+  pendingShortcut = "";
+  shortcutCapture.textContent = "Press keys";
+  shortcutCapture.focus();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (!capturingShortcut) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  pendingShortcut = formatShortcutFromEvent(event);
+  shortcutCapture.textContent = pendingShortcut;
+  if (!isModifierKey(event.key)) {
+    finishShortcutCapture();
+  }
+});
+
+document.addEventListener("keyup", (event) => {
+  if (!capturingShortcut || !pendingShortcut) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  if (isModifierKey(event.key)) {
+    finishShortcutCapture();
+  }
+});
+
+form.addEventListener("input", () => updatePreview(readFormSettings()));
+
 async function loadSettings(): Promise<void> {
   const settings = await chromeLocalGet<GlossaSettings>("settings").then((value) => mergeSettings(value));
   setInput("targetLang", settings.targetLang);
   setInput("shortcutKey", settings.shortcutKey);
+  shortcutCapture.textContent = settings.shortcutKey;
   setInput("learningWindowDays", String(settings.learningWindowDays));
+  setInput("glossTextColor", settings.appearance.textColor);
+  setInput("glossBackgroundColor", settings.appearance.backgroundColor);
+  setInput("glossBackgroundOpacity", String(settings.appearance.backgroundOpacity));
+  setInput("glossFontFamily", settings.appearance.fontFamily);
+  setInput("glossFontSize", String(settings.appearance.fontSize));
   setInput("provider", settings.ai.provider);
   setInput("aiEndpoint", settings.ai.endpoint);
   setInput("apiKey", settings.ai.apiKey ?? "");
   setInput("modelVersion", settings.modelVersion);
   setInput("ankiEndpoint", settings.anki.endpoint);
   setInput("ankiDeck", settings.anki.deck);
+  setInput("glossPrompt", settings.prompts.gloss);
+  setInput("ankiPrompt", settings.prompts.ankiCard);
+  updatePreview(settings);
 }
 
 async function saveSettings(settings: GlossaSettings): Promise<void> {
@@ -50,6 +97,17 @@ function readFormSettings(): GlossaSettings {
     learningWindowDays: Math.max(1, Number(readInput("learningWindowDays")) || DEFAULT_SETTINGS.learningWindowDays),
     promptVersion: DEFAULT_SETTINGS.promptVersion,
     modelVersion: readInput("modelVersion").trim() || DEFAULT_SETTINGS.modelVersion,
+    appearance: {
+      textColor: readInput("glossTextColor") || DEFAULT_SETTINGS.appearance.textColor,
+      backgroundColor: readInput("glossBackgroundColor") || DEFAULT_SETTINGS.appearance.backgroundColor,
+      backgroundOpacity: clamp(Number(readInput("glossBackgroundOpacity")) || DEFAULT_SETTINGS.appearance.backgroundOpacity, 0.2, 1),
+      fontFamily: readInput("glossFontFamily") || DEFAULT_SETTINGS.appearance.fontFamily,
+      fontSize: Math.max(9, Math.min(24, Number(readInput("glossFontSize")) || DEFAULT_SETTINGS.appearance.fontSize))
+    },
+    prompts: {
+      gloss: readInput("glossPrompt").trim() || DEFAULT_SETTINGS.prompts.gloss,
+      ankiCard: readInput("ankiPrompt").trim() || DEFAULT_SETTINGS.prompts.ankiCard
+    },
     ai: {
       provider,
       endpoint: readInput("aiEndpoint").trim() || DEFAULT_SETTINGS.ai.endpoint,
@@ -96,6 +154,8 @@ function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettin
   return {
     ...DEFAULT_SETTINGS,
     ...value,
+    appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
+    prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
     ai: { ...DEFAULT_SETTINGS.ai, ...value?.ai },
     anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
   };
@@ -111,6 +171,38 @@ function setInput(name: string, value: string): void {
 
 function setStatus(value: string): void {
   statusOutput.value = value;
+}
+
+function finishShortcutCapture(): void {
+  setInput("shortcutKey", pendingShortcut);
+  shortcutCapture.textContent = pendingShortcut;
+  capturingShortcut = false;
+  pendingShortcut = "";
+  setStatus("Shortcut captured");
+}
+
+function isModifierKey(key: string): boolean {
+  return key === "Control" || key === "Alt" || key === "Shift" || key === "Meta";
+}
+
+function updatePreview(settings: GlossaSettings): void {
+  glossPreview.style.color = settings.appearance.textColor;
+  glossPreview.style.backgroundColor = hexToRgb(settings.appearance.backgroundColor, settings.appearance.backgroundOpacity);
+  glossPreview.style.fontFamily = settings.appearance.fontFamily;
+  glossPreview.style.fontSize = `${settings.appearance.fontSize}px`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hexToRgb(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "");
+  const value = Number.parseInt(normalized, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function chromeLocalGet<T>(key: string): Promise<T | undefined> {

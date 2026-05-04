@@ -1,4 +1,5 @@
 import { buildCardCacheKey, buildGlossCacheKey } from "../core/cache";
+import { hashText } from "../shared/hash";
 import {
   createCandidateRecord,
   markRecordClicked,
@@ -65,7 +66,7 @@ async function handleGlossRequest(
         sentence: sentence.text,
         targetText: token.surface,
         targetSpan: [token.startOffset, token.endOffset],
-        promptVersion: settings.promptVersion,
+        promptVersion: await promptCacheVersion(settings.promptVersion, settings.prompts.gloss),
         modelVersion: settings.modelVersion
       });
       const cached = await deps.storage.glossCache.get(cacheKey);
@@ -89,7 +90,7 @@ async function handleGlossRequest(
           sentence: sentence.text,
           targetText: token.surface,
           targetSpan: [token.startOffset, token.endOffset],
-          promptVersion: settings.promptVersion,
+          promptVersion: await promptCacheVersion(settings.promptVersion, settings.prompts.gloss),
           modelVersion: settings.modelVersion
         });
         await deps.storage.glossCache.put(cacheKey, item);
@@ -118,7 +119,7 @@ async function handleWordClicked(
     lang: "en",
     lemma: message.token.lemma,
     targetLang: settings.targetLang,
-    promptVersion: settings.promptVersion
+    promptVersion: await promptCacheVersion(settings.promptVersion, settings.prompts.ankiCard)
   });
   const cachedCard = await deps.storage.cardCache.get(cardKey);
   const card = cachedCard ?? await deps.ai.ankiCard({ settings, sentence: message.sentence, token: message.token });
@@ -127,6 +128,10 @@ async function handleWordClicked(
   await deps.storage.cardCache.put(cardKey, { ...card, ...(noteId === undefined ? {} : { noteId }) });
   await deps.storage.lexicon.put({ ...clicked, ankiNoteIds });
   return noteId === undefined ? { type: "word.clicked.ok" } : { type: "word.clicked.ok", noteId };
+}
+
+async function promptCacheVersion(promptVersion: string, prompt: string): Promise<string> {
+  return `${promptVersion}:${await hashText(prompt)}`;
 }
 
 async function currentRecord(storage: ExtensionStorage, token: TokenCandidate, now: number): Promise<VocabularyRecord | undefined> {

@@ -26,4 +26,25 @@ describe("selection controller", () => {
 
     controller.detach();
   });
+
+  it("supports captured shortcut combinations", () => {
+    document.body.innerHTML = `<button id="save">Save draft</button>`;
+    const button = document.querySelector<HTMLButtonElement>("#save")!;
+    const onWordSelected = vi.fn();
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Ctrl+Shift+K",
+      onWordSelected
+    });
+    controller.attach();
+
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, shiftKey: true, bubbles: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    button.dispatchEvent(new KeyboardEvent("keyup", { key: "k", bubbles: true }));
+
+    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ surface: "Save" }));
+
+    controller.detach();
+  });
 });

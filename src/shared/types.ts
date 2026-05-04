@@ -87,12 +87,27 @@ export interface AnkiSettings {
   deck: string;
 }
 
+export interface AppearanceSettings {
+  textColor: string;
+  backgroundColor: string;
+  backgroundOpacity: number;
+  fontFamily: string;
+  fontSize: number;
+}
+
+export interface PromptSettings {
+  gloss: string;
+  ankiCard: string;
+}
+
 export interface GlossaSettings {
   targetLang: string;
   shortcutKey: string;
   learningWindowDays: number;
   promptVersion: string;
   modelVersion: string;
+  appearance: AppearanceSettings;
+  prompts: PromptSettings;
   ai: AiSettings;
   anki: AnkiSettings;
 }
@@ -109,6 +124,17 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   learningWindowDays: 3,
   promptVersion: "gloss-v1",
   modelVersion: "gpt-4.1-mini",
+  appearance: {
+    textColor: "#ffffff",
+    backgroundColor: "#0f172a",
+    backgroundOpacity: 0.9,
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    fontSize: 11
+  },
+  prompts: {
+    gloss: "Translate only the contextual meaning of each unfamiliar English word or phrase into the target language. Return short inline labels that fit above the source word.",
+    ankiCard: "Create concise Anki Basic card fields for the clicked English word in the sentence. Cover common meanings, the contextual meaning, and one natural example."
+  },
   ai: {
     provider: "openai-responses",
     endpoint: "https://api.openai.com/v1/responses"

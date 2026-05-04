@@ -50,6 +50,8 @@ function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettin
   return {
     ...DEFAULT_SETTINGS,
     ...value,
+    appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
+    prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
     ai: { ...DEFAULT_SETTINGS.ai, ...value?.ai },
     anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
   };
