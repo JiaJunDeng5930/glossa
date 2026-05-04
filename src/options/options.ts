@@ -29,6 +29,12 @@ document.querySelector<HTMLButtonElement>("#test-anki")!.addEventListener("click
   );
 });
 
+const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
+providerSelect.addEventListener("change", () => {
+  const provider = readInput("provider") as AiSettings["provider"];
+  setInput("aiEndpoint", defaultEndpointForProvider(provider));
+});
+
 shortcutCapture.addEventListener("click", () => {
   capturingShortcut = true;
   pendingShortcut = "";
@@ -76,6 +82,7 @@ async function loadSettings(): Promise<void> {
   setInput("provider", settings.ai.provider);
   setInput("aiEndpoint", settings.ai.endpoint);
   setInput("apiKey", settings.ai.apiKey ?? "");
+  setInput("reasoningEffort", settings.ai.reasoningEffort);
   setInput("modelVersion", settings.modelVersion);
   setInput("ankiEndpoint", settings.anki.endpoint);
   setInput("ankiDeck", settings.anki.deck);
@@ -111,6 +118,7 @@ function readFormSettings(): GlossaSettings {
     ai: {
       provider,
       endpoint: readInput("aiEndpoint").trim() || DEFAULT_SETTINGS.ai.endpoint,
+      reasoningEffort: readInput("reasoningEffort") as GlossaSettings["ai"]["reasoningEffort"],
       ...(apiKey ? { apiKey } : {})
     },
     anki: {
@@ -124,15 +132,27 @@ async function testAi(settings: GlossaSettings): Promise<void> {
   const endpoint = settings.ai.provider === "glossa-backend"
     ? `${settings.ai.endpoint.replace(/\/+$/, "")}/gloss`
     : settings.ai.endpoint;
+  const body = settings.ai.provider === "glossa-backend"
+    ? { sentence: "Submit the form.", tokens: [], targetLang: settings.targetLang, reasoningEffort: settings.ai.reasoningEffort }
+    : settings.ai.provider === "openai-chat-completions"
+      ? {
+        model: settings.modelVersion,
+        messages: [
+          { role: "developer", content: "Return strict JSON only." },
+          { role: "user", content: "Return {\"items\":[]} as JSON." }
+        ],
+        ...reasoningBody(settings)
+      }
+      : settings.ai.provider === "openai-completions"
+        ? { model: settings.modelVersion, prompt: "Return {\"items\":[]} as JSON.", temperature: 0 }
+        : { model: settings.modelVersion, input: "Return {\"items\":[]} as JSON.", ...reasoningBody(settings) };
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(settings.ai.apiKey ? { authorization: `Bearer ${settings.ai.apiKey}` } : {})
     },
-    body: JSON.stringify(settings.ai.provider === "glossa-backend"
-      ? { sentence: "Submit the form.", tokens: [], targetLang: settings.targetLang }
-      : { model: settings.modelVersion, input: "Return {\"items\":[]} as JSON." })
+    body: JSON.stringify(body)
   });
   if (!response.ok) {
     throw new Error(`AI HTTP ${response.status}`);
@@ -151,12 +171,13 @@ async function testAnki(settings: GlossaSettings): Promise<void> {
 }
 
 function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettings {
+  const ai = { ...DEFAULT_SETTINGS.ai, ...value?.ai };
   return {
     ...DEFAULT_SETTINGS,
     ...value,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
     prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
-    ai: { ...DEFAULT_SETTINGS.ai, ...value?.ai },
+    ai: { ...ai, endpoint: ai.endpoint || defaultEndpointForProvider(ai.provider) },
     anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
   };
 }
@@ -171,6 +192,26 @@ function setInput(name: string, value: string): void {
 
 function setStatus(value: string): void {
   statusOutput.value = value;
+}
+
+function defaultEndpointForProvider(provider: AiSettings["provider"]): string {
+  if (provider === "openai-chat-completions") {
+    return "https://api.openai.com/v1/chat/completions";
+  }
+  if (provider === "openai-completions") {
+    return "https://api.openai.com/v1/completions";
+  }
+  if (provider === "glossa-backend") {
+    return "http://127.0.0.1:8787";
+  }
+  return DEFAULT_SETTINGS.ai.endpoint;
+}
+
+function reasoningBody(settings: GlossaSettings): { reasoning?: { effort: Exclude<GlossaSettings["ai"]["reasoningEffort"], "none"> } } {
+  if (settings.ai.reasoningEffort === "none") {
+    return {};
+  }
+  return { reasoning: { effort: settings.ai.reasoningEffort } };
 }
 
 function finishShortcutCapture(): void {

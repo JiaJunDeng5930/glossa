@@ -47,14 +47,28 @@ function createChromeSettingsStore(): SettingsStore {
 }
 
 function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettings {
+  const ai = { ...DEFAULT_SETTINGS.ai, ...value?.ai };
   return {
     ...DEFAULT_SETTINGS,
     ...value,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
     prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
-    ai: { ...DEFAULT_SETTINGS.ai, ...value?.ai },
+    ai: { ...ai, endpoint: ai.endpoint || defaultEndpointForProvider(ai.provider) },
     anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
   };
+}
+
+function defaultEndpointForProvider(provider: GlossaSettings["ai"]["provider"]): string {
+  if (provider === "openai-chat-completions") {
+    return "https://api.openai.com/v1/chat/completions";
+  }
+  if (provider === "openai-completions") {
+    return "https://api.openai.com/v1/completions";
+  }
+  if (provider === "glossa-backend") {
+    return "http://127.0.0.1:8787";
+  }
+  return DEFAULT_SETTINGS.ai.endpoint;
 }
 
 function readChromeLocal<T>(key: string): Promise<T | undefined> {

@@ -36,6 +36,9 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("input[name=glossBackgroundOpacity]").fill("0.65");
   await page.locator("select[name=glossFontFamily]").selectOption("Georgia, Times New Roman, serif");
   await page.locator("input[name=glossFontSize]").fill("18");
+  await page.locator("select[name=provider]").selectOption("openai-chat-completions");
+  await page.locator("select[name=reasoningEffort]").selectOption("high");
+  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
 
@@ -58,6 +61,10 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     prompts: {
       gloss: "Use compact contextual labels.",
       ankiCard: "Create concise learning cards."
+    },
+    ai: {
+      provider: "openai-chat-completions",
+      reasoningEffort: "high"
     }
   });
 });

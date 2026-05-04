@@ -76,10 +76,14 @@ export interface ErrorMessage {
 export type ContentToBackgroundMessage = GlossRequestMessage | UserWordClickMessage | SettingsGetMessage;
 export type BackgroundResponseMessage = GlossResponseMessage | WordClickedOkMessage | SettingsGetResponseMessage | ErrorMessage;
 
+export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 export interface AiSettings {
-  provider: "glossa-backend" | "openai-responses";
+  provider: AiProvider;
   endpoint: string;
   apiKey?: string;
+  reasoningEffort: ReasoningEffort;
 }
 
 export interface AnkiSettings {
@@ -137,7 +141,8 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   },
   ai: {
     provider: "openai-responses",
-    endpoint: "https://api.openai.com/v1/responses"
+    endpoint: "https://api.openai.com/v1/responses",
+    reasoningEffort: "medium"
   },
   anki: {
     endpoint: "http://127.0.0.1:8765",

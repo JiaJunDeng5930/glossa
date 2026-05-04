@@ -66,7 +66,7 @@ async function handleGlossRequest(
         sentence: sentence.text,
         targetText: token.surface,
         targetSpan: [token.startOffset, token.endOffset],
-        promptVersion: await promptCacheVersion(settings.promptVersion, settings.prompts.gloss),
+        promptVersion: await promptCacheVersion(settings, settings.prompts.gloss),
         modelVersion: settings.modelVersion
       });
       const cached = await deps.storage.glossCache.get(cacheKey);
@@ -90,7 +90,7 @@ async function handleGlossRequest(
           sentence: sentence.text,
           targetText: token.surface,
           targetSpan: [token.startOffset, token.endOffset],
-          promptVersion: await promptCacheVersion(settings.promptVersion, settings.prompts.gloss),
+          promptVersion: await promptCacheVersion(settings, settings.prompts.gloss),
           modelVersion: settings.modelVersion
         });
         await deps.storage.glossCache.put(cacheKey, item);
@@ -119,7 +119,7 @@ async function handleWordClicked(
     lang: "en",
     lemma: message.token.lemma,
     targetLang: settings.targetLang,
-    promptVersion: await promptCacheVersion(settings.promptVersion, settings.prompts.ankiCard)
+    promptVersion: await promptCacheVersion(settings, settings.prompts.ankiCard)
   });
   const cachedCard = await deps.storage.cardCache.get(cardKey);
   const card = cachedCard ?? await deps.ai.ankiCard({ settings, sentence: message.sentence, token: message.token });
@@ -130,8 +130,13 @@ async function handleWordClicked(
   return noteId === undefined ? { type: "word.clicked.ok" } : { type: "word.clicked.ok", noteId };
 }
 
-async function promptCacheVersion(promptVersion: string, prompt: string): Promise<string> {
-  return `${promptVersion}:${await hashText(prompt)}`;
+async function promptCacheVersion(settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>, prompt: string): Promise<string> {
+  return [
+    settings.promptVersion,
+    settings.ai.provider,
+    settings.ai.reasoningEffort,
+    await hashText(prompt)
+  ].join(":");
 }
 
 async function currentRecord(storage: ExtensionStorage, token: TokenCandidate, now: number): Promise<VocabularyRecord | undefined> {

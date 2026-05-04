@@ -14,7 +14,7 @@ describe("background message handler", () => {
       learningWindowDays: 3,
       promptVersion: "gloss-v1",
       modelVersion: "gpt-4.1-mini",
-      ai: { provider: "glossa-backend", endpoint: "https://ai.example.test" },
+      ai: { provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" },
       anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa" }
     });
     await storage.lexicon.put({
@@ -74,7 +74,7 @@ describe("background message handler", () => {
       learningWindowDays: 3,
       promptVersion: "gloss-v1",
       modelVersion: "gpt-4.1-mini",
-      ai: { provider: "glossa-backend", endpoint: "https://ai.example.test" },
+      ai: { provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" },
       anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa" }
     });
     const message: UserWordClickMessage = {

@@ -61,6 +61,8 @@
           AI provider
           <select name="provider">
             <option value="openai-responses">OpenAI Responses API</option>
+            <option value="openai-chat-completions">OpenAI Chat Completions API</option>
+            <option value="openai-completions">OpenAI Completions API</option>
             <option value="glossa-backend">Glossa backend</option>
           </select>
         </label>
@@ -75,6 +77,17 @@
         <label>
           Model
           <input name="modelVersion" autocomplete="off">
+        </label>
+        <label>
+          Reasoning effort
+          <select name="reasoningEffort">
+            <option value="none">None</option>
+            <option value="minimal">Minimal</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="xhigh">XHigh</option>
+          </select>
         </label>
         <label>
           AnkiConnect endpoint

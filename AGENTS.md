@@ -15,7 +15,7 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 
 Vocabulary records use one table keyed by `lang:lemma`. `candidate` records become `known` after a displayed gloss. A clicked word becomes `learning_active`, receives an `expiresAt`, and stays eligible for display until expiry. Expired `learning_active` records transition to `known`. `ignored` records stay hidden.
 
-Settings contain `appearance` for inline label colors, opacity, font family, and font size, plus `prompts.gloss` and `prompts.ankiCard`. Prompt text is included in cache versioning through a hash so prompt edits create fresh gloss/card cache entries.
+Settings contain `appearance` for inline label colors, opacity, font family, and font size, plus `prompts.gloss` and `prompts.ankiCard`. Prompt text, OpenAI provider, and reasoning effort are included in cache versioning so edits create fresh gloss/card cache entries. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` keeps the existing `/gloss` and `/anki-card` contract.
 
 ## Commands
 
