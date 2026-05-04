@@ -109,7 +109,16 @@
                 <option value="xhigh">超高</option>
               </select>
             </label>
-            <button id="test-ai" class="test-button" type="button" data-state="idle">测试 AI</button>
+            <button id="test-ai" class="test-button" type="button" data-state="idle" aria-label="测试 AI">
+              <span class="test-label">测试 AI</span>
+              <span class="test-spinner" aria-hidden="true"></span>
+              <svg class="test-icon test-icon-success" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M20 6 9 17l-5-5"/>
+              </svg>
+              <svg class="test-icon test-icon-error" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
+              </svg>
+            </button>
           </section>
           <section class="settings-card" aria-labelledby="anki-heading">
             <h2 id="anki-heading">Anki</h2>
@@ -121,7 +130,16 @@
               Anki 牌组
               <input name="ankiDeck" autocomplete="off">
             </label>
-            <button id="test-anki" class="test-button" type="button" data-state="idle">测试 Anki</button>
+            <button id="test-anki" class="test-button" type="button" data-state="idle" aria-label="测试 Anki">
+              <span class="test-label">测试 Anki</span>
+              <span class="test-spinner" aria-hidden="true"></span>
+              <svg class="test-icon test-icon-success" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M20 6 9 17l-5-5"/>
+              </svg>
+              <svg class="test-icon test-icon-error" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
+              </svg>
+            </button>
           </section>
         </div>
         <section class="settings-card" aria-labelledby="prompt-heading">

@@ -66,12 +66,14 @@ test("options page captures shortcuts, previews style changes and saves prompts"
 
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
-  await expect(page.locator("#test-ai")).toHaveText("AI 已连接");
+  await expect(page.locator("#test-ai .test-label")).not.toBeVisible();
+  await expect(page.locator("#test-ai .test-icon-success")).toBeVisible();
   await expect(page.locator("#status")).toHaveText("");
 
   await page.locator("#test-anki").click();
   await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "error");
-  await expect(page.locator("#test-anki")).toHaveText("测试 Anki");
+  await expect(page.locator("#test-anki .test-label")).not.toBeVisible();
+  await expect(page.locator("#test-anki .test-icon-error")).toBeVisible();
   await expect(page.locator("#status")).toContainText("AnkiConnect 拒绝了请求");
 
   await page.locator("button[type=submit]").click();

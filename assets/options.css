@@ -191,15 +191,59 @@ button:disabled {
   width: auto;
   min-width: 132px;
   padding-inline: 18px;
+  display: inline-grid;
+  place-items: center;
   background: var(--color-ink);
   color: var(--color-snow);
   border-color: var(--color-ink);
+}
+
+.test-label,
+.test-spinner,
+.test-icon {
+  grid-area: 1 / 1;
+}
+
+.test-spinner,
+.test-icon {
+  display: none;
+}
+
+.test-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(29, 29, 31, 0.28);
+  border-top-color: currentColor;
+  border-radius: var(--radius-pill);
+  animation: glossa-spin 0.7s linear infinite;
+}
+
+.test-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.test-button[data-state="loading"] .test-label,
+.test-button[data-state="success"] .test-label,
+.test-button[data-state="error"] .test-label {
+  visibility: hidden;
 }
 
 .test-button[data-state="loading"] {
   background: var(--color-frosted);
   color: var(--color-ink);
   border-color: transparent;
+}
+
+.test-button[data-state="loading"] .test-spinner,
+.test-button[data-state="success"] .test-icon-success,
+.test-button[data-state="error"] .test-icon-error {
+  display: block;
 }
 
 .test-button[data-state="success"] {
@@ -236,6 +280,12 @@ output {
   font-size: 14px;
   line-height: 1.43;
   font-weight: 600;
+}
+
+@keyframes glossa-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 820px) {

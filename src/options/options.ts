@@ -22,21 +22,11 @@ form.addEventListener("submit", (event) => {
 });
 
 testAiButton.addEventListener("click", () => {
-  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "AI", {
-    idle: "测试 AI",
-    loading: "正在测试 AI",
-    success: "AI 已连接",
-    error: "测试 AI"
-  });
+  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "AI");
 });
 
 testAnkiButton.addEventListener("click", () => {
-  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "AnkiConnect", {
-    idle: "测试 Anki",
-    loading: "正在测试 Anki",
-    success: "Anki 已连接",
-    error: "测试 Anki"
-  });
+  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "AnkiConnect");
 });
 
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
@@ -223,35 +213,26 @@ function isKnownWordList(value: unknown): value is KnownWordListId {
   return typeof value === "string" && KNOWN_WORD_LISTS.some((item) => item.id === value);
 }
 
-interface TestButtonLabels {
-  idle: string;
-  loading: string;
-  success: string;
-  error: string;
-}
-
 async function runConnectionTest(
   button: HTMLButtonElement,
   run: () => Promise<void>,
-  serviceName: string,
-  labels: TestButtonLabels
+  serviceName: string
 ): Promise<void> {
   setStatus("");
-  setTestState(button, "loading", labels.loading);
+  setTestState(button, "loading");
   try {
     await run();
-    setTestState(button, "success", labels.success);
+    setTestState(button, "success");
   } catch (error) {
-    setTestState(button, "error", labels.error);
+    setTestState(button, "error");
     setStatus(friendlyConnectionError(serviceName, error));
   }
 }
 
 type TestState = "idle" | "loading" | "success" | "error";
 
-function setTestState(button: HTMLButtonElement, state: TestState, label: string): void {
+function setTestState(button: HTMLButtonElement, state: TestState): void {
   button.dataset.state = state;
-  button.textContent = label;
   button.disabled = state === "loading";
 }
 
