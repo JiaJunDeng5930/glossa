@@ -19,6 +19,8 @@ Settings contain `appearance` for inline label colors, opacity, font family, and
 
 Runtime messages use `src/shared/messages.ts` envelopes with `type`, `version`, `requestId`, `source`, `target`, `createdAt`, and `payload`. Content-script callers validate service-worker responses and keep a bounded timeout. The service worker validates every incoming envelope before dispatching and returns response envelopes with the original `requestId`.
 
+Content scanning starts from visible, non-editable, non-code text nodes, including open shadow roots and extension-injected frames, and produces DOM-grounded tokens with text-node offsets, source fingerprints, and scan versions. Non-Glossa DOM mutations invalidate pending gloss responses immediately; render code rechecks scan version, source text, fingerprint, and range rects before placing labels. Glossa-owned nodes carry `data-glossa-owned="1"`, `translate="no"`, and `notranslate` so future scans and mutation handling can identify them.
+
 Structured diagnostics use `src/shared/diagnostics.ts`. Trace events include component, operation, result, request id, sender tab/frame/document fields when Chrome provides them, and sanitized URLs. `sanitizeUrl` keeps only origin and path, so query strings and fragments stay out of logs.
 
 Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip. Extra filter presets cover CET-4, CET-6, TOEFL, GRE, and COCA 20000.

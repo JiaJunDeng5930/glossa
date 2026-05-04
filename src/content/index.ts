@@ -14,23 +14,38 @@ async function boot(): Promise<void> {
   const overlay = createGlossOverlay(document, settings?.appearance);
   let scanVersion = 0;
   let scanTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
-  let pageUrl = location.href;
+  let pageUrl = urlWithoutHash(location.href);
 
   const scanAndRender = async (reason: string) => {
-    if (location.href !== pageUrl) {
-      pageUrl = location.href;
+    const routeUrl = urlWithoutHash(location.href);
+    if (routeUrl !== pageUrl) {
+      pageUrl = routeUrl;
+      scanVersion += 1;
       overlay.clear();
     }
-    const scan = scanDocumentText(document, knownWords);
+    const version = ++scanVersion;
+    const scan = scanDocumentText(document, knownWords, {
+      scanVersion: version,
+      requireRenderableRange: true
+    });
     const tokenMap = new Map<string, ScannedToken>(scan.tokens.map((token) => [token.id, token]));
     const sentences = scan.sentences.filter((sentence) => sentence.tokens.length > 0);
-    const version = ++scanVersion;
     trace({
       component: "content-script",
       operation: "content.scan",
       result: "ok",
       url: location.href,
-      details: { reason, sentences: sentences.length, tokens: scan.tokens.length }
+      details: {
+        reason,
+        sentences: sentences.length,
+        tokens: scan.tokens.length,
+        scannedTextNodes: scan.stats.scannedTextNodes,
+        rejectedBySubtree: scan.stats.rejectedBySubtree,
+        rejectedByVisibility: scan.stats.rejectedByVisibility,
+        rejectedByKnownWord: scan.stats.rejectedByKnownWord,
+        rejectedByShape: scan.stats.rejectedByShape,
+        rejectedByFrequency: scan.stats.rejectedByFrequency
+      }
     });
 
     if (scan.tokens.length === 0) {
@@ -58,7 +73,20 @@ async function boot(): Promise<void> {
         details: { reason, items: response.payload.items.length }
       });
       if (response.payload.items.length > 0) {
-        overlay.render(response.payload.items, tokenMap);
+        const render = overlay.render(response.payload.items, tokenMap, version);
+        trace({
+          component: "content-script",
+          operation: "content.render.result",
+          requestId: response.requestId,
+          result: "ok",
+          url: location.href,
+          details: {
+            rendered: render.rendered,
+            skippedMissingToken: render.skippedMissingToken,
+            skippedStale: render.skippedStale,
+            skippedDuplicate: render.skippedDuplicate
+          }
+        });
       }
     } else if (response.type === "error") {
       reportError("background.error", response.payload.message, response.requestId);
@@ -89,9 +117,27 @@ async function boot(): Promise<void> {
     }
   }).attach();
 
-  const observer = new MutationObserver(() => scheduleScan("mutation"));
+  const observer = new MutationObserver((mutations) => {
+    if (mutations.every(isGlossaOwnedMutation)) {
+      return;
+    }
+    scanVersion += 1;
+    overlay.clear();
+    observeOpenShadowRoots(document.body);
+    scheduleScan("mutation");
+  });
   observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+  observeOpenShadowRoots(document.body);
   window.addEventListener("scroll", () => scheduleScan("scroll"), { passive: true });
+
+  function observeOpenShadowRoots(root: ParentNode): void {
+    for (const element of Array.from(root.querySelectorAll("*"))) {
+      if (element.shadowRoot) {
+        observer.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
+        observeOpenShadowRoots(element.shadowRoot);
+      }
+    }
+  }
 }
 
 function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
@@ -152,4 +198,29 @@ function reportError(operation: string, error: unknown, requestId?: string): voi
     url: location.href,
     error
   });
+}
+
+function urlWithoutHash(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function isGlossaOwnedMutation(mutation: MutationRecord): boolean {
+  if (isGlossaOwnedNode(mutation.target)) {
+    return true;
+  }
+  const changedNodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)];
+  return changedNodes.length > 0 && changedNodes.every(isGlossaOwnedNode);
+}
+
+function isGlossaOwnedNode(node: Node): boolean {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.parentElement?.closest("[data-glossa-owned='1']") !== null;
+  }
+  return node instanceof Element && node.closest("[data-glossa-owned='1']") !== null;
 }

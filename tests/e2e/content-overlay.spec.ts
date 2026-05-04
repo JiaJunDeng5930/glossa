@@ -148,3 +148,79 @@ test("content bundle scans text added after boot", async ({ page }) => {
     return host?.shadowRoot?.querySelector(".label")?.textContent === "动态";
   });
 });
+
+test("content bundle drops async glosses after the source paragraph changes", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Obscure archive appears here.</p></main>");
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          if (message.type === "settings.get") {
+            const response = {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+            };
+            callback?.(response);
+            return Promise.resolve(response);
+          }
+          if (message.type === "gloss.request" && !Reflect.get(window, "__firstGlossHeld")) {
+            Reflect.set(window, "__firstGlossHeld", true);
+            const token = message.payload?.sentences
+              ?.flatMap((sentence) => sentence.tokens)
+              .find((item) => item.surface.toLowerCase() === "obscure");
+            return new Promise((resolve) => {
+              Reflect.set(window, "__resolveFirstGloss", () => {
+                const response = {
+                  type: "gloss.response",
+                  version: 1,
+                  requestId: message.requestId,
+                  source: "service-worker",
+                  target: message.source,
+                  createdAt: Date.now(),
+                  payload: token ? { items: [{ tokenId: token.id, targetText: token.surface, display: "晦涩" }] } : { items: [] }
+                };
+                callback?.(response);
+                resolve(response);
+              });
+            });
+          }
+          const response = {
+            type: "gloss.response",
+            version: 1,
+            requestId: message.requestId,
+            source: "service-worker",
+            target: message.source,
+            createdAt: Date.now(),
+            payload: { items: [] }
+          };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => typeof Reflect.get(window, "__resolveFirstGloss") === "function");
+
+  await page.locator("#target").evaluate((element) => {
+    element.textContent = "Replacement archive appears here.";
+  });
+  await page.evaluate(() => {
+    (Reflect.get(window, "__resolveFirstGloss") as () => void)();
+  });
+
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => {
+    const host = document.querySelector("#glossa-overlay");
+    return host?.shadowRoot?.querySelectorAll(".label").length ?? 0;
+  })).toBe(0);
+});

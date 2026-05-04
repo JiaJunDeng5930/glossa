@@ -1,15 +1,25 @@
 import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossItem } from "../shared/types";
 import type { ScannedToken } from "./scanner";
-import { rectForToken } from "./range";
+import { validateTokenForRender } from "./range";
 
 export interface GlossOverlay {
-  render(items: GlossItem[], tokens: Map<string, ScannedToken>): void;
+  render(items: GlossItem[], tokens: Map<string, ScannedToken>, scanVersion: number): RenderSummary;
   clear(): void;
+}
+
+export interface RenderSummary {
+  rendered: number;
+  skippedMissingToken: number;
+  skippedStale: number;
+  skippedDuplicate: number;
 }
 
 export function createGlossOverlay(doc: Document, appearance: AppearanceSettings = DEFAULT_SETTINGS.appearance): GlossOverlay {
   const host = doc.createElement("div");
   host.id = "glossa-overlay";
+  host.dataset.glossaOwned = "1";
+  host.className = "notranslate";
+  host.setAttribute("translate", "no");
   applyAppearance(host, appearance);
   const shadow = host.attachShadow({ mode: "open" });
   const style = doc.createElement("style");
@@ -41,22 +51,44 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
   doc.documentElement.append(host);
 
   return {
-    render(items, tokens) {
+    render(items, tokens, scanVersion) {
       layer.replaceChildren();
+      const seen = new Set<string>();
+      const summary: RenderSummary = {
+        rendered: 0,
+        skippedMissingToken: 0,
+        skippedStale: 0,
+        skippedDuplicate: 0
+      };
       for (const item of items) {
         const token = tokens.get(item.tokenId);
         if (!token) {
+          summary.skippedMissingToken += 1;
           continue;
         }
-        const rect = rectForToken(token);
+        if (seen.has(token.id)) {
+          summary.skippedDuplicate += 1;
+          continue;
+        }
+        seen.add(token.id);
+        const validation = validateTokenForRender(token, scanVersion);
+        if (!validation.ok || !validation.rect) {
+          summary.skippedStale += 1;
+          continue;
+        }
         const label = doc.createElement("span");
         label.className = "label";
+        label.dataset.glossaOwned = "1";
         label.dataset.glossaLabel = item.tokenId;
+        label.setAttribute("translate", "no");
         label.textContent = item.display;
-        label.style.left = `${Math.max(0, rect.left)}px`;
-        label.style.top = `${Math.max(12, rect.top)}px`;
+        label.style.left = `${Math.max(0, validation.rect.left)}px`;
+        label.style.top = `${Math.max(12, validation.rect.top)}px`;
         layer.append(label);
+        validation.range?.detach();
+        summary.rendered += 1;
       }
+      return summary;
     },
     clear() {
       layer.replaceChildren();

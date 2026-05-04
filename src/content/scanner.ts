@@ -7,6 +7,9 @@ export interface ScannedToken extends TokenCandidate {
   nodeStartOffset: number;
   nodeEndOffset: number;
   sentenceText: string;
+  sourceText: string;
+  sourceFingerprint: string;
+  scanVersion: number;
 }
 
 export interface ScannedSentence extends SentenceCandidate {
@@ -16,25 +19,90 @@ export interface ScannedSentence extends SentenceCandidate {
 export interface ScanResult {
   sentences: ScannedSentence[];
   tokens: ScannedToken[];
+  stats: ScanStats;
 }
 
-const WORD_RE = /[A-Za-z][A-Za-z'-]*/g;
-const SENTENCE_RE = /[^.!?\n]+[.!?]?/g;
-const SKIPPED_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION"]);
+export interface ScanStats {
+  scannedTextNodes: number;
+  rejectedBySubtree: number;
+  rejectedByVisibility: number;
+  rejectedByText: number;
+  rejectedByKnownWord: number;
+  rejectedByShape: number;
+  rejectedByFrequency: number;
+  candidateWords: number;
+}
 
-export function scanDocumentText(doc: Document, knownWords: ReadonlySet<string>): ScanResult {
-  const textNodes = collectTextNodes(doc.body);
+export interface ScanOptions {
+  scanVersion?: number;
+  maxOccurrencesPerLemma?: number;
+  minWordLength?: number;
+  minContextChars?: number;
+  requireRenderableRange?: boolean;
+}
+
+const WORD_RE = /[A-Za-z]+(?:['-][A-Za-z]+)*/g;
+const SENTENCE_RE = /[^.!?\n]+[.!?]?/g;
+const SKIPPED_TAGS = new Set([
+  "SCRIPT",
+  "STYLE",
+  "NOSCRIPT",
+  "TEMPLATE",
+  "SVG",
+  "CANVAS",
+  "MATH",
+  "TEXTAREA",
+  "INPUT",
+  "SELECT",
+  "OPTION",
+  "PRE",
+  "CODE",
+  "KBD",
+  "SAMP",
+  "VAR",
+  "BUTTON"
+]);
+const SKIPPED_SELECTOR = [
+  "[contenteditable='true']",
+  "[contenteditable='']",
+  "[aria-hidden='true']",
+  "[translate='no']",
+  ".notranslate",
+  ".imt-notranslate",
+  "[data-glossa-owned='1']",
+  "[data-glossa-label]",
+  "#glossa-overlay"
+].join(",");
+
+export function scanDocumentText(
+  doc: Document,
+  knownWords: ReadonlySet<string>,
+  options: ScanOptions = {}
+): ScanResult {
+  const stats = createScanStats();
+  const textNodes = doc.body ? collectTextNodes(doc.body, stats) : [];
   const sentences: ScannedSentence[] = [];
   const tokens: ScannedToken[] = [];
+  const lemmaCounts = new Map<string, number>();
   let sentenceIndex = 0;
   let tokenIndex = 0;
+  const scanVersion = options.scanVersion ?? 0;
+  const maxOccurrencesPerLemma = options.maxOccurrencesPerLemma ?? 1;
+  const minWordLength = options.minWordLength ?? 3;
+  const minContextChars = options.minContextChars ?? 12;
 
   for (const textNode of textNodes) {
+    stats.scannedTextNodes += 1;
     const text = textNode.nodeValue ?? "";
     for (const sentenceMatch of text.matchAll(SENTENCE_RE)) {
       const raw = sentenceMatch[0];
       const trimmed = raw.trim();
       if (trimmed.length === 0) {
+        stats.rejectedByText += 1;
+        continue;
+      }
+      if (trimmed.length < minContextChars) {
+        stats.rejectedByText += 1;
         continue;
       }
       const leading = raw.length - raw.trimStart().length;
@@ -44,12 +112,28 @@ export function scanDocumentText(doc: Document, knownWords: ReadonlySet<string>)
 
       for (const wordMatch of trimmed.matchAll(WORD_RE)) {
         const surface = wordMatch[0];
+        if (!isEligibleSurface(surface, minWordLength)) {
+          stats.rejectedByShape += 1;
+          continue;
+        }
         const lemma = normalizeLemma(surface);
         if (isKnownLemma(knownWords, lemma)) {
+          stats.rejectedByKnownWord += 1;
+          continue;
+        }
+        const count = lemmaCounts.get(lemma) ?? 0;
+        if (count >= maxOccurrencesPerLemma) {
+          stats.rejectedByFrequency += 1;
           continue;
         }
         const startOffset = wordMatch.index ?? 0;
         const endOffset = startOffset + surface.length;
+        const nodeStartOffset = sentenceStart + startOffset;
+        const nodeEndOffset = sentenceStart + endOffset;
+        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset)) {
+          stats.rejectedByVisibility += 1;
+          continue;
+        }
         const token: ScannedToken = {
           id: `t${tokenIndex++}`,
           sentenceId,
@@ -58,12 +142,17 @@ export function scanDocumentText(doc: Document, knownWords: ReadonlySet<string>)
           startOffset,
           endOffset,
           textNode,
-          nodeStartOffset: sentenceStart + startOffset,
-          nodeEndOffset: sentenceStart + endOffset,
-          sentenceText: trimmed
+          nodeStartOffset,
+          nodeEndOffset,
+          sentenceText: trimmed,
+          sourceText: surface,
+          sourceFingerprint: createSourceFingerprint(text, nodeStartOffset, nodeEndOffset),
+          scanVersion
         };
         sentenceTokens.push(token);
         tokens.push(token);
+        lemmaCounts.set(lemma, count + 1);
+        stats.candidateWords += 1;
       }
 
       sentences.push({
@@ -74,31 +163,130 @@ export function scanDocumentText(doc: Document, knownWords: ReadonlySet<string>)
     }
   }
 
-  return { sentences, tokens };
+  return { sentences, tokens, stats };
 }
 
-function collectTextNodes(root: HTMLElement): Text[] {
+function collectTextNodes(root: HTMLElement, stats: ScanStats): Text[] {
   const nodes: Text[] = [];
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = node.parentElement;
-      if (!parent || SKIPPED_TAGS.has(parent.tagName) || !hasMeaningfulText(node.nodeValue)) {
-        return NodeFilter.FILTER_REJECT;
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as Element;
+      if (isExcludedElement(element)) {
+        stats.rejectedBySubtree += 1;
+        return;
       }
-      return NodeFilter.FILTER_ACCEPT;
+      if (!isVisibleElement(element)) {
+        stats.rejectedByVisibility += 1;
+        return;
+      }
     }
-  });
-
-  let current = walker.nextNode();
-  while (current) {
-    nodes.push(current as Text);
-    current = walker.nextNode();
-  }
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node as Text;
+      if (text.parentElement && hasMeaningfulText(text.nodeValue)) {
+        nodes.push(text);
+      } else {
+        stats.rejectedByText += 1;
+      }
+      return;
+    }
+    if (node instanceof Element && node.shadowRoot) {
+      visit(node.shadowRoot);
+    }
+    for (const child of Array.from(node.childNodes)) {
+      visit(child);
+    }
+  };
+  visit(root);
   return nodes;
+}
+
+function createScanStats(): ScanStats {
+  return {
+    scannedTextNodes: 0,
+    rejectedBySubtree: 0,
+    rejectedByVisibility: 0,
+    rejectedByText: 0,
+    rejectedByKnownWord: 0,
+    rejectedByShape: 0,
+    rejectedByFrequency: 0,
+    candidateWords: 0
+  };
+}
+
+function isExcludedElement(element: Element): boolean {
+  if (SKIPPED_TAGS.has(element.tagName)) {
+    return true;
+  }
+  if (element.matches(SKIPPED_SELECTOR)) {
+    return true;
+  }
+  return element.closest(SKIPPED_SELECTOR) !== null;
+}
+
+function isVisibleElement(element: Element): boolean {
+  if (!element.isConnected) {
+    return false;
+  }
+  const view = element.ownerDocument.defaultView;
+  if (!view?.getComputedStyle) {
+    return true;
+  }
+  const style = view.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+    return false;
+  }
+  return style.contentVisibility !== "hidden";
+}
+
+function isEligibleSurface(surface: string, minWordLength: number): boolean {
+  if (surface.length < minWordLength) {
+    return false;
+  }
+  if (/^[A-Z]{2,}$/.test(surface)) {
+    return false;
+  }
+  if (/[-']{2,}/.test(surface)) {
+    return false;
+  }
+  if (/^[a-fA-F0-9]{6,}$/.test(surface)) {
+    return false;
+  }
+  return true;
 }
 
 function hasMeaningfulText(text: string | null): boolean {
   return typeof text === "string" && /[A-Za-z]/.test(text);
+}
+
+function hasRenderableRange(textNode: Text, startOffset: number, endOffset: number): boolean {
+  const doc = textNode.ownerDocument;
+  const range = doc.createRange();
+  try {
+    range.setStart(textNode, startOffset);
+    range.setEnd(textNode, endOffset);
+    const rects = range.getClientRects();
+    return Array.from(rects).some((rect) => rect.width > 0 && rect.height > 0);
+  } catch {
+    return false;
+  } finally {
+    range.detach();
+  }
+}
+
+export function createSourceFingerprint(text: string, startOffset: number, endOffset: number): string {
+  const before = text.slice(Math.max(0, startOffset - 16), startOffset);
+  const target = text.slice(startOffset, endOffset);
+  const after = text.slice(endOffset, Math.min(text.length, endOffset + 16));
+  return `${startOffset}:${endOffset}:${hashSmall(`${before}|${target}|${after}`)}`;
+}
+
+function hashSmall(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 export function toSerializableSentence(sentence: ScannedSentence): SentenceCandidate {
