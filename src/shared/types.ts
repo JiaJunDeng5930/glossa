@@ -78,7 +78,7 @@ export type BackgroundResponseMessage = GlossResponseMessage | WordClickedOkMess
 
 export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
-export type KnownWordListId = "junior-high" | "senior-high";
+export type KnownWordListId = "junior-high" | "senior-high" | "cet4" | "cet6" | "toefl" | "gre" | "coca-20000";
 
 export const GLOSS_TARGET_LANG = "zh-CN";
 

@@ -8,5 +8,30 @@
     "label": "Senior high curriculum words",
     "source": "Ministry of Education high school English curriculum standard vocabulary appendix, 2017 edition with 2020 revision.",
     "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip"
+  },
+  "cet4": {
+    "label": "CET-4 word list",
+    "source": "Extracted first English entry from each line of mahavivo/english-wordlists CET4_edited.txt.",
+    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/CET4_edited.txt"
+  },
+  "cet6": {
+    "label": "CET-6 word list",
+    "source": "Extracted first English entry from each line of mahavivo/english-wordlists CET6_edited.txt.",
+    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/CET6_edited.txt"
+  },
+  "toefl": {
+    "label": "TOEFL word list",
+    "source": "Extracted first English entry from each line of mahavivo/english-wordlists TOEFL.txt.",
+    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/TOEFL.txt"
+  },
+  "gre": {
+    "label": "GRE word list",
+    "source": "Extracted first English entry from each line of mahavivo/english-wordlists GRE_8000_Words.txt.",
+    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/GRE_8000_Words.txt"
+  },
+  "coca-20000": {
+    "label": "COCA 20000 frequency list",
+    "source": "Extracted first English entry from each line of mahavivo/english-wordlists COCA_20000.txt.",
+    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/COCA_20000.txt"
   }
 }

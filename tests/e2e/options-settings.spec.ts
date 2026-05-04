@@ -40,7 +40,9 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("input[name=glossBackgroundOpacity]").fill("0.65");
   await page.locator("select[name=glossFontFamily]").selectOption("Georgia, Times New Roman, serif");
   await page.locator("input[name=glossFontSize]").fill("18");
-  await page.locator("select[name=knownWordList]").selectOption("senior-high");
+  await expect(page.locator("select[name=knownWordList] option")).toHaveCount(7);
+  await expect(page.locator("select[name=knownWordList]")).toContainText("托福 4510 词");
+  await page.locator("select[name=knownWordList]").selectOption("toefl");
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
   await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
@@ -81,7 +83,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   const settings = await page.evaluate(() => (Reflect.get(window, "__glossaStore") as { settings: unknown }).settings);
   expect(settings).toMatchObject({
     shortcutKey: "Ctrl+Shift+K",
-    knownWordList: "senior-high",
+    knownWordList: "toefl",
     appearance: {
       textColor: "#ff5500",
       backgroundColor: "#113355",
