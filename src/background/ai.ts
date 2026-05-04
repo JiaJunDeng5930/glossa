@@ -1,4 +1,4 @@
-import type { AnkiCard, GlossaSettings, GlossItem, TokenCandidate } from "../shared/types";
+import { GLOSS_TARGET_LANG, type AnkiCard, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
 
 export interface GlossBackendInput {
   settings: GlossaSettings;
@@ -28,7 +28,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         const output = await callOpenAiForTask(fetchImpl, input.settings, {
           task: "gloss",
           prompt: input.settings.prompts.gloss,
-          targetLang: input.settings.targetLang,
+          targetLang: GLOSS_TARGET_LANG,
           sentence: input.sentence,
           tokens: input.tokens
         });
@@ -37,7 +37,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
       return postJson<GlossBackendOutput>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/gloss`, {
         sentence: input.sentence,
         tokens: input.tokens,
-        targetLang: input.settings.targetLang,
+        targetLang: GLOSS_TARGET_LANG,
         prompt: input.settings.prompts.gloss,
         reasoningEffort: input.settings.ai.reasoningEffort,
         promptVersion: input.settings.promptVersion,
@@ -49,7 +49,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         const output = await callOpenAiForTask(fetchImpl, input.settings, {
           task: "anki-card",
           prompt: input.settings.prompts.ankiCard,
-          targetLang: input.settings.targetLang,
+          targetLang: GLOSS_TARGET_LANG,
           sentence: input.sentence,
           token: input.token
         });
@@ -58,7 +58,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
       return postJson<AnkiCard>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/anki-card`, {
         sentence: input.sentence,
         token: input.token,
-        targetLang: input.settings.targetLang,
+        targetLang: GLOSS_TARGET_LANG,
         prompt: input.settings.prompts.ankiCard,
         reasoningEffort: input.settings.ai.reasoningEffort,
         promptVersion: input.settings.promptVersion,

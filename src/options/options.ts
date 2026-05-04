@@ -1,13 +1,19 @@
+import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { formatShortcutFromEvent } from "../shared/shortcut";
-import { DEFAULT_SETTINGS, type AiSettings, type GlossaSettings } from "../shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type GlossaSettings, type KnownWordListId } from "../shared/types";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-capture")!;
 const glossPreview = document.querySelector<HTMLElement>("#gloss-preview")!;
+const glossPreviewLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss"));
+const knownWordListSelect = form.elements.namedItem("knownWordList") as HTMLSelectElement;
+const testAiButton = document.querySelector<HTMLButtonElement>("#test-ai")!;
+const testAnkiButton = document.querySelector<HTMLButtonElement>("#test-anki")!;
 let capturingShortcut = false;
 let pendingShortcut = "";
 
+populateKnownWordLists();
 void loadSettings();
 
 form.addEventListener("submit", (event) => {
@@ -15,18 +21,12 @@ form.addEventListener("submit", (event) => {
   void saveSettings(readFormSettings()).then(() => setStatus("Saved"));
 });
 
-document.querySelector<HTMLButtonElement>("#test-ai")!.addEventListener("click", () => {
-  void testAi(readFormSettings()).then(
-    () => setStatus("AI endpoint returned a valid response"),
-    (error) => setStatus(error instanceof Error ? error.message : "AI test failed")
-  );
+testAiButton.addEventListener("click", () => {
+  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "AI");
 });
 
-document.querySelector<HTMLButtonElement>("#test-anki")!.addEventListener("click", () => {
-  void testAnki(readFormSettings()).then(
-    () => setStatus("AnkiConnect endpoint is reachable"),
-    (error) => setStatus(error instanceof Error ? error.message : "Anki test failed")
-  );
+testAnkiButton.addEventListener("click", () => {
+  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "AnkiConnect");
 });
 
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
@@ -70,10 +70,10 @@ form.addEventListener("input", () => updatePreview(readFormSettings()));
 
 async function loadSettings(): Promise<void> {
   const settings = await chromeLocalGet<GlossaSettings>("settings").then((value) => mergeSettings(value));
-  setInput("targetLang", settings.targetLang);
   setInput("shortcutKey", settings.shortcutKey);
   shortcutCapture.textContent = settings.shortcutKey;
   setInput("learningWindowDays", String(settings.learningWindowDays));
+  setInput("knownWordList", settings.knownWordList);
   setInput("glossTextColor", settings.appearance.textColor);
   setInput("glossBackgroundColor", settings.appearance.backgroundColor);
   setInput("glossBackgroundOpacity", String(settings.appearance.backgroundOpacity));
@@ -99,9 +99,9 @@ function readFormSettings(): GlossaSettings {
   const provider = readInput("provider") as AiSettings["provider"];
   const apiKey = readInput("apiKey").trim();
   return {
-    targetLang: readInput("targetLang").trim() || DEFAULT_SETTINGS.targetLang,
     shortcutKey: readInput("shortcutKey").trim() || DEFAULT_SETTINGS.shortcutKey,
     learningWindowDays: Math.max(1, Number(readInput("learningWindowDays")) || DEFAULT_SETTINGS.learningWindowDays),
+    knownWordList: readKnownWordList(),
     promptVersion: DEFAULT_SETTINGS.promptVersion,
     modelVersion: readInput("modelVersion").trim() || DEFAULT_SETTINGS.modelVersion,
     appearance: {
@@ -133,7 +133,7 @@ async function testAi(settings: GlossaSettings): Promise<void> {
     ? `${settings.ai.endpoint.replace(/\/+$/, "")}/gloss`
     : settings.ai.endpoint;
   const body = settings.ai.provider === "glossa-backend"
-    ? { sentence: "Submit the form.", tokens: [], targetLang: settings.targetLang, reasoningEffort: settings.ai.reasoningEffort }
+    ? { sentence: "Submit the form.", tokens: [], targetLang: GLOSS_TARGET_LANG, reasoningEffort: settings.ai.reasoningEffort }
     : settings.ai.provider === "openai-chat-completions"
       ? {
         model: settings.modelVersion,
@@ -155,7 +155,7 @@ async function testAi(settings: GlossaSettings): Promise<void> {
     body: JSON.stringify(body)
   });
   if (!response.ok) {
-    throw new Error(`AI HTTP ${response.status}`);
+    throw new EndpointStatusError("AI", response.status);
   }
 }
 
@@ -166,7 +166,7 @@ async function testAnki(settings: GlossaSettings): Promise<void> {
     body: JSON.stringify({ action: "version", version: 6 })
   });
   if (!response.ok) {
-    throw new Error(`Anki HTTP ${response.status}`);
+    throw new EndpointStatusError("AnkiConnect", response.status);
   }
 }
 
@@ -175,6 +175,7 @@ function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettin
   return {
     ...DEFAULT_SETTINGS,
     ...value,
+    knownWordList: isKnownWordList(value?.knownWordList) ? value.knownWordList : DEFAULT_SETTINGS.knownWordList,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
     prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
     ai: { ...ai, endpoint: ai.endpoint || defaultEndpointForProvider(ai.provider) },
@@ -192,6 +193,71 @@ function setInput(name: string, value: string): void {
 
 function setStatus(value: string): void {
   statusOutput.value = value;
+}
+
+function populateKnownWordLists(): void {
+  knownWordListSelect.replaceChildren(...KNOWN_WORD_LISTS.map((list) => {
+    const option = document.createElement("option");
+    option.value = list.id;
+    option.textContent = list.label;
+    return option;
+  }));
+}
+
+function readKnownWordList(): KnownWordListId {
+  const value = readInput("knownWordList");
+  return isKnownWordList(value) ? value : DEFAULT_SETTINGS.knownWordList;
+}
+
+function isKnownWordList(value: unknown): value is KnownWordListId {
+  return typeof value === "string" && KNOWN_WORD_LISTS.some((item) => item.id === value);
+}
+
+async function runConnectionTest(button: HTMLButtonElement, run: () => Promise<void>, serviceName: string): Promise<void> {
+  setStatus("");
+  setTestState(button, "loading");
+  try {
+    await run();
+    setTestState(button, "success");
+  } catch (error) {
+    setTestState(button, "error");
+    setStatus(friendlyConnectionError(serviceName, error));
+  }
+}
+
+type TestState = "idle" | "loading" | "success" | "error";
+
+function setTestState(button: HTMLButtonElement, state: TestState): void {
+  button.dataset.state = state;
+  button.disabled = state === "loading";
+}
+
+class EndpointStatusError extends Error {
+  constructor(readonly serviceName: string, readonly status: number) {
+    super(`${serviceName} returned HTTP ${status}`);
+  }
+}
+
+function friendlyConnectionError(serviceName: string, error: unknown): string {
+  if (error instanceof EndpointStatusError) {
+    if (error.status === 401 || error.status === 403) {
+      return `${serviceName} rejected the request. Check the API key or access setting.`;
+    }
+    if (error.status === 404) {
+      return `${serviceName} endpoint was reached, and the test path was missing. Check the endpoint URL.`;
+    }
+    if (error.status >= 500) {
+      return `${serviceName} endpoint is reachable, and it reported a server error. Try again after the service is healthy.`;
+    }
+    return `${serviceName} endpoint returned HTTP ${error.status}. Check the endpoint setting.`;
+  }
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return `${serviceName} test timed out. Check that the endpoint is running and reachable.`;
+  }
+  if (error instanceof TypeError) {
+    return `${serviceName} endpoint could not be reached. Check the URL and network access.`;
+  }
+  return `${serviceName} test failed. Check the endpoint setting.`;
 }
 
 function defaultEndpointForProvider(provider: AiSettings["provider"]): string {
@@ -227,10 +293,13 @@ function isModifierKey(key: string): boolean {
 }
 
 function updatePreview(settings: GlossaSettings): void {
-  glossPreview.style.color = settings.appearance.textColor;
-  glossPreview.style.backgroundColor = hexToRgb(settings.appearance.backgroundColor, settings.appearance.backgroundOpacity);
   glossPreview.style.fontFamily = settings.appearance.fontFamily;
-  glossPreview.style.fontSize = `${settings.appearance.fontSize}px`;
+  for (const label of glossPreviewLabels) {
+    label.style.color = settings.appearance.textColor;
+    label.style.backgroundColor = hexToRgb(settings.appearance.backgroundColor, settings.appearance.backgroundOpacity);
+    label.style.fontFamily = settings.appearance.fontFamily;
+    label.style.fontSize = `${settings.appearance.fontSize}px`;
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {

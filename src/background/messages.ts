@@ -18,6 +18,7 @@ import type {
   TokenCandidate,
   VocabularyRecord
 } from "../shared/types";
+import { GLOSS_TARGET_LANG } from "../shared/types";
 
 export interface BackgroundMessageHandlerDeps {
   storage: ExtensionStorage;
@@ -62,7 +63,7 @@ async function handleGlossRequest(
         continue;
       }
       const cacheKey = await buildGlossCacheKey({
-        targetLang: settings.targetLang,
+        targetLang: GLOSS_TARGET_LANG,
         sentence: sentence.text,
         targetText: token.surface,
         targetSpan: [token.startOffset, token.endOffset],
@@ -86,7 +87,7 @@ async function handleGlossRequest(
           continue;
         }
         const cacheKey = await buildGlossCacheKey({
-          targetLang: settings.targetLang,
+          targetLang: GLOSS_TARGET_LANG,
           sentence: sentence.text,
           targetText: token.surface,
           targetSpan: [token.startOffset, token.endOffset],
@@ -118,7 +119,7 @@ async function handleWordClicked(
   const cardKey = await buildCardCacheKey({
     lang: "en",
     lemma: message.token.lemma,
-    targetLang: settings.targetLang,
+    targetLang: GLOSS_TARGET_LANG,
     promptVersion: await promptCacheVersion(settings, settings.prompts.ankiCard)
   });
   const cachedCard = await deps.storage.cardCache.get(cardKey);

@@ -18,7 +18,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
     Reflect.set(window, "__glossaMessages", sent);
     Reflect.set(window, "chrome", {
       runtime: {
-        getURL: () => "/missing-default-known.txt",
+        getURL: () => "/missing-known-word-list.txt",
         sendMessage(message: { type: string }, callback?: (response: unknown) => void) {
           sent.push(message);
           const response = message.type === "settings.get"
@@ -26,6 +26,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
               type: "settings.response",
               settings: {
                 shortcutKey: "Alt",
+                knownWordList: "junior-high",
                 appearance: {
                   textColor: "#ff5500",
                   backgroundColor: "#113355",

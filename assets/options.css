@@ -57,6 +57,11 @@ button {
   border-color: #111827;
 }
 
+button:disabled {
+  cursor: progress;
+  opacity: 0.86;
+}
+
 textarea {
   min-height: 96px;
   resize: vertical;
@@ -81,20 +86,39 @@ input[type="color"] {
 
 .gloss-preview {
   justify-self: start;
-  display: inline-grid;
-  gap: 4px;
-  padding: 8px 10px;
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 6px;
+  padding: 14px 12px 10px;
+  color: #111827;
+  background: white;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
 }
 
-.gloss-preview span {
+.preview-word {
+  position: relative;
+  display: inline-flex;
+  padding-top: 14px;
+}
+
+.preview-word > span {
   font-size: 16px;
-  opacity: 0.72;
 }
 
-.gloss-preview strong {
+.preview-gloss {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 13px);
+  transform: translateX(-50%);
+  padding: 3px 6px;
+  border-radius: 6px;
   font-size: inherit;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .actions {
@@ -104,8 +128,75 @@ input[type="color"] {
   margin-top: 8px;
 }
 
+.test-button {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.test-button .icon,
+.test-button .spinner {
+  grid-area: 1 / 1;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.spinner {
+  display: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: glossa-spin 0.7s linear infinite;
+}
+
+.test-button .icon-success,
+.test-button .icon-error {
+  display: none;
+}
+
+.test-button[data-state="loading"] .icon,
+.test-button[data-state="success"] .icon,
+.test-button[data-state="error"] .icon {
+  display: none;
+}
+
+.test-button[data-state="loading"] .spinner,
+.test-button[data-state="success"] .icon-success,
+.test-button[data-state="error"] .icon-error {
+  display: block;
+}
+
+.test-button[data-state="success"] {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+.test-button[data-state="error"] {
+  background: #b45309;
+  border-color: #b45309;
+}
+
 output {
   display: block;
   min-height: 24px;
   margin-top: 16px;
+  color: #7c2d12;
+}
+
+@keyframes glossa-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

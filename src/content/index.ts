@@ -1,16 +1,16 @@
-import { loadDefaultKnownWords } from "../core/lexicon";
+import { loadKnownWords } from "../core/lexicon";
 import type { BackgroundResponseMessage, GlossResponseMessage, TokenCandidate } from "../shared/types";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
 
 async function boot(): Promise<void> {
-  const knownWords = await loadDefaultKnownWords();
-  const scan = scanDocumentText(document, knownWords);
-  const tokenMap = new Map<string, ScannedToken>(scan.tokens.map((token) => [token.id, token]));
   const settingsResponse = await runtimeMessage<{ type: "settings.get" }, BackgroundResponseMessage>({ type: "settings.get" })
     .catch(() => ({ type: "settings.response" as const, settings: undefined }));
   const settings = settingsResponse.type === "settings.response" ? settingsResponse.settings : undefined;
+  const knownWords = await loadKnownWords(settings?.knownWordList ?? "junior-high");
+  const scan = scanDocumentText(document, knownWords);
+  const tokenMap = new Map<string, ScannedToken>(scan.tokens.map((token) => [token.id, token]));
   const overlay = createGlossOverlay(document, settings?.appearance);
 
   if (scan.tokens.length > 0) {

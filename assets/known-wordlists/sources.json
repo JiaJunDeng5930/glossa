@@ -1,0 +1,12 @@
+{
+  "junior-high": {
+    "label": "Junior high curriculum words",
+    "source": "Ministry of Education high school English curriculum standard vocabulary appendix; unstarred entries correspond to compulsory education stage words.",
+    "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip"
+  },
+  "senior-high": {
+    "label": "Senior high curriculum words",
+    "source": "Ministry of Education high school English curriculum standard vocabulary appendix, 2017 edition with 2020 revision.",
+    "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip"
+  }
+}

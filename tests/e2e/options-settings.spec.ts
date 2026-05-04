@@ -8,6 +8,9 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
     Reflect.set(window, "__glossaStore", store);
+    Reflect.set(window, "fetch", (url: string) => Promise.resolve(new Response(null, {
+      status: url.includes("8765") ? 401 : 200
+    })));
     Reflect.set(window, "chrome", {
       storage: {
         local: {
@@ -36,6 +39,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("input[name=glossBackgroundOpacity]").fill("0.65");
   await page.locator("select[name=glossFontFamily]").selectOption("Georgia, Times New Roman, serif");
   await page.locator("input[name=glossFontSize]").fill("18");
+  await page.locator("select[name=knownWordList]").selectOption("senior-high");
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
   await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
@@ -43,14 +47,25 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
 
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
-  await expect(page.locator("#gloss-preview")).toHaveCSS("color", "rgb(255, 85, 0)");
-  await expect(page.locator("#gloss-preview")).toHaveCSS("font-size", "18px");
+  await expect(page.locator(".preview-gloss").first()).toHaveCSS("color", "rgb(255, 85, 0)");
+  await expect(page.locator(".preview-gloss").first()).toHaveCSS("font-size", "18px");
+  await expect(page.locator("#test-ai")).toHaveText("");
+  await expect(page.locator("#test-anki")).toHaveText("");
+
+  await page.locator("#test-ai").click();
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
+  await expect(page.locator("#status")).toHaveText("");
+
+  await page.locator("#test-anki").click();
+  await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#status")).toContainText("AnkiConnect rejected the request");
 
   await page.locator("button[type=submit]").click();
 
   const settings = await page.evaluate(() => (Reflect.get(window, "__glossaStore") as { settings: unknown }).settings);
   expect(settings).toMatchObject({
     shortcutKey: "Ctrl+Shift+K",
+    knownWordList: "senior-high",
     appearance: {
       textColor: "#ff5500",
       backgroundColor: "#113355",

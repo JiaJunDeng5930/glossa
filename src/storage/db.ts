@@ -51,6 +51,7 @@ function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettin
   return {
     ...DEFAULT_SETTINGS,
     ...value,
+    knownWordList: value?.knownWordList ?? DEFAULT_SETTINGS.knownWordList,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
     prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
     ai: { ...ai, endpoint: ai.endpoint || defaultEndpointForProvider(ai.provider) },

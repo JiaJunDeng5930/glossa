@@ -9,7 +9,6 @@ describe("background message handler", () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
       ...DEFAULT_SETTINGS,
-      targetLang: "zh-CN",
       shortcutKey: "Alt",
       learningWindowDays: 3,
       promptVersion: "gloss-v1",
@@ -69,7 +68,6 @@ describe("background message handler", () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
       ...DEFAULT_SETTINGS,
-      targetLang: "zh-CN",
       shortcutKey: "Alt",
       learningWindowDays: 3,
       promptVersion: "gloss-v1",

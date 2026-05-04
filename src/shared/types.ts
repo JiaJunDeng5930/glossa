@@ -78,6 +78,9 @@ export type BackgroundResponseMessage = GlossResponseMessage | WordClickedOkMess
 
 export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type KnownWordListId = "junior-high" | "senior-high";
+
+export const GLOSS_TARGET_LANG = "zh-CN";
 
 export interface AiSettings {
   provider: AiProvider;
@@ -105,9 +108,9 @@ export interface PromptSettings {
 }
 
 export interface GlossaSettings {
-  targetLang: string;
   shortcutKey: string;
   learningWindowDays: number;
+  knownWordList: KnownWordListId;
   promptVersion: string;
   modelVersion: string;
   appearance: AppearanceSettings;
@@ -123,9 +126,9 @@ export interface AnkiCard {
 }
 
 export const DEFAULT_SETTINGS: GlossaSettings = {
-  targetLang: "zh-CN",
   shortcutKey: "Alt",
   learningWindowDays: 3,
+  knownWordList: "junior-high",
   promptVersion: "gloss-v1",
   modelVersion: "gpt-4.1-mini",
   appearance: {
@@ -136,7 +139,7 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
     fontSize: 11
   },
   prompts: {
-    gloss: "Translate only the contextual meaning of each unfamiliar English word or phrase into the target language. Return short inline labels that fit above the source word.",
+    gloss: "Translate only the contextual meaning of each unfamiliar English word or phrase into Simplified Chinese. Return short inline labels that fit above the source word.",
     ankiCard: "Create concise Anki Basic card fields for the clicked English word in the sentence. Cover common meanings, the contextual meaning, and one natural example."
   },
   ai: {

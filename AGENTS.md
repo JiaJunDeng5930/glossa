@@ -6,16 +6,18 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 
 - `src/content/*`: page scanning, DOM range mapping, Shadow DOM labels, and shortcut-based selection mode. Content code sends requests to background and keeps page interaction local.
 - `src/background/*`: message orchestration, AI calls, AnkiConnect calls, cache lookup, and vocabulary state persistence. Service worker code persists task state and cache results.
-- `src/core/*`: vocabulary state machine, lemma normalization, known-word filtering, and cache key construction.
+- `src/core/*`: vocabulary state machine, lemma normalization, known-word-list loading, and cache key construction.
 - `src/storage/db.ts`: minimal wrapper for `chrome.storage.local` settings and IndexedDB-backed lexicon/cache stores.
-- `src/options/*`: settings UI for target language, shortcut, AI endpoint, OpenAI Responses API key, and AnkiConnect endpoint.
+- `src/options/*`: settings UI for shortcut, known-word filter, AI endpoint, OpenAI Responses API key, AnkiConnect endpoint, prompts, and connection checks.
 - `src/shared/shortcut.ts`: shared shortcut capture and matching rules for options and content selection mode.
 
 ## State Model
 
 Vocabulary records use one table keyed by `lang:lemma`. `candidate` records become `known` after a displayed gloss. A clicked word becomes `learning_active`, receives an `expiresAt`, and stays eligible for display until expiry. Expired `learning_active` records transition to `known`. `ignored` records stay hidden.
 
-Settings contain `appearance` for inline label colors, opacity, font family, and font size, plus `prompts.gloss` and `prompts.ankiCard`. Prompt text, OpenAI provider, and reasoning effort are included in cache versioning so edits create fresh gloss/card cache entries. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` keeps the existing `/gloss` and `/anki-card` contract.
+Settings contain `appearance` for inline label colors, opacity, font family, and font size, plus `knownWordList`, `prompts.gloss`, and `prompts.ankiCard`. The extension is fixed to English source text and `zh-CN` gloss output through `GLOSS_TARGET_LANG`. Prompt text, OpenAI provider, and reasoning effort are included in cache versioning so edits create fresh gloss/card cache entries. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` keeps the existing `/gloss` and `/anki-card` contract.
+
+Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip.
 
 ## Commands
 

@@ -11,10 +11,6 @@
       <h1>Glossa</h1>
       <form id="settings-form">
         <label>
-          Target language
-          <input name="targetLang" autocomplete="off">
-        </label>
-        <label>
           Selection shortcut key
           <input name="shortcutKey" type="hidden">
           <button id="shortcut-capture" class="secondary" type="button"></button>
@@ -22,6 +18,10 @@
         <label>
           Learning window days
           <input name="learningWindowDays" type="number" min="1" step="1">
+        </label>
+        <label>
+          Known word filter
+          <select name="knownWordList"></select>
         </label>
         <section aria-labelledby="appearance-heading">
           <h2 id="appearance-heading">Gloss style</h2>
@@ -53,8 +53,17 @@
             </label>
           </div>
           <div id="gloss-preview" class="gloss-preview">
-            <span>submit</span>
-            <strong>提交</strong>
+            Readers can
+            <span class="preview-word">
+              <strong class="preview-gloss">适应</strong>
+              <span>adapt</span>
+            </span>
+            to
+            <span class="preview-word">
+              <strong class="preview-gloss">复杂</strong>
+              <span>complex</span>
+            </span>
+            ideas quickly.
           </div>
         </section>
         <label>
@@ -107,8 +116,30 @@
         </label>
         <div class="actions">
           <button type="submit">Save</button>
-          <button id="test-ai" type="button">Test AI</button>
-          <button id="test-anki" type="button">Test Anki</button>
+          <button id="test-ai" class="test-button" type="button" aria-label="Test AI connection" title="Test AI connection" data-state="idle">
+            <svg class="icon icon-idle" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>
+            </svg>
+            <span class="spinner" aria-hidden="true"></span>
+            <svg class="icon icon-success" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+            <svg class="icon icon-error" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
+            </svg>
+          </button>
+          <button id="test-anki" class="test-button" type="button" aria-label="Test Anki connection" title="Test Anki connection" data-state="idle">
+            <svg class="icon icon-idle" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 5h12v14H6zM9 8h6M9 12h6M9 16h4"/>
+            </svg>
+            <span class="spinner" aria-hidden="true"></span>
+            <svg class="icon icon-success" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+            <svg class="icon icon-error" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
+            </svg>
+          </button>
         </div>
       </form>
       <output id="status" role="status"></output>
