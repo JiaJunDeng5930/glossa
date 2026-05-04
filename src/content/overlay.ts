@@ -5,6 +5,7 @@ import { validateTokenForRender } from "./range";
 export interface GlossOverlay {
   render(items: GlossItem[], tokens: Map<string, ScannedToken>, scanVersion: number): RenderSummary;
   clear(): void;
+  pruneDisconnected(): number;
   ownsMutation(mutation: MutationRecord): boolean;
 }
 
@@ -14,6 +15,8 @@ export interface RenderSummary {
   skippedStale: number;
   skippedDuplicate: number;
   skippedOverlap: number;
+  preserved: number;
+  prunedDisconnected: number;
 }
 
 interface RenderCandidate {
@@ -143,6 +146,18 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     }
   };
 
+  const pruneDisconnectedNodes = (): number => {
+    let pruned = 0;
+    for (const node of Array.from(renderedNodes)) {
+      if (node.isConnected) {
+        continue;
+      }
+      renderedNodes.delete(node);
+      pruned += 1;
+    }
+    return pruned;
+  };
+
   return {
     render(items, tokens, scanVersion) {
       const seen = new Set<string>();
@@ -152,7 +167,9 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         skippedMissingToken: 0,
         skippedStale: 0,
         skippedDuplicate: 0,
-        skippedOverlap: 0
+        skippedOverlap: 0,
+        preserved: 0,
+        prunedDisconnected: pruneDisconnectedNodes()
       };
       for (const item of items) {
         const token = tokens.get(item.tokenId);
@@ -165,6 +182,14 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
           continue;
         }
         seen.add(token.id);
+        const existing = findRenderedToken(token.id);
+        if (existing) {
+          if (existing.dataset.glossaDisplay === item.display && existing.dataset.glossaSurface === token.sourceText) {
+            summary.preserved += 1;
+            continue;
+          }
+          unwrapRenderedNode(existing);
+        }
         const validation = validateTokenForRender(token, scanVersion);
         if (!validation.ok || !validation.rect) {
           summary.skippedStale += 1;
@@ -183,10 +208,39 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     clear() {
       clearRenderedNodes();
     },
+    pruneDisconnected() {
+      return pruneDisconnectedNodes();
+    },
     ownsMutation(mutation) {
       return ignoredMutationTargets.has(mutation.target);
     }
   };
+
+  function findRenderedToken(tokenId: string): HTMLElement | undefined {
+    for (const node of Array.from(renderedNodes)) {
+      if (!node.isConnected) {
+        renderedNodes.delete(node);
+        continue;
+      }
+      if (node.dataset.glossaToken === tokenId) {
+        return node;
+      }
+    }
+    return undefined;
+  }
+
+  function unwrapRenderedNode(node: HTMLElement): void {
+    const parent = node.parentNode;
+    if (!parent) {
+      renderedNodes.delete(node);
+      return;
+    }
+    const surface = node.dataset.glossaSurface ?? "";
+    rememberMutationTarget(parent);
+    parent.replaceChild(doc.createTextNode(surface), node);
+    parent.normalize();
+    renderedNodes.delete(node);
+  }
 
   function renderTextNode(textNode: Text, candidates: RenderCandidate[], summary: RenderSummary): number {
     const parent = textNode.parentNode;
@@ -226,6 +280,9 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     wrapper.dataset.glossaOwned = "1";
     wrapper.dataset.glossaToken = candidate.item.tokenId;
     wrapper.dataset.glossaSurface = candidate.token.sourceText;
+    wrapper.dataset.glossaDisplay = candidate.item.display;
+    wrapper.dataset.glossaFingerprint = candidate.token.sourceFingerprint;
+    wrapper.dataset.glossaLemma = candidate.token.lemma;
     wrapper.className = "notranslate";
     wrapper.setAttribute("translate", "no");
     applyAppearance(wrapper, appearance);

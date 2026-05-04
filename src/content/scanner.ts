@@ -85,7 +85,6 @@ export function scanDocumentText(
   const tokens: ScannedToken[] = [];
   const lemmaCounts = new Map<string, number>();
   let sentenceIndex = 0;
-  let tokenIndex = 0;
   const scanVersion = options.scanVersion ?? 0;
   const maxOccurrencesPerLemma = options.maxOccurrencesPerLemma ?? 1;
   const minWordLength = options.minWordLength ?? 3;
@@ -134,8 +133,9 @@ export function scanDocumentText(
           stats.rejectedByVisibility += 1;
           continue;
         }
+        const sourceFingerprint = createSourceFingerprint(text, nodeStartOffset, nodeEndOffset);
         const token: ScannedToken = {
-          id: `t${tokenIndex++}`,
+          id: createTokenId(textNode, surface, lemma, sentenceStart, sourceFingerprint),
           sentenceId,
           surface,
           lemma,
@@ -146,7 +146,7 @@ export function scanDocumentText(
           nodeEndOffset,
           sentenceText: trimmed,
           sourceText: surface,
-          sourceFingerprint: createSourceFingerprint(text, nodeStartOffset, nodeEndOffset),
+          sourceFingerprint,
           scanVersion
         };
         sentenceTokens.push(token);
@@ -164,6 +164,41 @@ export function scanDocumentText(
   }
 
   return { sentences, tokens, stats };
+}
+
+function createTokenId(
+  textNode: Text,
+  surface: string,
+  lemma: string,
+  sentenceStart: number,
+  sourceFingerprint: string
+): string {
+  const root = textNode.getRootNode();
+  const rootKind = root instanceof ShadowRoot ? "shadow" : "document";
+  const parentPath = textNode.parentElement ? elementPath(textNode.parentElement) : "text";
+  return [
+    "t",
+    rootKind,
+    hashSmall(parentPath),
+    hashSmall(`${sentenceStart}:${surface}:${lemma}`),
+    sourceFingerprint
+  ].join(":");
+}
+
+function elementPath(element: Element): string {
+  const parts: string[] = [];
+  let current: Element | null = element;
+  while (current && parts.length < 8) {
+    const parent: Element | null = current.parentElement;
+    const siblingIndex = parent
+      ? Array.from<Element>(parent.children)
+        .filter((sibling) => !sibling.matches("[data-glossa-owned='1']"))
+        .indexOf(current)
+      : 0;
+    parts.push(`${current.tagName.toLowerCase()}:${Math.max(0, siblingIndex)}`);
+    current = parent;
+  }
+  return parts.reverse().join("/");
 }
 
 function collectTextNodes(root: HTMLElement, stats: ScanStats): Text[] {

@@ -21,8 +21,8 @@ async function boot(): Promise<void> {
     if (routeUrl !== pageUrl) {
       pageUrl = routeUrl;
       scanVersion += 1;
+      overlay.clear();
     }
-    overlay.clear();
     const version = ++scanVersion;
     const scan = scanDocumentText(document, knownWords, {
       scanVersion: version,
@@ -48,8 +48,8 @@ async function boot(): Promise<void> {
       }
     });
 
+    overlay.pruneDisconnected();
     if (scan.tokens.length === 0) {
-      overlay.clear();
       return;
     }
 
@@ -85,7 +85,9 @@ async function boot(): Promise<void> {
             skippedMissingToken: render.skippedMissingToken,
             skippedStale: render.skippedStale,
             skippedDuplicate: render.skippedDuplicate,
-            skippedOverlap: render.skippedOverlap
+            skippedOverlap: render.skippedOverlap,
+            preserved: render.preserved,
+            prunedDisconnected: render.prunedDisconnected
           }
         });
       }
@@ -123,7 +125,7 @@ async function boot(): Promise<void> {
       return;
     }
     scanVersion += 1;
-    overlay.clear();
+    overlay.pruneDisconnected();
     observeOpenShadowRoots(document.body);
     scheduleScan("mutation");
   });

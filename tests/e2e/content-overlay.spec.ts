@@ -331,6 +331,98 @@ test("content bundle drops async glosses after the source paragraph changes", as
   })).toBe(0);
 });
 
+test("content bundle preserves existing glosses while mutation rescans wait for responses", async ({ page }) => {
+  await page.setContent("<main><p id=\"stable\">Obscure archive appears here.</p><p id=\"dynamic\"></p></main>");
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          if (message.type === "settings.get") {
+            const response = {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+            };
+            callback?.(response);
+            return Promise.resolve(response);
+          }
+          const tokens = message.payload?.sentences?.flatMap((sentence) => sentence.tokens) ?? [];
+          const obscure = tokens.find((token) => token.surface.toLowerCase() === "obscure");
+          if (message.type === "gloss.request" && obscure && !Reflect.get(window, "__initialGlossRendered")) {
+            Reflect.set(window, "__initialGlossRendered", true);
+            const response = {
+              type: "gloss.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { items: [{ tokenId: obscure.id, targetText: obscure.surface, display: "晦涩" }] }
+            };
+            callback?.(response);
+            return Promise.resolve(response);
+          }
+          if (message.type === "gloss.request") {
+            return new Promise((resolve) => {
+              Reflect.set(window, "__mutationGlossHeld", true);
+              Reflect.set(window, "__resolveMutationGloss", () => {
+                const dynamic = tokens.find((token) => token.surface.toLowerCase() === "dynamic");
+                const response = {
+                  type: "gloss.response",
+                  version: 1,
+                  requestId: message.requestId,
+                  source: "service-worker",
+                  target: message.source,
+                  createdAt: Date.now(),
+                  payload: dynamic ? { items: [{ tokenId: dynamic.id, targetText: dynamic.surface, display: "动态" }] } : { items: [] }
+                };
+                callback?.(response);
+                resolve(response);
+              });
+            });
+          }
+          const response = {
+            type: "gloss.response",
+            version: 1,
+            requestId: message.requestId,
+            source: "service-worker",
+            target: message.source,
+            createdAt: Date.now(),
+            payload: { items: [] }
+          };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "晦涩");
+
+  await page.locator("#dynamic").evaluate((element) => {
+    element.textContent = "A dynamic paragraph appears after boot.";
+  });
+  await page.waitForFunction(() => Reflect.get(window, "__mutationGlossHeld") === true);
+
+  expect(await page.locator("[data-glossa-token-label]", { hasText: "晦涩" }).count()).toBe(1);
+
+  await page.evaluate(() => {
+    (Reflect.get(window, "__resolveMutationGloss") as () => void)();
+  });
+  await page.waitForFunction(() => {
+    return Array.from(document.querySelectorAll("[data-glossa-token-label]"))
+      .some((label) => label.textContent === "动态");
+  });
+});
+
 function overlaps(
   left: { left: number; right: number; top: number; bottom: number },
   right: { left: number; right: number; top: number; bottom: number }
