@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createBackgroundMessageHandler } from "../../src/background/messages";
+import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, type GlossRequestMessage, type UserWordClickMessage } from "../../src/shared/types";
+import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
 describe("background message handler", () => {
   it("serves gloss requests from state, cache and AI backend", async () => {
@@ -27,8 +28,7 @@ describe("background message handler", () => {
       ankiNoteIds: [],
       lastShownAt: 1
     });
-    const request: GlossRequestMessage = {
-      type: "gloss.request",
+    const request = createContentMessage("gloss.request", {
       pageUrl: "https://example.test",
       sentences: [{
         id: "s1",
@@ -38,7 +38,7 @@ describe("background message handler", () => {
           { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 8, endOffset: 14 }
         ]
       }]
-    };
+    });
     const ai = {
       gloss: vi.fn(async () => ({
         items: [{ tokenId: "t2", targetText: "submit", display: "提交", phrase: "submit button" }]
@@ -54,7 +54,8 @@ describe("background message handler", () => {
     if (response.type !== "gloss.response") {
       throw new Error("expected gloss response");
     }
-    expect(response.items).toEqual([{ tokenId: "t2", targetText: "submit", display: "提交", phrase: "submit button" }]);
+    expect(response.requestId).toBe(request.requestId);
+    expect(response.payload.items).toEqual([{ tokenId: "t2", targetText: "submit", display: "提交", phrase: "submit button" }]);
     expect(ai.gloss).toHaveBeenCalledTimes(1);
     expect(ai.gloss).toHaveBeenCalledWith(expect.objectContaining({
       settings: expect.objectContaining({
@@ -75,12 +76,11 @@ describe("background message handler", () => {
       ai: { provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" },
       anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa" }
     });
-    const message: UserWordClickMessage = {
-      type: "word.clicked",
+    const message = createContentMessage("word.clicked", {
       pageUrl: "https://example.test",
       sentence: "A submit button finishes the form.",
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
-    };
+    });
     const ai = {
       gloss: vi.fn(),
       ankiCard: vi.fn(async () => ({
@@ -94,7 +94,7 @@ describe("background message handler", () => {
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
     const response = await handler(message);
 
-    expect(response).toEqual({ type: "word.clicked.ok", noteId: 42 });
+    expect(response).toMatchObject({ type: "word.clicked.ok", requestId: message.requestId, payload: { noteId: 42 } });
     expect(await storage.lexicon.get("en:submit")).toMatchObject({
       state: "learning_active",
       clickCount: 1,
@@ -127,8 +127,7 @@ describe("background message handler", () => {
     };
     const handler = createBackgroundMessageHandler({ storage, ai, anki: { createNote: vi.fn() }, now: () => 1_000 });
     const sentence = "A submit button.";
-    const first = await handler({
-      type: "gloss.request",
+    const firstRequest = createContentMessage("gloss.request", {
       pageUrl: "https://example.test",
       sentences: [{
         id: "s1",
@@ -136,8 +135,7 @@ describe("background message handler", () => {
         tokens: [{ id: "old-token", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }]
       }]
     });
-    const second = await handler({
-      type: "gloss.request",
+    const secondRequest = createContentMessage("gloss.request", {
       pageUrl: "https://example.test",
       sentences: [{
         id: "s2",
@@ -145,9 +143,11 @@ describe("background message handler", () => {
         tokens: [{ id: "new-token", sentenceId: "s2", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }]
       }]
     });
+    const first = await handler(firstRequest);
+    const second = await handler(secondRequest);
 
-    expect(first).toMatchObject({ type: "gloss.response", items: [{ tokenId: "old-token" }] });
-    expect(second).toMatchObject({ type: "gloss.response", items: [{ tokenId: "new-token", targetText: "submit", display: "提交" }] });
+    expect(first).toMatchObject({ type: "gloss.response", payload: { items: [{ tokenId: "old-token" }] } });
+    expect(second).toMatchObject({ type: "gloss.response", payload: { items: [{ tokenId: "new-token", targetText: "submit", display: "提交" }] } });
     expect(ai.gloss).toHaveBeenCalledTimes(1);
   });
 });

@@ -320,9 +320,27 @@ function hexToRgb(hex: string, alpha: number): string {
 }
 
 function chromeLocalGet<T>(key: string): Promise<T | undefined> {
-  return new Promise((resolve) => chrome.storage.local.get(key, (result) => resolve(result[key] as T | undefined)));
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(key, (result) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve(result[key] as T | undefined);
+    });
+  });
 }
 
 function chromeLocalSet<T>(key: string, value: T): Promise<void> {
-  return new Promise((resolve) => chrome.storage.local.set({ [key]: value }, () => resolve()));
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [key]: value }, () => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve();
+    });
+  });
 }

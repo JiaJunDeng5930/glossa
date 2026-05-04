@@ -13,6 +13,9 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       status: url.includes("8765") ? 401 : 200
     })));
     Reflect.set(window, "chrome", {
+      runtime: {
+        lastError: undefined
+      },
       storage: {
         local: {
           get(key: string, callback: (result: Record<string, unknown>) => void) {

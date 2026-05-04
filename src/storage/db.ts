@@ -76,8 +76,15 @@ function readChromeLocal<T>(key: string): Promise<T | undefined> {
   if (!globalThis.chrome?.storage?.local) {
     return Promise.resolve(undefined);
   }
-  return new Promise((resolve) => {
-    chrome.storage.local.get(key, (result) => resolve(result[key] as T | undefined));
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(key, (result) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve(result[key] as T | undefined);
+    });
   });
 }
 
@@ -85,8 +92,15 @@ function writeChromeLocal<T>(key: string, value: T): Promise<void> {
   if (!globalThis.chrome?.storage?.local) {
     return Promise.resolve();
   }
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [key]: value }, () => resolve());
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [key]: value }, () => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve();
+    });
   });
 }
 

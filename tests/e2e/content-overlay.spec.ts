@@ -19,11 +19,17 @@ test("content bundle renders inline glosses and captures shortcut word selection
     Reflect.set(window, "chrome", {
       runtime: {
         getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string }, callback?: (response: unknown) => void) {
+        sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
           sent.push(message);
           const response = message.type === "settings.get"
             ? {
               type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: {
               settings: {
                 shortcutKey: "Alt",
                 knownWordList: "junior-high",
@@ -35,10 +41,27 @@ test("content bundle renders inline glosses and captures shortcut word selection
                   fontSize: 18
                 }
               }
+              }
             }
             : message.type === "gloss.request"
-              ? { type: "gloss.response", items: [{ tokenId: "t1", targetText: "submit", display: "提交" }] }
-              : { type: "word.clicked.ok", noteId: 7 };
+              ? {
+                type: "gloss.response",
+                version: 1,
+                requestId: message.requestId,
+                source: "service-worker",
+                target: message.source,
+                createdAt: Date.now(),
+                payload: { items: [{ tokenId: "t1", targetText: "submit", display: "提交" }] }
+              }
+              : {
+                type: "word.clicked.ok",
+                version: 1,
+                requestId: message.requestId,
+                source: "service-worker",
+                target: message.source,
+                createdAt: Date.now(),
+                payload: { noteId: 7 }
+              };
           callback?.(response);
           return Promise.resolve(response);
         }
@@ -75,16 +98,40 @@ test("content bundle scans text added after boot", async ({ page }) => {
     Reflect.set(window, "chrome", {
       runtime: {
         getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> }, callback?: (response: unknown) => void) {
+        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
           sent.push(message);
-          const dynamicToken = message.sentences
+          const dynamicToken = message.payload?.sentences
             ?.flatMap((sentence) => sentence.tokens)
             .find((token) => token.surface.toLowerCase() === "dynamic");
           const response = message.type === "settings.get"
-            ? { type: "settings.response", settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+            ? {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+            }
             : message.type === "gloss.request" && dynamicToken
-              ? { type: "gloss.response", items: [{ tokenId: dynamicToken.id, targetText: dynamicToken.surface, display: "动态" }] }
-              : { type: "gloss.response", items: [] };
+              ? {
+                type: "gloss.response",
+                version: 1,
+                requestId: message.requestId,
+                source: "service-worker",
+                target: message.source,
+                createdAt: Date.now(),
+                payload: { items: [{ tokenId: dynamicToken.id, targetText: dynamicToken.surface, display: "动态" }] }
+              }
+              : {
+                type: "gloss.response",
+                version: 1,
+                requestId: message.requestId,
+                source: "service-worker",
+                target: message.source,
+                createdAt: Date.now(),
+                payload: { items: [] }
+              };
           callback?.(response);
           return Promise.resolve(response);
         }

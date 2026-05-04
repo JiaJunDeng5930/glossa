@@ -1,5 +1,6 @@
 import { buildCardCacheKey, buildGlossCacheKey } from "../core/cache";
 import { hashText } from "../shared/hash";
+import { createBackgroundResponse } from "../shared/messages";
 import {
   createCandidateRecord,
   markRecordClicked,
@@ -32,17 +33,18 @@ export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDep
   return async function handleMessage(message: ContentToBackgroundMessage): Promise<BackgroundResponseMessage> {
     try {
       if (message.type === "settings.get") {
-        return { type: "settings.response", settings: await deps.storage.settings.get() };
+        return createBackgroundResponse(message, "settings.response", { settings: await deps.storage.settings.get() });
       }
       if (message.type === "gloss.request") {
-        return await handleGlossRequest(message.sentences, deps, now());
+        const payload = await handleGlossRequest(message.payload.sentences, deps, now());
+        return createBackgroundResponse(message, "gloss.response", payload);
       }
-      return await handleWordClicked(message, deps, now());
+      const payload = await handleWordClicked(message.payload, deps, now());
+      return createBackgroundResponse(message, "word.clicked.ok", payload);
     } catch (error) {
-      return {
-        type: "error",
+      return createBackgroundResponse(message, "error", {
         message: error instanceof Error ? error.message : "Unknown background error"
-      };
+      });
     }
   };
 }
@@ -51,7 +53,7 @@ async function handleGlossRequest(
   sentences: SentenceCandidate[],
   deps: BackgroundMessageHandlerDeps,
   now: number
-): Promise<BackgroundResponseMessage> {
+): Promise<{ items: GlossItem[] }> {
   const settings = await deps.storage.settings.get();
   const items: GlossItem[] = [];
 
@@ -101,34 +103,34 @@ async function handleGlossRequest(
     }
   }
 
-  return { type: "gloss.response", items };
+  return { items };
 }
 
 async function handleWordClicked(
-  message: Extract<ContentToBackgroundMessage, { type: "word.clicked" }>,
+  payload: Extract<ContentToBackgroundMessage, { type: "word.clicked" }>["payload"],
   deps: BackgroundMessageHandlerDeps,
   now: number
-): Promise<BackgroundResponseMessage> {
+): Promise<{ noteId?: number }> {
   const settings = await deps.storage.settings.get();
-  const existing = await deps.storage.lexicon.get(vocabularyKey("en", message.token.lemma));
+  const existing = await deps.storage.lexicon.get(vocabularyKey("en", payload.token.lemma));
   const clicked = markRecordClicked(
-    existing ?? createCandidateRecord(message.token.lemma, message.token.surface, "en", now),
+    existing ?? createCandidateRecord(payload.token.lemma, payload.token.surface, "en", now),
     now,
     settings.learningWindowDays
   );
   const cardKey = await buildCardCacheKey({
     lang: "en",
-    lemma: message.token.lemma,
+    lemma: payload.token.lemma,
     targetLang: GLOSS_TARGET_LANG,
     promptVersion: await promptCacheVersion(settings, settings.prompts.ankiCard)
   });
   const cachedCard = await deps.storage.cardCache.get(cardKey);
-  const card = cachedCard ?? await deps.ai.ankiCard({ settings, sentence: message.sentence, token: message.token });
-  const noteId = cachedCard?.noteId ?? await deps.anki.createNote({ settings, card, token: message.token });
+  const card = cachedCard ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
+  const noteId = cachedCard?.noteId ?? await deps.anki.createNote({ settings, card, token: payload.token });
   const ankiNoteIds = noteId === undefined ? clicked.ankiNoteIds : [...new Set([...clicked.ankiNoteIds, noteId])];
   await deps.storage.cardCache.put(cardKey, { ...card, ...(noteId === undefined ? {} : { noteId }) });
   await deps.storage.lexicon.put({ ...clicked, ankiNoteIds });
-  return noteId === undefined ? { type: "word.clicked.ok" } : { type: "word.clicked.ok", noteId };
+  return noteId === undefined ? {} : { noteId };
 }
 
 async function promptCacheVersion(settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>, prompt: string): Promise<string> {

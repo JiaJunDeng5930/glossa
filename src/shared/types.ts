@@ -36,42 +36,56 @@ export interface GlossItem {
   phrase?: string;
 }
 
-export interface GlossRequestMessage {
-  type: "gloss.request";
+export type MessageSource = "content-script" | "service-worker" | "options";
+export type MessageTarget = MessageSource;
+export type MessageVersion = 1;
+
+export interface MessageEnvelope<TType extends string, TSource extends MessageSource, TTarget extends MessageTarget, TPayload> {
+  type: TType;
+  version: MessageVersion;
+  requestId: string;
+  source: TSource;
+  target: TTarget;
+  createdAt: number;
+  payload: TPayload;
+}
+
+export interface GlossRequestPayload {
   pageUrl: string;
   sentences: SentenceCandidate[];
 }
 
-export interface GlossResponseMessage {
-  type: "gloss.response";
+export interface GlossResponsePayload {
   items: GlossItem[];
 }
 
-export interface UserWordClickMessage {
-  type: "word.clicked";
+export interface UserWordClickPayload {
   pageUrl: string;
   sentence: string;
   token: TokenCandidate;
 }
 
-export interface WordClickedOkMessage {
-  type: "word.clicked.ok";
+export interface WordClickedOkPayload {
   noteId?: number;
 }
 
-export interface SettingsGetMessage {
-  type: "settings.get";
-}
+export type SettingsGetPayload = Record<string, never>;
 
-export interface SettingsGetResponseMessage {
-  type: "settings.response";
+export interface SettingsGetResponsePayload {
   settings: GlossaSettings;
 }
 
-export interface ErrorMessage {
-  type: "error";
+export interface ErrorPayload {
   message: string;
 }
+
+export type GlossRequestMessage = MessageEnvelope<"gloss.request", "content-script", "service-worker", GlossRequestPayload>;
+export type GlossResponseMessage = MessageEnvelope<"gloss.response", "service-worker", "content-script", GlossResponsePayload>;
+export type UserWordClickMessage = MessageEnvelope<"word.clicked", "content-script", "service-worker", UserWordClickPayload>;
+export type WordClickedOkMessage = MessageEnvelope<"word.clicked.ok", "service-worker", "content-script", WordClickedOkPayload>;
+export type SettingsGetMessage = MessageEnvelope<"settings.get", "content-script", "service-worker", SettingsGetPayload>;
+export type SettingsGetResponseMessage = MessageEnvelope<"settings.response", "service-worker", "content-script", SettingsGetResponsePayload>;
+export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
 
 export type ContentToBackgroundMessage = GlossRequestMessage | UserWordClickMessage | SettingsGetMessage;
 export type BackgroundResponseMessage = GlossResponseMessage | WordClickedOkMessage | SettingsGetResponseMessage | ErrorMessage;

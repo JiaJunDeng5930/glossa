@@ -1,13 +1,15 @@
 import { loadKnownWords } from "../core/lexicon";
-import type { BackgroundResponseMessage, TokenCandidate } from "../shared/types";
+import { trace } from "../shared/diagnostics";
+import { createContentMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
+import type { BackgroundResponseMessage, ContentToBackgroundMessage, TokenCandidate } from "../shared/types";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
 
 async function boot(): Promise<void> {
-  const settingsResponse = await runtimeMessage<{ type: "settings.get" }, BackgroundResponseMessage>({ type: "settings.get" })
-    .catch(() => ({ type: "settings.response" as const, settings: undefined }));
-  const settings = settingsResponse.type === "settings.response" ? settingsResponse.settings : undefined;
+  const settingsResponse = await runtimeMessage(createContentMessage("settings.get", {}))
+    .catch(() => undefined);
+  const settings = settingsResponse?.type === "settings.response" ? settingsResponse.payload.settings : undefined;
   const knownWords = await loadKnownWords(settings?.knownWordList ?? "junior-high");
   const overlay = createGlossOverlay(document, settings?.appearance);
   let scanVersion = 0;
@@ -23,31 +25,43 @@ async function boot(): Promise<void> {
     const tokenMap = new Map<string, ScannedToken>(scan.tokens.map((token) => [token.id, token]));
     const sentences = scan.sentences.filter((sentence) => sentence.tokens.length > 0);
     const version = ++scanVersion;
-    console.info("[Glossa] scan", { reason, sentences: sentences.length, tokens: scan.tokens.length });
+    trace({
+      component: "content-script",
+      operation: "content.scan",
+      result: "ok",
+      url: location.href,
+      details: { reason, sentences: sentences.length, tokens: scan.tokens.length }
+    });
 
     if (scan.tokens.length === 0) {
       overlay.clear();
       return;
     }
 
-    const response = await runtimeMessage({
-      type: "gloss.request",
+    const response = await runtimeMessage(createContentMessage("gloss.request", {
       pageUrl: location.href,
       sentences: sentences.map(toSerializableSentence)
-    }).catch((error) => {
-      reportError("gloss request failed", error);
+    })).catch((error) => {
+      reportError("gloss.request", error);
       return undefined;
     });
     if (version !== scanVersion || !response) {
       return;
     }
     if (response.type === "gloss.response") {
-      console.info("[Glossa] render", { reason, items: response.items.length });
-      if (response.items.length > 0) {
-        overlay.render(response.items, tokenMap);
+      trace({
+        component: "content-script",
+        operation: "content.render",
+        requestId: response.requestId,
+        result: "ok",
+        url: location.href,
+        details: { reason, items: response.payload.items.length }
+      });
+      if (response.payload.items.length > 0) {
+        overlay.render(response.payload.items, tokenMap);
       }
     } else if (response.type === "error") {
-      reportError("background returned error", response.message);
+      reportError("background.error", response.payload.message, response.requestId);
     }
   };
 
@@ -67,12 +81,11 @@ async function boot(): Promise<void> {
     document,
     shortcutKey: settings?.shortcutKey ?? "Alt",
     onWordSelected(selection) {
-      return runtimeMessage({
-        type: "word.clicked",
+      return runtimeMessage(createContentMessage("word.clicked", {
         pageUrl: location.href,
         sentence: selection.sentence,
         token: selection.token
-      }).then(() => undefined);
+      })).then(() => undefined);
     }
   }).attach();
 
@@ -81,7 +94,7 @@ async function boot(): Promise<void> {
   window.addEventListener("scroll", () => scheduleScan("scroll"), { passive: true });
 }
 
-function runtimeMessage<TMessage, TResponse = BackgroundResponseMessage>(message: TMessage): Promise<TResponse> {
+function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
   return new Promise((resolve, reject) => {
     const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
     if (!runtime?.sendMessage) {
@@ -89,19 +102,37 @@ function runtimeMessage<TMessage, TResponse = BackgroundResponseMessage>(message
       return;
     }
     const sendMessage = runtime.sendMessage as unknown as (
-      message: TMessage,
-      callback: (response: TResponse) => void
-    ) => Promise<TResponse> | void;
-    const maybePromise = sendMessage(message, (response: TResponse) => {
+      message: ContentToBackgroundMessage,
+      callback: (response: unknown) => void
+    ) => Promise<unknown> | void;
+    const timeout = globalThis.setTimeout(() => {
+      trace({
+        component: "content-script",
+        operation: message.type,
+        requestId: message.requestId,
+        result: "timeout",
+        url: location.href
+      });
+      reject(messageTimeoutError(message));
+    }, timeoutMs);
+    const settle = (value: unknown) => {
+      globalThis.clearTimeout(timeout);
+      resolve(validateBackgroundResponse(value, message));
+    };
+    const maybePromise = sendMessage(message, (response: unknown) => {
       const error = chrome.runtime.lastError;
       if (error) {
+        globalThis.clearTimeout(timeout);
         reject(new Error(error.message));
       } else {
-        resolve(response);
+        settle(response);
       }
     });
     if (maybePromise && typeof maybePromise.then === "function") {
-      (maybePromise as Promise<TResponse>).then(resolve, reject);
+      (maybePromise as Promise<unknown>).then(settle, (error) => {
+        globalThis.clearTimeout(timeout);
+        reject(error);
+      });
     }
   });
 }
@@ -112,6 +143,13 @@ if (document.readyState === "loading") {
   void boot().catch((error) => reportError("boot failed", error));
 }
 
-function reportError(message: string, error: unknown): void {
-  console.warn("[Glossa]", message, error);
+function reportError(operation: string, error: unknown, requestId?: string): void {
+  trace({
+    component: "content-script",
+    operation,
+    ...(requestId ? { requestId } : {}),
+    result: "error",
+    url: location.href,
+    error
+  });
 }
