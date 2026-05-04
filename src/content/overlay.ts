@@ -5,6 +5,7 @@ import { validateTokenForRender } from "./range";
 export interface GlossOverlay {
   render(items: GlossItem[], tokens: Map<string, ScannedToken>, scanVersion: number): RenderSummary;
   clear(): void;
+  ownsMutation(mutation: MutationRecord): boolean;
 }
 
 export interface RenderSummary {
@@ -12,7 +13,15 @@ export interface RenderSummary {
   skippedMissingToken: number;
   skippedStale: number;
   skippedDuplicate: number;
+  skippedOverlap: number;
 }
+
+interface RenderCandidate {
+  item: GlossItem;
+  token: ScannedToken;
+}
+
+const STYLE_ID = "glossa-inline-style";
 
 export function createGlossOverlay(doc: Document, appearance: AppearanceSettings = DEFAULT_SETTINGS.appearance): GlossOverlay {
   const host = doc.createElement("div");
@@ -32,33 +41,103 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       z-index: 2147483647;
       font-family: var(--glossa-font-family);
     }
-    .label {
-      position: fixed;
-      transform: translateY(-100%);
-      padding: 1px 4px;
-      border-radius: 4px;
-      background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
-      color: var(--glossa-text-color);
-      font-size: var(--glossa-font-size);
-      line-height: 1.25;
-      white-space: nowrap;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
-    }
   `;
   const layer = doc.createElement("div");
   layer.part.add("layer");
   shadow.append(style, layer);
   doc.documentElement.append(host);
+  const renderedNodes = new Set<HTMLElement>();
+  let ignoredMutationTargets = new WeakSet<Node>();
+  let ignoreResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  const rememberMutationTarget = (target: Node): void => {
+    ignoredMutationTargets.add(target);
+    if (ignoreResetTimer) {
+      globalThis.clearTimeout(ignoreResetTimer);
+    }
+    ignoreResetTimer = globalThis.setTimeout(() => {
+      ignoredMutationTargets = new WeakSet<Node>();
+      ignoreResetTimer = undefined;
+    }, 0);
+  };
+
+  const installStyle = (root: Document | ShadowRoot): void => {
+    const existing = root instanceof Document
+      ? root.getElementById(STYLE_ID)
+      : root.querySelector(`#${STYLE_ID}`);
+    if (existing) {
+      return;
+    }
+    const inlineStyle = doc.createElement("style");
+    inlineStyle.id = STYLE_ID;
+    inlineStyle.dataset.glossaOwned = "1";
+    inlineStyle.setAttribute("translate", "no");
+    inlineStyle.textContent = `
+      [data-glossa-token] {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        vertical-align: baseline;
+        max-width: max-content;
+        white-space: nowrap;
+        line-height: inherit;
+        margin-inline: 1px;
+      }
+      [data-glossa-token-label] {
+        display: block;
+        flex: 0 0 auto;
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
+        color: var(--glossa-text-color);
+        font-family: var(--glossa-font-family);
+        font-size: var(--glossa-font-size);
+        line-height: 1.25;
+        white-space: nowrap;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+        pointer-events: none;
+      }
+      [data-glossa-token-surface] {
+        display: block;
+        flex: 0 0 auto;
+        line-height: inherit;
+      }
+    `;
+    if (root instanceof Document) {
+      const parent = root.head ?? root.documentElement;
+      parent.append(inlineStyle);
+      rememberMutationTarget(parent);
+    } else {
+      root.append(inlineStyle);
+      rememberMutationTarget(root);
+    }
+  };
+
+  const clearRenderedNodes = (): void => {
+    for (const node of Array.from(renderedNodes)) {
+      const parent = node.parentNode;
+      if (!parent) {
+        renderedNodes.delete(node);
+        continue;
+      }
+      const surface = node.dataset.glossaSurface ?? "";
+      rememberMutationTarget(parent);
+      parent.replaceChild(doc.createTextNode(surface), node);
+      parent.normalize();
+      renderedNodes.delete(node);
+    }
+  };
 
   return {
     render(items, tokens, scanVersion) {
-      layer.replaceChildren();
       const seen = new Set<string>();
+      const candidatesByTextNode = new Map<Text, RenderCandidate[]>();
       const summary: RenderSummary = {
         rendered: 0,
         skippedMissingToken: 0,
         skippedStale: 0,
-        skippedDuplicate: 0
+        skippedDuplicate: 0,
+        skippedOverlap: 0
       };
       for (const item of items) {
         const token = tokens.get(item.tokenId);
@@ -76,24 +155,82 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
           summary.skippedStale += 1;
           continue;
         }
-        const label = doc.createElement("span");
-        label.className = "label";
-        label.dataset.glossaOwned = "1";
-        label.dataset.glossaLabel = item.tokenId;
-        label.setAttribute("translate", "no");
-        label.textContent = item.display;
-        label.style.left = `${Math.max(0, validation.rect.left)}px`;
-        label.style.top = `${Math.max(12, validation.rect.top)}px`;
-        layer.append(label);
         validation.range?.detach();
-        summary.rendered += 1;
+        const candidates = candidatesByTextNode.get(token.textNode) ?? [];
+        candidates.push({ item, token });
+        candidatesByTextNode.set(token.textNode, candidates);
+      }
+      for (const [textNode, candidates] of candidatesByTextNode) {
+        summary.rendered += renderTextNode(textNode, candidates, summary);
       }
       return summary;
     },
     clear() {
-      layer.replaceChildren();
+      clearRenderedNodes();
+    },
+    ownsMutation(mutation) {
+      return ignoredMutationTargets.has(mutation.target);
     }
   };
+
+  function renderTextNode(textNode: Text, candidates: RenderCandidate[], summary: RenderSummary): number {
+    const parent = textNode.parentNode;
+    const text = textNode.nodeValue ?? "";
+    if (!parent || text.length === 0) {
+      return 0;
+    }
+    const root = textNode.getRootNode();
+    if (root instanceof Document || root instanceof ShadowRoot) {
+      installStyle(root);
+    }
+
+    const fragment = doc.createDocumentFragment();
+    let cursor = 0;
+    let rendered = 0;
+    for (const candidate of candidates.sort((left, right) => left.token.nodeStartOffset - right.token.nodeStartOffset)) {
+      const { token } = candidate;
+      if (token.nodeStartOffset < cursor || token.nodeEndOffset > text.length) {
+        summary.skippedOverlap += 1;
+        continue;
+      }
+      fragment.append(text.slice(cursor, token.nodeStartOffset));
+      const wrapper = createTokenWrapper(candidate);
+      fragment.append(wrapper);
+      renderedNodes.add(wrapper);
+      cursor = token.nodeEndOffset;
+      rendered += 1;
+    }
+    fragment.append(text.slice(cursor));
+    rememberMutationTarget(parent);
+    parent.replaceChild(fragment, textNode);
+    return rendered;
+  }
+
+  function createTokenWrapper(candidate: RenderCandidate): HTMLElement {
+    const wrapper = doc.createElement("span");
+    wrapper.dataset.glossaOwned = "1";
+    wrapper.dataset.glossaToken = candidate.item.tokenId;
+    wrapper.dataset.glossaSurface = candidate.token.sourceText;
+    wrapper.className = "notranslate";
+    wrapper.setAttribute("translate", "no");
+    applyAppearance(wrapper, appearance);
+
+    const label = doc.createElement("span");
+    label.dataset.glossaOwned = "1";
+    label.dataset.glossaTokenLabel = candidate.item.tokenId;
+    label.dataset.glossaLabel = candidate.item.tokenId;
+    label.setAttribute("translate", "no");
+    label.textContent = candidate.item.display;
+
+    const surface = doc.createElement("span");
+    surface.dataset.glossaOwned = "1";
+    surface.dataset.glossaTokenSurface = candidate.item.tokenId;
+    surface.setAttribute("translate", "no");
+    surface.textContent = candidate.token.sourceText;
+
+    wrapper.append(label, surface);
+    return wrapper;
+  }
 }
 
 function applyAppearance(host: HTMLElement, appearance: AppearanceSettings): void {

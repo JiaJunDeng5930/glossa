@@ -21,8 +21,8 @@ async function boot(): Promise<void> {
     if (routeUrl !== pageUrl) {
       pageUrl = routeUrl;
       scanVersion += 1;
-      overlay.clear();
     }
+    overlay.clear();
     const version = ++scanVersion;
     const scan = scanDocumentText(document, knownWords, {
       scanVersion: version,
@@ -84,7 +84,8 @@ async function boot(): Promise<void> {
             rendered: render.rendered,
             skippedMissingToken: render.skippedMissingToken,
             skippedStale: render.skippedStale,
-            skippedDuplicate: render.skippedDuplicate
+            skippedDuplicate: render.skippedDuplicate,
+            skippedOverlap: render.skippedOverlap
           }
         });
       }
@@ -118,7 +119,7 @@ async function boot(): Promise<void> {
   }).attach();
 
   const observer = new MutationObserver((mutations) => {
-    if (mutations.every(isGlossaOwnedMutation)) {
+    if (mutations.every((mutation) => overlay.ownsMutation(mutation) || isGlossaOwnedMutation(mutation))) {
       return;
     }
     scanVersion += 1;

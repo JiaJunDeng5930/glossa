@@ -4,7 +4,7 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 
 ## Module Boundaries
 
-- `src/content/*`: page scanning, DOM range mapping, Shadow DOM labels, and shortcut-based selection mode. Content code sends requests to background and keeps page interaction local.
+- `src/content/*`: page scanning, DOM range mapping, inline gloss wrappers, and shortcut-based selection mode. Content code sends requests to background and keeps page interaction local.
 - `src/background/*`: message orchestration, AI calls, AnkiConnect calls, cache lookup, and vocabulary state persistence. Service worker code persists task state and cache results.
 - `src/core/*`: vocabulary state machine, lemma normalization, known-word-list loading, and cache key construction.
 - `src/storage/db.ts`: minimal wrapper for `chrome.storage.local` settings and IndexedDB-backed lexicon/cache stores.
@@ -21,7 +21,7 @@ Runtime messages use `src/shared/messages.ts` envelopes with `type`, `version`, 
 
 Background gloss resolution checks a page-scoped in-memory replay cache before lexicon state, then uses lexicon state to gate IndexedDB gloss cache and AI work. This keeps same-page DOM rescans display-stable during the current service-worker lifetime while `known` and `ignored` still stop cold requests.
 
-Content scanning starts from visible, non-editable, non-code text nodes, including open shadow roots and extension-injected frames, and produces DOM-grounded tokens with text-node offsets, source fingerprints, and scan versions. Non-Glossa DOM mutations invalidate pending gloss responses immediately; render code rechecks scan version, source text, fingerprint, and range rects before placing labels. Glossa-owned nodes carry `data-glossa-owned="1"`, `translate="no"`, and `notranslate` so future scans and mutation handling can identify them.
+Content scanning starts from visible, non-editable, non-code text nodes, including open shadow roots and extension-injected frames, and produces DOM-grounded tokens with text-node offsets, source fingerprints, and scan versions. Non-Glossa DOM mutations invalidate pending gloss responses immediately; render code rechecks scan version, source text, fingerprint, and range rects before placing labels. Glosses render as inline `data-glossa-token` wrappers that reserve text-flow space, place the label above the source word, and center both children. Glossa-owned nodes carry `data-glossa-owned="1"`, `translate="no"`, and `notranslate` so future scans and mutation handling can identify them.
 
 Structured diagnostics use `src/shared/diagnostics.ts`. Trace events include component, operation, result, request id, sender tab/frame/document fields when Chrome provides them, and sanitized URLs. `sanitizeUrl` keeps only origin and path, so query strings and fragments stay out of logs.
 

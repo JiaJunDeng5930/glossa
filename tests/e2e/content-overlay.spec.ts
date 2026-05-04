@@ -145,8 +145,101 @@ test("content bundle scans text added after boot", async ({ page }) => {
 
   await page.waitForFunction(() => {
     const host = document.querySelector("#glossa-overlay");
-    return host?.shadowRoot?.querySelector(".label")?.textContent === "动态";
+    return document.querySelector("[data-glossa-token-label]")?.textContent === "动态" && host !== null;
   });
+});
+
+test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Obscure archive terms appear here.</p></main>");
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          const tokens = message.payload?.sentences?.flatMap((sentence) => sentence.tokens) ?? [];
+          const items = tokens
+            .filter((token) => ["obscure", "archive"].includes(token.surface.toLowerCase()))
+            .map((token, index) => ({
+              tokenId: token.id,
+              targetText: token.surface,
+              display: index === 0 ? "极其晦涩的词" : "长期归档资料"
+            }));
+          const response = message.type === "settings.get"
+            ? {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: {
+                settings: {
+                  shortcutKey: "Alt",
+                  knownWordList: "junior-high",
+                  appearance: {
+                    textColor: "#111111",
+                    backgroundColor: "#ffffff",
+                    backgroundOpacity: 1,
+                    fontFamily: "Arial, sans-serif",
+                    fontSize: 16
+                  }
+                }
+              }
+            }
+            : {
+              type: "gloss.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { items }
+            };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.waitForFunction(() => document.querySelectorAll("[data-glossa-token]").length === 2);
+  const geometry = await page.evaluate(() => {
+    const wrappers = Array.from(document.querySelectorAll<HTMLElement>("[data-glossa-token]"));
+    return wrappers.map((wrapper) => {
+      const label = wrapper.querySelector<HTMLElement>("[data-glossa-token-label]")!.getBoundingClientRect();
+      const surface = wrapper.querySelector<HTMLElement>("[data-glossa-token-surface]")!.getBoundingClientRect();
+      return {
+        label: rect(label),
+        surface: rect(surface)
+      };
+    });
+
+    function rect(value: DOMRect): { left: number; right: number; top: number; bottom: number; centerX: number } {
+      return {
+        left: value.left,
+        right: value.right,
+        top: value.top,
+        bottom: value.bottom,
+        centerX: value.left + value.width / 2
+      };
+    }
+  });
+
+  expect(geometry).toHaveLength(2);
+  const [first, second] = geometry;
+  if (!first || !second) {
+    throw new Error("expected two rendered gloss wrappers");
+  }
+  for (const item of [first, second]) {
+    expect(Math.abs(item.label.centerX - item.surface.centerX)).toBeLessThan(0.5);
+    expect(item.label.bottom).toBeLessThanOrEqual(item.surface.top);
+  }
+  expect(overlaps(first.label, second.label)).toBe(false);
+  expect(overlaps(first.surface, second.surface)).toBe(false);
 });
 
 test("content bundle drops async glosses after the source paragraph changes", async ({ page }) => {
@@ -224,3 +317,13 @@ test("content bundle drops async glosses after the source paragraph changes", as
     return host?.shadowRoot?.querySelectorAll(".label").length ?? 0;
   })).toBe(0);
 });
+
+function overlaps(
+  left: { left: number; right: number; top: number; bottom: number },
+  right: { left: number; right: number; top: number; bottom: number }
+): boolean {
+  return left.left < right.right
+    && left.right > right.left
+    && left.top < right.bottom
+    && left.bottom > right.top;
+}
