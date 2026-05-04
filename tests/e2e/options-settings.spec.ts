@@ -50,8 +50,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("color", "rgb(255, 85, 0)");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("font-size", "18px");
-  await expect(page.locator("#test-ai")).toHaveText("Test AI");
-  await expect(page.locator("#test-anki")).toHaveText("Test Anki");
+  await expect(page.locator("#test-ai")).toHaveText("测试 AI");
+  await expect(page.locator("#test-anki")).toHaveText("测试 Anki");
   const buttonPositions = await page.evaluate(() => {
     const reasoning = document.querySelector("select[name=reasoningEffort]")!.getBoundingClientRect();
     const testAi = document.querySelector("#test-ai")!.getBoundingClientRect();
@@ -66,13 +66,13 @@ test("options page captures shortcuts, previews style changes and saves prompts"
 
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
-  await expect(page.locator("#test-ai")).toHaveText("AI connected");
+  await expect(page.locator("#test-ai")).toHaveText("AI 已连接");
   await expect(page.locator("#status")).toHaveText("");
 
   await page.locator("#test-anki").click();
   await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "error");
-  await expect(page.locator("#test-anki")).toHaveText("Test Anki");
-  await expect(page.locator("#status")).toContainText("AnkiConnect rejected the request");
+  await expect(page.locator("#test-anki")).toHaveText("测试 Anki");
+  await expect(page.locator("#status")).toContainText("AnkiConnect 拒绝了请求");
 
   await page.locator("button[type=submit]").click();
 

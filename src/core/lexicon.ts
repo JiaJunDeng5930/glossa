@@ -4,12 +4,12 @@ import { normalizeLemma } from "./state";
 export const KNOWN_WORD_LISTS = [
   {
     id: "junior-high",
-    label: "Junior high curriculum words",
+    label: "初中课标词汇",
     file: "assets/known-wordlists/junior-high.txt"
   },
   {
     id: "senior-high",
-    label: "Senior high curriculum words",
+    label: "高中课标词汇",
     file: "assets/known-wordlists/senior-high.txt"
   }
 ] as const satisfies readonly { id: KnownWordListId; label: string; file: string }[];

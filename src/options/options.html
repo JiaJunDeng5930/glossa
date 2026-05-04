@@ -1,142 +1,142 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Glossa Options</title>
+    <title>Glossa 设置</title>
     <link rel="stylesheet" href="../assets/options.css">
   </head>
   <body>
     <main>
       <header class="page-hero">
         <p>Glossa</p>
-        <h1>Reading settings</h1>
+        <h1>阅读设置</h1>
       </header>
       <form id="settings-form">
         <section class="settings-card" aria-labelledby="reading-heading">
-          <h2 id="reading-heading">Reading</h2>
+          <h2 id="reading-heading">阅读</h2>
           <div class="field-grid">
             <label>
-              Selection shortcut key
+              选词快捷键
               <input name="shortcutKey" type="hidden">
               <button id="shortcut-capture" class="secondary" type="button"></button>
             </label>
             <label>
-              Learning window days
+              学习窗口天数
               <input name="learningWindowDays" type="number" min="1" step="1">
             </label>
             <label>
-              Known word filter
+              基础过滤词表
               <select name="knownWordList"></select>
             </label>
           </div>
         </section>
         <section class="settings-card" aria-labelledby="appearance-heading">
-          <h2 id="appearance-heading">Gloss style</h2>
+          <h2 id="appearance-heading">释义样式</h2>
           <div class="style-grid">
             <label>
-              Text color
+              文字颜色
               <input name="glossTextColor" type="color">
             </label>
             <label>
-              Background
+              背景颜色
               <input name="glossBackgroundColor" type="color">
             </label>
             <label>
-              Depth
+              深浅
               <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
             </label>
             <label>
-              Font
+              字体
               <select name="glossFontFamily">
-                <option value="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">System Sans</option>
-                <option value="Georgia, Times New Roman, serif">Georgia</option>
+                <option value="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">系统无衬线</option>
+                <option value="Georgia, Times New Roman, serif">衬线</option>
                 <option value="Inter, ui-sans-serif, system-ui, sans-serif">Inter</option>
-                <option value="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">Mono</option>
+                <option value="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">等宽</option>
               </select>
             </label>
             <label>
-              Size
+              字号
               <input name="glossFontSize" type="number" min="9" max="24" step="1">
             </label>
           </div>
           <div id="gloss-preview" class="gloss-preview">
-            Readers can
+            读者可以
             <span class="preview-word">
               <strong class="preview-gloss">适应</strong>
               <span>adapt</span>
             </span>
-            to
+            并理解
             <span class="preview-word">
               <strong class="preview-gloss">复杂</strong>
               <span>complex</span>
             </span>
-            ideas quickly.
+            的观点。
           </div>
         </section>
         <div class="settings-grid">
           <section class="settings-card" aria-labelledby="ai-heading">
             <h2 id="ai-heading">AI</h2>
             <label>
-              AI provider
+              AI 服务
               <select name="provider">
                 <option value="openai-responses">OpenAI Responses API</option>
                 <option value="openai-chat-completions">OpenAI Chat Completions API</option>
                 <option value="openai-completions">OpenAI Completions API</option>
-                <option value="glossa-backend">Glossa backend</option>
+                <option value="glossa-backend">Glossa 后端</option>
               </select>
             </label>
             <label>
-              AI endpoint
+              AI 接口地址
               <input name="aiEndpoint" autocomplete="off">
             </label>
             <label>
-              AI API key
+              AI API 密钥
               <input name="apiKey" type="password" autocomplete="off">
             </label>
             <label>
-              Model
+              模型
               <input name="modelVersion" autocomplete="off">
             </label>
             <label>
-              Reasoning effort
+              推理强度
               <select name="reasoningEffort">
-                <option value="none">None</option>
-                <option value="minimal">Minimal</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="xhigh">XHigh</option>
+                <option value="none">无</option>
+                <option value="minimal">极简</option>
+                <option value="low">低</option>
+                <option value="medium">中</option>
+                <option value="high">高</option>
+                <option value="xhigh">超高</option>
               </select>
             </label>
-            <button id="test-ai" class="test-button" type="button" data-state="idle">Test AI</button>
+            <button id="test-ai" class="test-button" type="button" data-state="idle">测试 AI</button>
           </section>
           <section class="settings-card" aria-labelledby="anki-heading">
             <h2 id="anki-heading">Anki</h2>
             <label>
-              AnkiConnect endpoint
+              AnkiConnect 接口地址
               <input name="ankiEndpoint" autocomplete="off">
             </label>
             <label>
-              Anki deck
+              Anki 牌组
               <input name="ankiDeck" autocomplete="off">
             </label>
-            <button id="test-anki" class="test-button" type="button" data-state="idle">Test Anki</button>
+            <button id="test-anki" class="test-button" type="button" data-state="idle">测试 Anki</button>
           </section>
         </div>
         <section class="settings-card" aria-labelledby="prompt-heading">
-          <h2 id="prompt-heading">Prompts</h2>
+          <h2 id="prompt-heading">提示词</h2>
           <label>
-            Gloss prompt
+            释义提示词
             <textarea name="glossPrompt" rows="5"></textarea>
           </label>
           <label>
-            Anki card prompt
+            Anki 卡片提示词
             <textarea name="ankiPrompt" rows="5"></textarea>
           </label>
         </section>
         <div class="actions">
-          <button class="primary-action" type="submit">Save</button>
+          <button class="primary-action" type="submit">保存</button>
         </div>
       </form>
       <output id="status" role="status"></output>

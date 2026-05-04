@@ -18,24 +18,24 @@ void loadSettings();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  void saveSettings(readFormSettings()).then(() => setStatus("Saved"));
+  void saveSettings(readFormSettings()).then(() => setStatus("已保存"));
 });
 
 testAiButton.addEventListener("click", () => {
   void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "AI", {
-    idle: "Test AI",
-    loading: "Testing AI",
-    success: "AI connected",
-    error: "Test AI"
+    idle: "测试 AI",
+    loading: "正在测试 AI",
+    success: "AI 已连接",
+    error: "测试 AI"
   });
 });
 
 testAnkiButton.addEventListener("click", () => {
   void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "AnkiConnect", {
-    idle: "Test Anki",
-    loading: "Testing Anki",
-    success: "Anki connected",
-    error: "Test Anki"
+    idle: "测试 Anki",
+    loading: "正在测试 Anki",
+    success: "Anki 已连接",
+    error: "测试 Anki"
   });
 });
 
@@ -48,7 +48,7 @@ providerSelect.addEventListener("change", () => {
 shortcutCapture.addEventListener("click", () => {
   capturingShortcut = true;
   pendingShortcut = "";
-  shortcutCapture.textContent = "Press keys";
+  shortcutCapture.textContent = "按下快捷键";
   shortcutCapture.focus();
 });
 
@@ -264,23 +264,23 @@ class EndpointStatusError extends Error {
 function friendlyConnectionError(serviceName: string, error: unknown): string {
   if (error instanceof EndpointStatusError) {
     if (error.status === 401 || error.status === 403) {
-      return `${serviceName} rejected the request. Check the API key or access setting.`;
+      return `${serviceName} 拒绝了请求，请检查 API 密钥或访问权限。`;
     }
     if (error.status === 404) {
-      return `${serviceName} endpoint was reached, and the test path was missing. Check the endpoint URL.`;
+      return `${serviceName} 接口可以访问，但测试路径不存在，请检查接口地址。`;
     }
     if (error.status >= 500) {
-      return `${serviceName} endpoint is reachable, and it reported a server error. Try again after the service is healthy.`;
+      return `${serviceName} 接口可以访问，但服务返回了错误，请在服务恢复后重试。`;
     }
-    return `${serviceName} endpoint returned HTTP ${error.status}. Check the endpoint setting.`;
+    return `${serviceName} 接口返回 HTTP ${error.status}，请检查接口设置。`;
   }
   if (error instanceof DOMException && error.name === "AbortError") {
-    return `${serviceName} test timed out. Check that the endpoint is running and reachable.`;
+    return `${serviceName} 测试超时，请检查接口服务是否正在运行且可以访问。`;
   }
   if (error instanceof TypeError) {
-    return `${serviceName} endpoint could not be reached. Check the URL and network access.`;
+    return `${serviceName} 接口无法访问，请检查地址和网络连接。`;
   }
-  return `${serviceName} test failed. Check the endpoint setting.`;
+  return `${serviceName} 测试失败，请检查接口设置。`;
 }
 
 function defaultEndpointForProvider(provider: AiSettings["provider"]): string {
@@ -308,7 +308,7 @@ function finishShortcutCapture(): void {
   shortcutCapture.textContent = pendingShortcut;
   capturingShortcut = false;
   pendingShortcut = "";
-  setStatus("Shortcut captured");
+  setStatus("已记录快捷键");
 }
 
 function isModifierKey(key: string): boolean {
