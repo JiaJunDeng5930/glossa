@@ -47,4 +47,29 @@ describe("selection controller", () => {
 
     controller.detach();
   });
+
+  it("routes async selection failures to the error handler", async () => {
+    document.body.innerHTML = `<button id="save">Save draft</button>`;
+    const button = document.querySelector<HTMLButtonElement>("#save")!;
+    const error = new Error("selection failed");
+    const onError = vi.fn();
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected: vi.fn(async () => {
+        throw error;
+      }),
+      onError
+    });
+    controller.attach();
+
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+
+    expect(onError).toHaveBeenCalledWith(error);
+
+    controller.detach();
+  });
 });

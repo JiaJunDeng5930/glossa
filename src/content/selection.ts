@@ -18,6 +18,7 @@ export interface SelectionControllerOptions {
   document: Document;
   shortcutKey: string;
   onWordSelected(selection: WordSelection): void | Promise<void>;
+  onError?(error: unknown): void;
 }
 
 export function createSelectionController(options: SelectionControllerOptions): SelectionController {
@@ -47,7 +48,14 @@ export function createSelectionController(options: SelectionControllerOptions): 
     const element = event.target instanceof Element ? event.target : null;
     const selection = element ? selectionFromElementText(element) : undefined;
     if (selection) {
-      void options.onWordSelected(selection);
+      try {
+        const result = options.onWordSelected(selection);
+        if (result && typeof result.catch === "function") {
+          void result.catch((error) => options.onError?.(error));
+        }
+      } catch (error) {
+        options.onError?.(error);
+      }
     }
   };
 

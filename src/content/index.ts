@@ -8,15 +8,55 @@ import { createSelectionController } from "./selection";
 
 async function boot(): Promise<void> {
   const settingsResponse = await runtimeMessage(createContentMessage("settings.get", {}))
-    .catch(() => undefined);
+    .catch((error) => {
+      if (isExtensionContextInvalidated(error)) {
+        throw error;
+      }
+      return undefined;
+    });
   const settings = settingsResponse?.type === "settings.response" ? settingsResponse.payload.settings : undefined;
   const knownWords = await loadKnownWords(settings?.knownWordList ?? "junior-high");
   const overlay = createGlossOverlay(document, settings?.appearance);
   let scanVersion = 0;
   let scanTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let pageUrl = urlWithoutHash(location.href);
+  let stopped = false;
+  let selectionController: ReturnType<typeof createSelectionController> | undefined;
+  let observer: MutationObserver | undefined;
+
+  const stopContentScript = (reason: string): void => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    if (scanTimer) {
+      globalThis.clearTimeout(scanTimer);
+      scanTimer = undefined;
+    }
+    observer?.disconnect();
+    selectionController?.detach();
+    overlay.clear();
+    trace({
+      component: "content-script",
+      operation: "content.stop",
+      result: "ignored",
+      url: location.href,
+      details: { reason }
+    });
+  };
+
+  const handleRuntimeError = (operation: string, error: unknown, requestId?: string): void => {
+    if (isExtensionContextInvalidated(error)) {
+      stopContentScript("extension-context-invalidated");
+      return;
+    }
+    reportError(operation, error, requestId);
+  };
 
   const scanAndRender = async (reason: string) => {
+    if (stopped) {
+      return;
+    }
     const routeUrl = urlWithoutHash(location.href);
     if (routeUrl !== pageUrl) {
       pageUrl = routeUrl;
@@ -57,10 +97,10 @@ async function boot(): Promise<void> {
       pageUrl: location.href,
       sentences: sentences.map(toSerializableSentence)
     })).catch((error) => {
-      reportError("gloss.request", error);
+      handleRuntimeError("gloss.request", error);
       return undefined;
     });
-    if (version !== scanVersion || !response) {
+    if (stopped || version !== scanVersion || !response) {
       return;
     }
     if (response.type === "gloss.response") {
@@ -97,6 +137,9 @@ async function boot(): Promise<void> {
   };
 
   const scheduleScan = (reason: string) => {
+    if (stopped) {
+      return;
+    }
     if (scanTimer) {
       globalThis.clearTimeout(scanTimer);
     }
@@ -107,8 +150,11 @@ async function boot(): Promise<void> {
   };
 
   await scanAndRender("boot");
+  if (stopped) {
+    return;
+  }
 
-  createSelectionController({
+  selectionController = createSelectionController({
     document,
     shortcutKey: settings?.shortcutKey ?? "Alt",
     onWordSelected(selection) {
@@ -116,11 +162,20 @@ async function boot(): Promise<void> {
         pageUrl: location.href,
         sentence: selection.sentence,
         token: selection.token
-      })).then(() => undefined);
+      })).then(() => undefined).catch((error) => {
+        handleRuntimeError("word.clicked", error);
+      });
+    },
+    onError(error) {
+      handleRuntimeError("word.clicked", error);
     }
-  }).attach();
+  });
+  selectionController.attach();
 
-  const observer = new MutationObserver((mutations) => {
+  observer = new MutationObserver((mutations) => {
+    if (stopped) {
+      return;
+    }
     if (mutations.every((mutation) => overlay.ownsMutation(mutation) || isGlossaOwnedMutation(mutation))) {
       return;
     }
@@ -134,9 +189,12 @@ async function boot(): Promise<void> {
   window.addEventListener("scroll", () => scheduleScan("scroll"), { passive: true });
 
   function observeOpenShadowRoots(root: ParentNode): void {
+    if (stopped) {
+      return;
+    }
     for (const element of Array.from(root.querySelectorAll("*"))) {
       if (element.shadowRoot) {
-        observer.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
+        observer?.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
         observeOpenShadowRoots(element.shadowRoot);
       }
     }
@@ -168,17 +226,31 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
       globalThis.clearTimeout(timeout);
       resolve(validateBackgroundResponse(value, message));
     };
-    const maybePromise = sendMessage(message, (response: unknown) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        globalThis.clearTimeout(timeout);
-        reject(new Error(error.message));
-      } else {
-        settle(response);
-      }
-    });
+    let maybePromise: Promise<unknown> | void;
+    try {
+      maybePromise = sendMessage(message, (response: unknown) => {
+        let error: chrome.runtime.LastError | undefined;
+        try {
+          error = chrome.runtime.lastError;
+        } catch (lastError) {
+          globalThis.clearTimeout(timeout);
+          reject(lastError);
+          return;
+        }
+        if (error) {
+          globalThis.clearTimeout(timeout);
+          reject(new Error(error.message));
+        } else {
+          settle(response);
+        }
+      }) as Promise<unknown> | void;
+    } catch (error) {
+      globalThis.clearTimeout(timeout);
+      reject(error);
+      return;
+    }
     if (maybePromise && typeof maybePromise.then === "function") {
-      (maybePromise as Promise<unknown>).then(settle, (error) => {
+      maybePromise.then(settle, (error) => {
         globalThis.clearTimeout(timeout);
         reject(error);
       });
@@ -186,10 +258,21 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
   });
 }
 
+function isExtensionContextInvalidated(error: unknown): boolean {
+  return error instanceof Error && /Extension context invalidated/i.test(error.message);
+}
+
+function handleBootError(error: unknown): void {
+  if (isExtensionContextInvalidated(error)) {
+    return;
+  }
+  reportError("boot failed", error);
+}
+
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => void boot().catch((error) => reportError("boot failed", error)), { once: true });
+  document.addEventListener("DOMContentLoaded", () => void boot().catch(handleBootError), { once: true });
 } else {
-  void boot().catch((error) => reportError("boot failed", error));
+  void boot().catch(handleBootError);
 }
 
 function reportError(operation: string, error: unknown, requestId?: string): void {

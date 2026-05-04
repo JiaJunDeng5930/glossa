@@ -149,6 +149,97 @@ test("content bundle scans text added after boot", async ({ page }) => {
   });
 });
 
+test("content bundle stops quietly when gloss messaging sees an invalidated extension context", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setContent("<main><p>Obscure archive appears here.</p></main>");
+  await page.evaluate(() => {
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
+          if (message.type === "settings.get") {
+            const response = {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+            };
+            callback?.(response);
+            return Promise.resolve(response);
+          }
+          throw new Error("Extension context invalidated.");
+        }
+      }
+    });
+  });
+
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForTimeout(300);
+
+  expect(pageErrors).toEqual([]);
+});
+
+test("content bundle handles invalidated extension context during word click", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setContent("<main><p id=\"target\">Submit draft carefully.</p></main>");
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          if (message.type === "settings.get") {
+            const response = {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+            };
+            callback?.(response);
+            return Promise.resolve(response);
+          }
+          if (message.type === "gloss.request") {
+            const response = {
+              type: "gloss.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { items: [] }
+            };
+            callback?.(response);
+            return Promise.resolve(response);
+          }
+          throw new Error("Extension context invalidated.");
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => {
+    const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+    return sent.some((message) => message.type === "gloss.request");
+  });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+  await page.waitForTimeout(300);
+
+  expect(pageErrors).toEqual([]);
+});
+
 test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Obscure archive archive terms appear here.</p></main>");
   await page.evaluate(() => {
