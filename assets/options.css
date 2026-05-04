@@ -228,16 +228,24 @@ button:disabled {
   stroke-linejoin: round;
 }
 
-.test-button[data-state="loading"] .test-label,
-.test-button[data-state="success"] .test-label,
-.test-button[data-state="error"] .test-label {
-  visibility: hidden;
-}
-
 .test-button[data-state="loading"] {
   background: var(--color-frosted);
   color: var(--color-ink);
   border-color: transparent;
+}
+
+.test-button[data-state="loading"],
+.test-button[data-state="success"],
+.test-button[data-state="error"] {
+  width: 44px;
+  min-width: 44px;
+  padding-inline: 0;
+}
+
+.test-button[data-state="loading"] .test-label,
+.test-button[data-state="success"] .test-label,
+.test-button[data-state="error"] .test-label {
+  display: none;
 }
 
 .test-button[data-state="loading"] .test-spinner,
@@ -312,6 +320,12 @@ output {
   .test-button,
   .primary-action {
     width: 100%;
+  }
+
+  .test-button[data-state="loading"],
+  .test-button[data-state="success"],
+  .test-button[data-state="error"] {
+    width: 44px;
   }
 
   .actions {
