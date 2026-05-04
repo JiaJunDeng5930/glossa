@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Word Glossing Strategy"
+  short_description: "Strategies for webpage word glossing"
+  default_prompt: "Use $web-word-glossing-strategy to design or review Glossa's webpage word detection and inline gloss behavior."
