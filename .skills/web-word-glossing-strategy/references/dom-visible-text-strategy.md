@@ -89,6 +89,46 @@ Use viewport scheduling for long pages:
 
 Avoid inserting loading placeholders for word glossing. Word-level glosses should appear only after a resolved candidate is ready to render.
 
+## Stable Rendering Lifecycle
+
+Keep the visible page stable while scanning and requesting glosses:
+
+- Preserve already rendered labels during ordinary mutation and scroll rescans.
+- Treat a rescan as a reconciliation pass: compute new candidates, validate existing labels, then apply the smallest DOM change set.
+- Clear labels immediately only for explicit restore, route change, settings change, vocabulary-state change, or a source container that was actually replaced.
+- Keep a registry of rendered labels keyed by stable candidate identity, such as root identity, source fingerprint, lemma, offsets, and normalized source text.
+- Reuse labels whose source range still validates and whose glossary display text is unchanged.
+- Replace a label only after the new label is ready to insert.
+- Remove labels for ranges that no longer exist, fail visibility checks, or now map to `known` or `ignored` vocabulary state.
+- Let scan version invalidate async writes without using scan version as a blanket reason to remove all visible labels.
+
+This lifecycle prevents a common flicker pattern: mutation increments a version, clears every label, waits for debounce and background results, then renders the same labels again. The user sees a temporary disappearance even when the page text did not change.
+
+Use this shape for content-script state:
+
+```ts
+type RenderedGloss = {
+  id: string;
+  lemma: string;
+  sourceText: string;
+  sourceFingerprint: string;
+  root: Document | ShadowRoot;
+  wrapper: HTMLElement;
+  display: string;
+  lastValidatedAt: number;
+};
+```
+
+Reconciliation order:
+
+1. Collect dirty containers from mutation, scroll, resize, or route detection.
+2. Rescan only those containers when possible.
+3. Build candidate ids from current DOM-grounded candidates.
+4. Validate existing rendered labels against current DOM and vocabulary state.
+5. Keep valid labels in place.
+6. Insert new labels after range validation and gloss resolution.
+7. Remove invalid labels after replacement candidates are ready, except when the original source container has been removed.
+
 ## Dynamic DOM Handling
 
 Use one `MutationObserver` per document or shadow root:
@@ -99,6 +139,8 @@ Use one `MutationObserver` per document or shadow root:
 - Coalesce mutations for a short delay before rescanning.
 - Rescan the closest stable container rather than the entire page.
 - Clear marks and candidate state under replaced containers before rescanning.
+- Keep labels outside the dirty container untouched.
+- For dirty containers, validate existing labels first and remove only labels whose source no longer matches.
 
 For URL changes in single-page apps:
 
@@ -106,6 +148,13 @@ For URL changes in single-page apps:
 - Recompute page rules and scopes after route changes.
 - Clear page-local scan state when the route changes.
 - Keep persistent vocabulary state in background storage.
+
+For scroll events:
+
+- Use scroll as a visibility scheduling signal.
+- Scan newly visible or near-visible containers.
+- Preserve labels that are already rendered in other containers.
+- Avoid a full-page clear-and-rerender cycle on every scroll.
 
 ## Stale Result Prevention
 
@@ -119,6 +168,13 @@ Every async result must prove its source still exists:
 
 This rule applies to gloss cache hits and network/AI results equally.
 
+Async result handling:
+
+- Keep old valid labels visible while waiting for new results.
+- Drop stale results silently after logging a bounded diagnostic event.
+- Apply a result only when the rendered registry has no valid label for the same candidate id, or when the display text changed and the source range still validates.
+- Perform replacement as one DOM operation where possible.
+
 ## Extension-Owned DOM
 
 Every inserted node must be identifiable:
@@ -129,6 +185,8 @@ Every inserted node must be identifiable:
 - Mark programmatic updates so the mutation observer can ignore them during the same task.
 
 Never let extension-owned text enter candidate extraction.
+
+For owned-mutation filtering, mark both the wrapper and the parent or root receiving the DOM write for the current task. A zero-delay reset works for synchronous DOM callbacks; longer render batches should keep an operation token until the batch completes.
 
 ## Frames And Shadow DOM
 
@@ -153,6 +211,21 @@ Before inserting a gloss:
 
 When the original text node is split for insertion, update local mappings or invalidate sibling candidates from the same text node and rescan the container.
 
+After inserting a gloss:
+
+- Add the wrapper to the rendered registry.
+- Confirm the wrapper remains connected.
+- Confirm the wrapper did not create duplicate labels adjacent to the same surface text.
+- Optionally read label and surrounding text rects; remove or downgrade labels that overflow or collide in constrained containers.
+
+Cleanup rules:
+
+- `restore` removes all labels and normalizes affected text nodes.
+- `route-change` removes labels in the old page scope.
+- `settings-change` reconciles labels when style changes can be applied in place, and removes labels when the rendering mode changes.
+- `vocabulary-change` removes labels for affected lemmas and leaves unrelated labels in place.
+- `mutation` removes labels only under removed or invalidated source containers.
+
 ## Failure Signals
 
 Record these counts per scan:
@@ -167,5 +240,8 @@ Record these counts per scan:
 - render successes
 - render skips due to stale DOM
 - render skips due to duplicate label
+- labels preserved during reconciliation
+- labels removed due to invalid source
+- labels replaced due to display change
 
 Use sanitized URLs and request IDs. Do not log full page text.

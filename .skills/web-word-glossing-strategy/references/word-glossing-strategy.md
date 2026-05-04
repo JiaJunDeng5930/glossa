@@ -114,8 +114,60 @@ Render as a small, removable annotation:
 - Avoid labels inside editable text, code, or controls.
 - Collapse or suppress labels in dense clusters.
 - Support removal when the page is restored, settings change, or vocabulary state changes.
+- Preserve valid rendered labels while new scans or gloss requests are pending.
+- Reconcile by stable candidate id instead of clearing the full page before every scan.
 
 For a word in the middle of a text node, use `Range` or split text nodes carefully. After splitting, invalidate remaining candidates from the original text node and rescan the container to prevent offset drift.
+
+## Stable Display Strategy
+
+Keep gloss display stable with a rendered-label registry:
+
+```ts
+type RenderedLabel = {
+  candidateId: string;
+  lemma: string;
+  display: string;
+  sourceText: string;
+  sourceFingerprint: string;
+  wrapper: HTMLElement;
+  root: Document | ShadowRoot;
+};
+```
+
+Use these rules:
+
+- Build candidate ids from source fingerprint, lemma, normalized source text, root identity, and offsets.
+- Keep a rendered label in place when the candidate id still exists and the range still validates.
+- Insert new labels only after the gloss display text is available and the source range is current.
+- Replace a label only when its display text, vocabulary state, or rendering mode changed.
+- Remove a label immediately when its source container was removed from the DOM.
+- Remove labels for a lemma when the user marks that lemma as `known` or `ignored`.
+- Apply style-only settings changes in place when the wrapper structure can stay the same.
+- Use explicit restore or route-change handling for full cleanup.
+
+Avoid this lifecycle for ordinary mutation or scroll events:
+
+```ts
+scanVersion += 1;
+overlay.clear();
+scheduleScan();
+```
+
+This lifecycle creates visible flicker because labels disappear before the replacement scan and background response complete. Prefer:
+
+```ts
+markDirtyContainers(mutations);
+scheduleReconcile();
+// During reconcile:
+// 1. rescan dirty containers
+// 2. validate existing labels
+// 3. keep valid labels
+// 4. render new labels
+// 5. remove invalid labels
+```
+
+Scroll should drive viewport scheduling. It should not clear existing labels.
 
 ## Dynamic Page Strategy
 
@@ -129,6 +181,13 @@ For every candidate request:
 - Render only after all checks pass.
 
 If verification fails, drop the result and let the next scan produce a fresh candidate.
+
+Keep async result handling idempotent:
+
+- A stale result changes no DOM.
+- A duplicate result for an already valid label changes no DOM.
+- A changed display result replaces the existing label in one local operation.
+- A failed background request leaves old valid labels visible and records the failure.
 
 ## User Interaction
 
@@ -153,6 +212,9 @@ Log structured events for:
 - render success
 - stale DOM skip
 - duplicate skip
+- preserved label count
+- removed label count
+- replaced label count
 - state transition
 
 Include component, operation, request ID, tab/frame/document fields when available, sanitized URL, candidate count, lemma count, and elapsed time. Avoid logging page body or full sentence context unless a local debug mode explicitly enables it.
@@ -170,6 +232,9 @@ Cover these cases:
 - Hidden `display:none`, `visibility:hidden`, `opacity:0`, and zero-rect text stay unannotated.
 - Dynamic paragraph replacement discards stale async result.
 - Repeated scanner run creates no duplicate labels.
+- Mutation rescan preserves unchanged labels while new results are pending.
+- Scroll rescan preserves existing labels and annotates newly visible content.
+- Background timeout leaves old valid labels visible.
 - Long page scans viewport-proximate content first.
 - Same-origin iframe and open shadow root behavior is intentional.
 - Cache hit still verifies DOM before rendering.

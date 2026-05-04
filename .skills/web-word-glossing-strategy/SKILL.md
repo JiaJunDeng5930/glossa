@@ -33,7 +33,10 @@ Use these Glossa boundaries unless the repository has changed:
 4. Treat dynamic DOM as a first-class case.
    Observe mutations, resizes, frame/shadow boundaries, and URL changes. Version or fingerprint candidate ranges so async gloss results are discarded when their source DOM has changed.
 
-5. Verify on real page behavior.
+5. Keep rendered glosses stable during rescans.
+   Preserve currently valid labels while a new scan or background request is in flight. Clear labels only for changed source ranges, route changes, settings changes, vocabulary-state changes, or explicit restore actions.
+
+6. Verify on real page behavior.
    Prefer focused unit tests for tokenization/state/cache plus Playwright extension tests for visible insertion, scrolling, dynamic updates, and duplicate prevention.
 
 ## Design Rules
@@ -43,6 +46,7 @@ Use these Glossa boundaries unless the repository has changed:
 - Use DOM `Range` or explicit text-node offsets for insertion. Store enough source identity to verify the target still matches before rendering.
 - Insert annotations with minimal layout impact. Prefer small inline wrappers or Shadow DOM labels that preserve original text and can be removed cleanly.
 - Mark extension-owned nodes and skip them in future scans and mutation handling.
+- Update labels by diffing stable candidate identities. Preserve labels that still match the current DOM and vocabulary state.
 - Batch background requests and cache by normalized lemma plus prompt/settings version. Keep request IDs and source ranges for diagnostics.
 - Make vocabulary state deterministic: `candidate` can become `known` after display, clicked words can become active learning items, expired learning items can become known, and ignored words stay hidden.
 - Keep failures observable. Record sanitized page URL, frame/document identity when available, scan reason, candidate counts, filtered counts, request ID, and render result.
@@ -55,6 +59,7 @@ Before accepting a change, verify:
 - Dynamic replacement of a paragraph removes or invalidates old candidates.
 - Async results never render into a changed text node.
 - Re-running the scanner does not duplicate labels.
+- Mutation and scroll rescans preserve still-valid labels without visible disappearance.
 - Scrolling or revealing content triggers delayed scanning where needed.
 - Shadow DOM and same-origin iframes are handled intentionally.
 - Long pages do not scan every node eagerly when dynamic mode is sufficient.
@@ -62,5 +67,5 @@ Before accepting a change, verify:
 
 ## Detailed References
 
-- `references/dom-visible-text-strategy.md`: DOM traversal, visible-text filtering, observers, stale result handling, and insertion safeguards adapted for word-level annotation.
-- `references/word-glossing-strategy.md`: unknown-word detection, candidate scoring, vocabulary states, inline gloss rendering, caching, diagnostics, and test cases.
+- `references/dom-visible-text-strategy.md`: DOM traversal, visible-text filtering, observers, stable rendering lifecycle, stale result handling, and insertion safeguards adapted for word-level annotation.
+- `references/word-glossing-strategy.md`: unknown-word detection, candidate scoring, vocabulary states, stable inline gloss rendering, caching, diagnostics, and test cases.
