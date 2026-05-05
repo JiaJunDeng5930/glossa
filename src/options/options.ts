@@ -5,12 +5,13 @@ import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type GlossaSettin
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-capture")!;
+const translateShortcutCapture = document.querySelector<HTMLButtonElement>("#translate-shortcut-capture")!;
 const glossPreview = document.querySelector<HTMLElement>("#gloss-preview")!;
 const glossPreviewLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss"));
 const knownWordListSelect = form.elements.namedItem("knownWordList") as HTMLSelectElement;
 const testAiButton = document.querySelector<HTMLButtonElement>("#test-ai")!;
 const testAnkiButton = document.querySelector<HTMLButtonElement>("#test-anki")!;
-let capturingShortcut = false;
+let capturingShortcutName: "shortcutKey" | "translateShortcutKey" | undefined;
 let pendingShortcut = "";
 
 populateKnownWordLists();
@@ -36,27 +37,28 @@ providerSelect.addEventListener("change", () => {
 });
 
 shortcutCapture.addEventListener("click", () => {
-  capturingShortcut = true;
-  pendingShortcut = "";
-  shortcutCapture.textContent = "按下快捷键";
-  shortcutCapture.focus();
+  startShortcutCapture("shortcutKey", shortcutCapture);
+});
+
+translateShortcutCapture.addEventListener("click", () => {
+  startShortcutCapture("translateShortcutKey", translateShortcutCapture);
 });
 
 document.addEventListener("keydown", (event) => {
-  if (!capturingShortcut) {
+  if (!capturingShortcutName) {
     return;
   }
   event.preventDefault();
   event.stopPropagation();
   pendingShortcut = formatShortcutFromEvent(event);
-  shortcutCapture.textContent = pendingShortcut;
+  shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
   if (!isModifierKey(event.key)) {
     finishShortcutCapture();
   }
 });
 
 document.addEventListener("keyup", (event) => {
-  if (!capturingShortcut || !pendingShortcut) {
+  if (!capturingShortcutName || !pendingShortcut) {
     return;
   }
   event.preventDefault();
@@ -72,6 +74,9 @@ async function loadSettings(): Promise<void> {
   const settings = await chromeLocalGet<GlossaSettings>("settings").then((value) => mergeSettings(value));
   setInput("shortcutKey", settings.shortcutKey);
   shortcutCapture.textContent = settings.shortcutKey;
+  setInput("translateShortcutKey", settings.translateShortcutKey);
+  translateShortcutCapture.textContent = settings.translateShortcutKey;
+  setChecked("autoTranslateEnabled", settings.autoTranslateEnabled);
   setInput("learningWindowDays", String(settings.learningWindowDays));
   setInput("knownWordList", settings.knownWordList);
   setInput("glossTextColor", settings.appearance.textColor);
@@ -100,6 +105,8 @@ function readFormSettings(): GlossaSettings {
   const apiKey = readInput("apiKey").trim();
   return {
     shortcutKey: readInput("shortcutKey").trim() || DEFAULT_SETTINGS.shortcutKey,
+    translateShortcutKey: readInput("translateShortcutKey").trim() || DEFAULT_SETTINGS.translateShortcutKey,
+    autoTranslateEnabled: readCheckbox("autoTranslateEnabled"),
     learningWindowDays: Math.max(1, Number(readInput("learningWindowDays")) || DEFAULT_SETTINGS.learningWindowDays),
     knownWordList: readKnownWordList(),
     promptVersion: DEFAULT_SETTINGS.promptVersion,
@@ -175,6 +182,8 @@ function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettin
   return {
     ...DEFAULT_SETTINGS,
     ...value,
+    translateShortcutKey: value?.translateShortcutKey ?? DEFAULT_SETTINGS.translateShortcutKey,
+    autoTranslateEnabled: value?.autoTranslateEnabled ?? DEFAULT_SETTINGS.autoTranslateEnabled,
     knownWordList: isKnownWordList(value?.knownWordList) ? value.knownWordList : DEFAULT_SETTINGS.knownWordList,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
     prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
@@ -189,6 +198,14 @@ function readInput(name: string): string {
 
 function setInput(name: string, value: string): void {
   (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value = value;
+}
+
+function readCheckbox(name: string): boolean {
+  return (form.elements.namedItem(name) as HTMLInputElement).checked;
+}
+
+function setChecked(name: string, value: boolean): void {
+  (form.elements.namedItem(name) as HTMLInputElement).checked = value;
 }
 
 function setStatus(value: string): void {
@@ -285,9 +302,12 @@ function reasoningBody(settings: GlossaSettings): { reasoning?: { effort: Exclud
 }
 
 function finishShortcutCapture(): void {
-  setInput("shortcutKey", pendingShortcut);
-  shortcutCapture.textContent = pendingShortcut;
-  capturingShortcut = false;
+  if (!capturingShortcutName) {
+    return;
+  }
+  setInput(capturingShortcutName, pendingShortcut);
+  shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
+  capturingShortcutName = undefined;
   pendingShortcut = "";
   setStatus("已记录快捷键");
 }
@@ -304,6 +324,17 @@ function updatePreview(settings: GlossaSettings): void {
     label.style.fontFamily = settings.appearance.fontFamily;
     label.style.fontSize = `${settings.appearance.fontSize}px`;
   }
+}
+
+function startShortcutCapture(name: "shortcutKey" | "translateShortcutKey", button: HTMLButtonElement): void {
+  capturingShortcutName = name;
+  pendingShortcut = "";
+  button.textContent = "按下快捷键";
+  button.focus();
+}
+
+function shortcutButtonFor(name: "shortcutKey" | "translateShortcutKey"): HTMLButtonElement {
+  return name === "shortcutKey" ? shortcutCapture : translateShortcutCapture;
 }
 
 function clamp(value: number, min: number, max: number): number {

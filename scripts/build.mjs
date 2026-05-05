@@ -9,13 +9,15 @@ const watch = process.argv.includes("--watch");
 
 await rm(dist, { recursive: true, force: true });
 await mkdir(resolve(dist, "options"), { recursive: true });
+await mkdir(resolve(dist, "popup"), { recursive: true });
 await mkdir(resolve(dist, "assets"), { recursive: true });
 
 const context = await esbuild.context({
   entryPoints: {
     content: resolve(root, "src/content/index.ts"),
     background: resolve(root, "src/background/index.ts"),
-    options: resolve(root, "src/options/options.ts")
+    options: resolve(root, "src/options/options.ts"),
+    popup: resolve(root, "src/popup/popup.ts")
   },
   bundle: true,
   format: "esm",
@@ -38,5 +40,6 @@ if (watch) {
 async function copyStaticFiles() {
   await copyFile(resolve(root, "manifest.json"), resolve(dist, "manifest.json"));
   await copyFile(resolve(root, "src/options/options.html"), resolve(dist, "options/options.html"));
+  await copyFile(resolve(root, "src/popup/popup.html"), resolve(dist, "popup/popup.html"));
   await cp(resolve(root, "assets"), resolve(dist, "assets"), { recursive: true });
 }

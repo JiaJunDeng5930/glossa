@@ -123,6 +123,8 @@ export interface PromptSettings {
 
 export interface GlossaSettings {
   shortcutKey: string;
+  translateShortcutKey: string;
+  autoTranslateEnabled: boolean;
   learningWindowDays: number;
   knownWordList: KnownWordListId;
   promptVersion: string;
@@ -141,6 +143,8 @@ export interface AnkiCard {
 
 export const DEFAULT_SETTINGS: GlossaSettings = {
   shortcutKey: "Alt",
+  translateShortcutKey: "Alt+G",
+  autoTranslateEnabled: false,
   learningWindowDays: 3,
   knownWordList: "junior-high",
   promptVersion: "gloss-v1",

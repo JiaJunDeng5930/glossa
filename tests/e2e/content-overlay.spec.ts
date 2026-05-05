@@ -1,5 +1,131 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { resolve } from "node:path";
+
+test("content bundle waits for manual activation before requesting glosses", async ({ page }) => {
+  await page.setContent("<main><p>Manual archive appears here.</p></main>");
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    const listeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "__glossaListeners", listeners);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        onMessage: {
+          addListener(listener: (message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void) {
+            listeners.push(listener);
+          }
+        },
+        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          const manualToken = message.payload?.sentences
+            ?.flatMap((sentence) => sentence.tokens)
+            .find((token) => token.surface.toLowerCase() === "manual");
+          const response = message.type === "settings.get"
+            ? {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: {
+                settings: {
+                  shortcutKey: "Alt",
+                  translateShortcutKey: "Alt+G",
+                  autoTranslateEnabled: false,
+                  knownWordList: "junior-high"
+                }
+              }
+            }
+            : {
+              type: "gloss.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: manualToken ? { items: [{ tokenId: manualToken.id, targetText: manualToken.surface, display: "手动" }] } : { items: [] }
+            };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForTimeout(300);
+  expect(await sentMessageTypes(page)).toEqual(["settings.get"]);
+
+  await page.evaluate(() => {
+    const listeners = Reflect.get(window, "__glossaListeners") as Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void>;
+    return new Promise((resolve) => {
+      listeners[0]?.({ type: "glossa.activateTranslation" }, {}, resolve);
+    });
+  });
+
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "手动");
+  expect(await sentMessageTypes(page)).toContain("gloss.request");
+});
+
+test("content bundle uses the configured translation shortcut for manual activation", async ({ page }) => {
+  await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
+  await page.evaluate(() => {
+    const sent: unknown[] = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          const shortcutToken = message.payload?.sentences
+            ?.flatMap((sentence) => sentence.tokens)
+            .find((token) => token.surface.toLowerCase() === "shortcut");
+          const response = message.type === "settings.get"
+            ? {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: {
+                settings: {
+                  shortcutKey: "Alt",
+                  translateShortcutKey: "Ctrl+Shift+G",
+                  autoTranslateEnabled: false,
+                  knownWordList: "junior-high"
+                }
+              }
+            }
+            : {
+              type: "gloss.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: shortcutToken ? { items: [{ tokenId: shortcutToken.id, targetText: shortcutToken.surface, display: "快捷" }] } : { items: [] }
+            };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForTimeout(300);
+  expect(await sentMessageTypes(page)).toEqual(["settings.get"]);
+
+  await page.keyboard.down("Control");
+  await page.keyboard.down("Shift");
+  await page.keyboard.press("KeyG");
+  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
+
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
+  expect(await sentMessageTypes(page)).toContain("gloss.request");
+});
 
 test("content bundle renders inline glosses and captures shortcut word selection", async ({ page }) => {
   const messages: unknown[] = [];
@@ -32,6 +158,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
               payload: {
               settings: {
                 shortcutKey: "Alt",
+                autoTranslateEnabled: true,
                 knownWordList: "junior-high",
                 appearance: {
                   textColor: "#ff5500",
@@ -111,7 +238,7 @@ test("content bundle scans text added after boot", async ({ page }) => {
               source: "service-worker",
               target: message.source,
               createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
             }
             : message.type === "gloss.request" && dynamicToken
               ? {
@@ -166,7 +293,7 @@ test("content bundle stops quietly when gloss messaging sees an invalidated exte
               source: "service-worker",
               target: message.source,
               createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
             };
             callback?.(response);
             return Promise.resolve(response);
@@ -203,7 +330,7 @@ test("content bundle handles invalidated extension context during word click", a
               source: "service-worker",
               target: message.source,
               createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
             };
             callback?.(response);
             return Promise.resolve(response);
@@ -269,6 +396,7 @@ test("content bundle lays out inline glosses without label or source overlap", a
               payload: {
                 settings: {
                   shortcutKey: "Alt",
+                  autoTranslateEnabled: true,
                   knownWordList: "junior-high",
                   appearance: {
                     textColor: "#111111",
@@ -364,7 +492,7 @@ test("content bundle drops async glosses after the source paragraph changes", as
               source: "service-worker",
               target: message.source,
               createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
             };
             callback?.(response);
             return Promise.resolve(response);
@@ -440,7 +568,7 @@ test("content bundle preserves existing glosses while mutation rescans wait for 
               source: "service-worker",
               target: message.source,
               createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", knownWordList: "junior-high" } }
+              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
             };
             callback?.(response);
             return Promise.resolve(response);
@@ -522,4 +650,11 @@ function overlaps(
     && left.right > right.left
     && left.top < right.bottom
     && left.bottom > right.top;
+}
+
+async function sentMessageTypes(page: Page): Promise<string[]> {
+  return await page.evaluate(() => {
+    const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+    return sent.map((message) => message.type);
+  });
 }

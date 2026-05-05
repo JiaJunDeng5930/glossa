@@ -51,6 +51,8 @@ function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettin
   return {
     ...DEFAULT_SETTINGS,
     ...value,
+    translateShortcutKey: value?.translateShortcutKey ?? DEFAULT_SETTINGS.translateShortcutKey,
+    autoTranslateEnabled: value?.autoTranslateEnabled ?? DEFAULT_SETTINGS.autoTranslateEnabled,
     knownWordList: value?.knownWordList ?? DEFAULT_SETTINGS.knownWordList,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
     prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },

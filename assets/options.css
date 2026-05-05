@@ -89,6 +89,16 @@ label {
   font-weight: 600;
 }
 
+.checkbox-field {
+  align-self: end;
+  min-height: 44px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 10px 0;
+}
+
 input,
 select,
 textarea,
@@ -117,6 +127,12 @@ input[type="color"] {
 
 input[type="range"] {
   padding-inline: 0;
+}
+
+input[type="checkbox"] {
+  width: 20px;
+  min-height: 20px;
+  accent-color: var(--color-azure);
 }
 
 button {

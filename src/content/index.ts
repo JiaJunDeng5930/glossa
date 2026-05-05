@@ -1,7 +1,8 @@
 import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
 import { createContentMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
-import type { BackgroundResponseMessage, ContentToBackgroundMessage, TokenCandidate } from "../shared/types";
+import { matchesShortcut } from "../shared/shortcut";
+import type { BackgroundResponseMessage, ContentToBackgroundMessage } from "../shared/types";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
@@ -21,6 +22,8 @@ async function boot(): Promise<void> {
   let scanTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let pageUrl = urlWithoutHash(location.href);
   let stopped = false;
+  const autoTranslateEnabled = settings?.autoTranslateEnabled ?? false;
+  let translationEnabled = autoTranslateEnabled;
   let selectionController: ReturnType<typeof createSelectionController> | undefined;
   let observer: MutationObserver | undefined;
 
@@ -53,7 +56,7 @@ async function boot(): Promise<void> {
     reportError(operation, error, requestId);
   };
 
-  const scanAndRender = async (reason: string) => {
+  const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
     if (stopped) {
       return;
     }
@@ -62,6 +65,10 @@ async function boot(): Promise<void> {
       pageUrl = routeUrl;
       scanVersion += 1;
       overlay.clear();
+      translationEnabled = options.manualActivation === true || autoTranslateEnabled;
+    }
+    if (!translationEnabled) {
+      return;
     }
     const version = ++scanVersion;
     const scan = scanDocumentText(document, knownWords, {
@@ -137,7 +144,7 @@ async function boot(): Promise<void> {
   };
 
   const scheduleScan = (reason: string) => {
-    if (stopped) {
+    if (stopped || !translationEnabled) {
       return;
     }
     if (scanTimer) {
@@ -149,7 +156,41 @@ async function boot(): Promise<void> {
     }, 150);
   };
 
-  await scanAndRender("boot");
+  const activateTranslation = async (reason: string): Promise<void> => {
+    if (stopped) {
+      return;
+    }
+    translationEnabled = true;
+    await scanAndRender(reason, { manualActivation: true });
+  };
+
+  const onShortcutKeyDown = (event: KeyboardEvent): void => {
+    if (matchesShortcut(event, settings?.translateShortcutKey ?? "Alt+G")) {
+      event.preventDefault();
+      event.stopPropagation();
+      void activateTranslation("shortcut");
+    }
+  };
+
+  const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
+  runtime?.onMessage?.addListener((message: unknown, _sender, sendResponse) => {
+    if (!isTranslateActivationMessage(message)) {
+      return false;
+    }
+    void activateTranslation("popup").then(() => {
+      sendResponse({ ok: true });
+    }).catch((error) => {
+      handleRuntimeError("content.activate", error);
+      sendResponse({ ok: false, message: error instanceof Error ? error.message : "Translation activation failed" });
+    });
+    return true;
+  });
+
+  document.addEventListener("keydown", onShortcutKeyDown, true);
+
+  if (translationEnabled) {
+    await scanAndRender("boot");
+  }
   if (stopped) {
     return;
   }
@@ -309,4 +350,11 @@ function isGlossaOwnedNode(node: Node): boolean {
     return node.parentElement?.closest("[data-glossa-owned='1']") !== null;
   }
   return node instanceof Element && node.closest("[data-glossa-owned='1']") !== null;
+}
+
+function isTranslateActivationMessage(value: unknown): value is { type: "glossa.activateTranslation" } {
+  return typeof value === "object"
+    && value !== null
+    && "type" in value
+    && value.type === "glossa.activateTranslation";
 }

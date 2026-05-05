@@ -37,6 +37,10 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.keyboard.press("KeyK");
   await page.keyboard.up("Shift");
   await page.keyboard.up("Control");
+  await page.locator("#translate-shortcut-capture").click();
+  await page.keyboard.down("Alt");
+  await page.keyboard.press("KeyG");
+  await page.keyboard.up("Alt");
 
   await page.locator("input[name=glossTextColor]").fill("#ff5500");
   await page.locator("input[name=glossBackgroundColor]").fill("#113355");
@@ -46,6 +50,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("select[name=knownWordList] option")).toHaveCount(7);
   await expect(page.locator("select[name=knownWordList]")).toContainText("托福 4510 词");
   await page.locator("select[name=knownWordList]").selectOption("toefl");
+  await page.locator("input[name=autoTranslateEnabled]").check();
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
   await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
@@ -53,6 +58,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
 
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
+  await expect(page.locator("#translate-shortcut-capture")).toHaveText("Alt+G");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("color", "rgb(255, 85, 0)");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("font-size", "18px");
   await expect(page.locator("#test-ai")).toHaveText("测试 AI");
@@ -88,6 +94,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   const settings = await page.evaluate(() => (Reflect.get(window, "__glossaStore") as { settings: unknown }).settings);
   expect(settings).toMatchObject({
     shortcutKey: "Ctrl+Shift+K",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: true,
     knownWordList: "toefl",
     appearance: {
       textColor: "#ff5500",

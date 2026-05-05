@@ -9,13 +9,16 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 - `src/core/*`: vocabulary state machine, lemma normalization, known-word-list loading, and cache key construction.
 - `src/storage/db.ts`: minimal wrapper for `chrome.storage.local` settings and IndexedDB-backed lexicon/cache stores.
 - `src/options/*`: settings UI for shortcut, known-word filter, AI endpoint, OpenAI Responses API key, AnkiConnect endpoint, prompts, and connection checks.
+- `src/popup/*`: action popup menu. The translate button sends a tab message that activates content translation for the current page.
 - `src/shared/shortcut.ts`: shared shortcut capture and matching rules for options and content selection mode.
 
 ## State Model
 
 Vocabulary records use one table keyed by `lang:lemma`. `candidate` records become `known` after a displayed gloss. A clicked word becomes `learning_active`, receives an `expiresAt`, and stays eligible for display until expiry. Expired `learning_active` records transition to `known`. `ignored` records stay hidden.
 
-Settings contain `appearance` for inline label colors, opacity, font family, and font size, plus `knownWordList`, `prompts.gloss`, and `prompts.ankiCard`. The extension is fixed to English source text and `zh-CN` gloss output through `GLOSS_TARGET_LANG`. Prompt text, OpenAI provider, and reasoning effort are included in cache versioning so edits create fresh gloss/card cache entries. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` keeps the existing `/gloss` and `/anki-card` contract.
+Settings contain `autoTranslateEnabled`, `translateShortcutKey`, `shortcutKey`, `appearance` for inline label colors, opacity, font family, and font size, plus `knownWordList`, `prompts.gloss`, and `prompts.ankiCard`. The extension is fixed to English source text and `zh-CN` gloss output through `GLOSS_TARGET_LANG`. Prompt text, OpenAI provider, and reasoning effort are included in cache versioning so edits create fresh gloss/card cache entries. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` keeps the existing `/gloss` and `/anki-card` contract.
+
+Content translation has a page-local activation flag. It starts from `settings.autoTranslateEnabled`, turns on when the action popup sends `glossa.activateTranslation` or the page receives `settings.translateShortcutKey`, and resets to the setting value after a route URL change. Mutation and scroll rescans only request glosses while the page is active.
 
 Runtime messages use `src/shared/messages.ts` envelopes with `type`, `version`, `requestId`, `source`, `target`, `createdAt`, and `payload`. Content-script callers validate service-worker responses and keep a bounded timeout. The service worker validates every incoming envelope before dispatching and returns response envelopes with the original `requestId`.
 
@@ -33,7 +36,7 @@ The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no sha
 
 - `npm run typecheck`: TypeScript contract check.
 - `npm run test`: Vitest unit and integration tests.
-- `npm run build`: bundle `content.js`, `background.js`, and `options.js` into `dist/`.
+- `npm run build`: bundle `content.js`, `background.js`, `options.js`, and `popup.js` into `dist/`.
 - `npm run test:e2e`: Playwright browser check against the built content bundle.
 - `npm run verify`: full local gate.
 
