@@ -1,56 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 import { resolve } from "node:path";
 
+type RuntimeSettings = Record<string, unknown>;
+
 test("content bundle waits for manual activation before requesting glosses", async ({ page }) => {
   await page.setContent("<main><p>Manual archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    const listeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "__glossaListeners", listeners);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        onMessage: {
-          addListener(listener: (message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void) {
-            listeners.push(listener);
-          }
-        },
-        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          const manualToken = message.payload?.sentences
-            ?.flatMap((sentence) => sentence.tokens)
-            .find((token) => token.surface.toLowerCase() === "manual");
-          const response = message.type === "settings.get"
-            ? {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: {
-                settings: {
-                  shortcutKey: "Alt",
-                  translateShortcutKey: "Alt+G",
-                  autoTranslateEnabled: false,
-                  knownWordList: "junior-high"
-                }
-              }
-            }
-            : {
-              type: "gloss.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: manualToken ? { items: [{ tokenId: manualToken.id, targetText: manualToken.surface, display: "手动" }] } : { items: [] }
-            };
-          callback?.(response);
-          return Promise.resolve(response);
-        }
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const manualToken = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "manual");
+      if (manualToken) {
+        emit(glossToken(message.payload.scanId, manualToken.id, "ready", { tokenId: manualToken.id, targetText: manualToken.surface, display: "手动" }));
       }
+      emit(glossDone(message.payload.scanId));
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
@@ -65,52 +36,28 @@ test("content bundle waits for manual activation before requesting glosses", asy
   });
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "手动");
-  expect(await sentMessageTypes(page)).toContain("gloss.request");
+  expect(await sentMessageTypes(page)).toContain("gloss.scan");
 });
 
 test("content bundle uses the configured translation shortcut for manual activation", async ({ page }) => {
   await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Ctrl+Shift+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          const shortcutToken = message.payload?.sentences
-            ?.flatMap((sentence) => sentence.tokens)
-            .find((token) => token.surface.toLowerCase() === "shortcut");
-          const response = message.type === "settings.get"
-            ? {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: {
-                settings: {
-                  shortcutKey: "Alt",
-                  translateShortcutKey: "Ctrl+Shift+G",
-                  autoTranslateEnabled: false,
-                  knownWordList: "junior-high"
-                }
-              }
-            }
-            : {
-              type: "gloss.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: shortcutToken ? { items: [{ tokenId: shortcutToken.id, targetText: shortcutToken.surface, display: "快捷" }] } : { items: [] }
-            };
-          callback?.(response);
-          return Promise.resolve(response);
-        }
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const shortcutToken = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "shortcut");
+      if (shortcutToken) {
+        emit(glossToken(message.payload.scanId, shortcutToken.id, "ready", { tokenId: shortcutToken.id, targetText: shortcutToken.surface, display: "快捷" }));
       }
+      emit(glossDone(message.payload.scanId));
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
@@ -124,7 +71,7 @@ test("content bundle uses the configured translation shortcut for manual activat
   await page.keyboard.up("Control");
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
-  expect(await sentMessageTypes(page)).toContain("gloss.request");
+  expect(await sentMessageTypes(page)).toContain("gloss.scan");
 });
 
 test("content bundle renders inline glosses and captures shortcut word selection", async ({ page }) => {
@@ -139,60 +86,29 @@ test("content bundle renders inline glosses and captures shortcut word selection
       </script>
     </main>
   `);
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high",
+    appearance: {
+      textColor: "#ff5500",
+      backgroundColor: "#113355",
+      backgroundOpacity: 0.65,
+      fontFamily: "Georgia, Times New Roman, serif",
+      fontSize: 18
+    }
+  });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          const response = message.type === "settings.get"
-            ? {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: {
-              settings: {
-                shortcutKey: "Alt",
-                autoTranslateEnabled: true,
-                knownWordList: "junior-high",
-                appearance: {
-                  textColor: "#ff5500",
-                  backgroundColor: "#113355",
-                  backgroundOpacity: 0.65,
-                  fontFamily: "Georgia, Times New Roman, serif",
-                  fontSize: 18
-                }
-              }
-              }
-            }
-            : message.type === "gloss.request"
-              ? {
-                type: "gloss.response",
-                version: 1,
-                requestId: message.requestId,
-                source: "service-worker",
-                target: message.source,
-                createdAt: Date.now(),
-                payload: { items: [{ tokenId: "t1", targetText: "submit", display: "提交" }] }
-              }
-              : {
-                type: "word.clicked.ok",
-                version: 1,
-                requestId: message.requestId,
-                source: "service-worker",
-                target: message.source,
-                createdAt: Date.now(),
-                payload: { noteId: 7 }
-              };
-          callback?.(response);
-          return Promise.resolve(response);
-        }
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const submit = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "submit");
+      if (submit) {
+        emit(glossToken(message.payload.scanId, submit.id, "ready", { tokenId: submit.id, targetText: submit.surface, display: "提交" }));
       }
+      emit(glossDone(message.payload.scanId));
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
@@ -203,7 +119,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
   await expect(page.locator("#glossa-overlay")).toHaveCSS("--glossa-font-size", "18px");
   await page.waitForFunction(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
-    return sent.some((message) => message.type === "gloss.request");
+    return sent.some((message) => message.type === "gloss.scan");
   });
   await page.keyboard.down("Alt");
   await page.locator("#save").click();
@@ -212,57 +128,25 @@ test("content bundle renders inline glosses and captures shortcut word selection
   expect(await page.evaluate(() => Reflect.get(window, "buttonClicks"))).toBe(0);
   messages.push(...await page.evaluate(() => Reflect.get(window, "__glossaMessages") as unknown[]));
   expect(messages).toEqual(expect.arrayContaining([
-    expect.objectContaining({ type: "gloss.request" }),
+    expect.objectContaining({ type: "gloss.scan" }),
     expect.objectContaining({ type: "word.clicked" })
   ]));
 });
 
 test("content bundle scans text added after boot", async ({ page }) => {
   await page.setContent("<main id=\"app\"></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          const dynamicToken = message.payload?.sentences
-            ?.flatMap((sentence) => sentence.tokens)
-            .find((token) => token.surface.toLowerCase() === "dynamic");
-          const response = message.type === "settings.get"
-            ? {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
-            }
-            : message.type === "gloss.request" && dynamicToken
-              ? {
-                type: "gloss.response",
-                version: 1,
-                requestId: message.requestId,
-                source: "service-worker",
-                target: message.source,
-                createdAt: Date.now(),
-                payload: { items: [{ tokenId: dynamicToken.id, targetText: dynamicToken.surface, display: "动态" }] }
-              }
-              : {
-                type: "gloss.response",
-                version: 1,
-                requestId: message.requestId,
-                source: "service-worker",
-                target: message.source,
-                createdAt: Date.now(),
-                payload: { items: [] }
-              };
-          callback?.(response);
-          return Promise.resolve(response);
-        }
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const dynamicToken = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "dynamic");
+      if (dynamicToken) {
+        emit(glossToken(message.payload.scanId, dynamicToken.id, "ready", { tokenId: dynamicToken.id, targetText: dynamicToken.surface, display: "动态" }));
       }
+      emit(glossDone(message.payload.scanId));
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
@@ -276,31 +160,74 @@ test("content bundle scans text added after boot", async ({ page }) => {
   });
 });
 
+test("content bundle replaces pending gloss spinners with ready labels", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Pending archive appears here.</p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const pending = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "pending");
+      if (!pending) {
+        emit(glossDone(message.payload.scanId));
+        return;
+      }
+      emit(glossToken(message.payload.scanId, pending.id, "pending"));
+      Reflect.set(window, "__resolvePendingGloss", () => {
+        emit(glossToken(message.payload.scanId, pending.id, "ready", { tokenId: pending.id, targetText: pending.surface, display: "等待" }));
+        emit(glossDone(message.payload.scanId));
+      });
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+  const pendingGeometry = await tokenGeometry(page);
+  expect(pendingGeometry.label.bottom).toBeLessThanOrEqual(pendingGeometry.surface.top);
+  expect(Math.abs(pendingGeometry.label.centerX - pendingGeometry.surface.centerX)).toBeLessThan(0.5);
+
+  await page.evaluate(() => {
+    (Reflect.get(window, "__resolvePendingGloss") as () => void)();
+  });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "等待");
+});
+
+test("content bundle leaves hidden tokens as original page text", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Ignored archive appears here.</p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const ignored = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "ignored");
+      if (ignored) {
+        emit(glossToken(message.payload.scanId, ignored.id, "hidden"));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => {
+    const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+    return sent.some((message) => message.type === "gloss.scan");
+  });
+
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await expect(page.locator("#target")).toHaveText("Ignored archive appears here.");
+});
+
 test("content bundle stops quietly when gloss messaging sees an invalidated extension context", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.setContent("<main><p>Obscure archive appears here.</p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
   await page.evaluate(() => {
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
-          if (message.type === "settings.get") {
-            const response = {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
-            };
-            callback?.(response);
-            return Promise.resolve(response);
-          }
-          throw new Error("Extension context invalidated.");
-        }
-      }
+    Reflect.set(window, "__glossaOnScan", () => {
+      throw new Error("Extension context invalidated.");
     });
   });
 
@@ -314,49 +241,23 @@ test("content bundle handles invalidated extension context during word click", a
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.setContent("<main><p id=\"target\">Submit draft carefully.</p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          if (message.type === "settings.get") {
-            const response = {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
-            };
-            callback?.(response);
-            return Promise.resolve(response);
-          }
-          if (message.type === "gloss.request") {
-            const response = {
-              type: "gloss.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { items: [] }
-            };
-            callback?.(response);
-            return Promise.resolve(response);
-          }
-          throw new Error("Extension context invalidated.");
-        }
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string } }, emit: (response: unknown) => void) => {
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      emit(glossDone(message.payload.scanId));
+    });
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string }) => {
+      if (message.type === "word.clicked") {
+        throw new Error("Extension context invalidated.");
       }
+      return undefined;
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
   await page.waitForFunction(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
-    return sent.some((message) => message.type === "gloss.request");
+    return sent.some((message) => message.type === "gloss.scan");
   });
 
   await page.keyboard.down("Alt");
@@ -369,58 +270,33 @@ test("content bundle handles invalidated extension context during word click", a
 
 test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Obscure archive archive terms appear here.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high",
+    appearance: {
+      textColor: "#111111",
+      backgroundColor: "#ffffff",
+      backgroundOpacity: 1,
+      fontFamily: "Arial, sans-serif",
+      fontSize: 16
+    }
+  });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          const tokens = message.payload?.sentences?.flatMap((sentence) => sentence.tokens) ?? [];
-          const items = tokens
-            .filter((token) => ["obscure", "archive"].includes(token.surface.toLowerCase()))
-            .map((token, index) => ({
-              tokenId: token.id,
-              targetText: token.surface,
-              display: index === 0 ? "极其晦涩的词" : "长期归档资料"
-            }));
-          const response = message.type === "settings.get"
-            ? {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: {
-                settings: {
-                  shortcutKey: "Alt",
-                  autoTranslateEnabled: true,
-                  knownWordList: "junior-high",
-                  appearance: {
-                    textColor: "#111111",
-                    backgroundColor: "#ffffff",
-                    backgroundOpacity: 1,
-                    fontFamily: "Arial, sans-serif",
-                    fontSize: 16
-                  }
-                }
-              }
-            }
-            : {
-              type: "gloss.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { items }
-            };
-          callback?.(response);
-          return Promise.resolve(response);
-        }
-      }
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const tokens = message.payload.sentences.flatMap((sentence) => sentence.tokens);
+      tokens
+        .filter((token) => ["obscure", "archive"].includes(token.surface.toLowerCase()))
+        .forEach((token, index) => {
+          emit(glossToken(message.payload.scanId, token.id, "ready", {
+            tokenId: token.id,
+            targetText: token.surface,
+            display: index === 0 ? "极其晦涩的词" : "长期归档资料"
+          }));
+        });
+      emit(glossDone(message.payload.scanId));
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
@@ -476,61 +352,25 @@ test("content bundle lays out inline glosses without label or source overlap", a
 
 test("content bundle drops async glosses after the source paragraph changes", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Obscure archive appears here.</p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          if (message.type === "settings.get") {
-            const response = {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
-            };
-            callback?.(response);
-            return Promise.resolve(response);
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      if (!Reflect.get(window, "__firstGlossHeld")) {
+        Reflect.set(window, "__firstGlossHeld", true);
+        const token = message.payload.sentences
+          .flatMap((sentence) => sentence.tokens)
+          .find((item) => item.surface.toLowerCase() === "obscure");
+        Reflect.set(window, "__resolveFirstGloss", () => {
+          if (token) {
+            emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, targetText: token.surface, display: "晦涩" }));
           }
-          if (message.type === "gloss.request" && !Reflect.get(window, "__firstGlossHeld")) {
-            Reflect.set(window, "__firstGlossHeld", true);
-            const token = message.payload?.sentences
-              ?.flatMap((sentence) => sentence.tokens)
-              .find((item) => item.surface.toLowerCase() === "obscure");
-            return new Promise((resolve) => {
-              Reflect.set(window, "__resolveFirstGloss", () => {
-                const response = {
-                  type: "gloss.response",
-                  version: 1,
-                  requestId: message.requestId,
-                  source: "service-worker",
-                  target: message.source,
-                  createdAt: Date.now(),
-                  payload: token ? { items: [{ tokenId: token.id, targetText: token.surface, display: "晦涩" }] } : { items: [] }
-                };
-                callback?.(response);
-                resolve(response);
-              });
-            });
-          }
-          const response = {
-            type: "gloss.response",
-            version: 1,
-            requestId: message.requestId,
-            source: "service-worker",
-            target: message.source,
-            createdAt: Date.now(),
-            payload: { items: [] }
-          };
-          callback?.(response);
-          return Promise.resolve(response);
-        }
+          emit(glossDone(message.payload.scanId));
+        });
+        return;
       }
+      emit(glossDone(message.payload.scanId));
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
@@ -544,83 +384,32 @@ test("content bundle drops async glosses after the source paragraph changes", as
   });
 
   await page.waitForTimeout(300);
-  expect(await page.evaluate(() => {
-    const host = document.querySelector("#glossa-overlay");
-    return host?.shadowRoot?.querySelectorAll(".label").length ?? 0;
-  })).toBe(0);
+  expect(await page.locator("[data-glossa-token-label]", { hasText: "晦涩" }).count()).toBe(0);
 });
 
 test("content bundle preserves existing glosses while mutation rescans wait for responses", async ({ page }) => {
   await page.setContent("<main><p id=\"stable\">Obscure archive appears here.</p><p id=\"dynamic\"></p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
   await page.evaluate(() => {
-    const sent: unknown[] = [];
-    Reflect.set(window, "__glossaMessages", sent);
-    Reflect.set(window, "chrome", {
-      runtime: {
-        getURL: () => "/missing-known-word-list.txt",
-        sendMessage(message: { type: string; requestId: string; source: "content-script"; payload?: { sentences?: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, callback?: (response: unknown) => void) {
-          sent.push(message);
-          if (message.type === "settings.get") {
-            const response = {
-              type: "settings.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { settings: { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" } }
-            };
-            callback?.(response);
-            return Promise.resolve(response);
-          }
-          const tokens = message.payload?.sentences?.flatMap((sentence) => sentence.tokens) ?? [];
-          const obscure = tokens.find((token) => token.surface.toLowerCase() === "obscure");
-          if (message.type === "gloss.request" && obscure && !Reflect.get(window, "__initialGlossRendered")) {
-            Reflect.set(window, "__initialGlossRendered", true);
-            const response = {
-              type: "gloss.response",
-              version: 1,
-              requestId: message.requestId,
-              source: "service-worker",
-              target: message.source,
-              createdAt: Date.now(),
-              payload: { items: [{ tokenId: obscure.id, targetText: obscure.surface, display: "晦涩" }] }
-            };
-            callback?.(response);
-            return Promise.resolve(response);
-          }
-          if (message.type === "gloss.request") {
-            return new Promise((resolve) => {
-              Reflect.set(window, "__mutationGlossHeld", true);
-              Reflect.set(window, "__resolveMutationGloss", () => {
-                const dynamic = tokens.find((token) => token.surface.toLowerCase() === "dynamic");
-                const response = {
-                  type: "gloss.response",
-                  version: 1,
-                  requestId: message.requestId,
-                  source: "service-worker",
-                  target: message.source,
-                  createdAt: Date.now(),
-                  payload: dynamic ? { items: [{ tokenId: dynamic.id, targetText: dynamic.surface, display: "动态" }] } : { items: [] }
-                };
-                callback?.(response);
-                resolve(response);
-              });
-            });
-          }
-          const response = {
-            type: "gloss.response",
-            version: 1,
-            requestId: message.requestId,
-            source: "service-worker",
-            target: message.source,
-            createdAt: Date.now(),
-            payload: { items: [] }
-          };
-          callback?.(response);
-          return Promise.resolve(response);
-        }
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const tokens = message.payload.sentences.flatMap((sentence) => sentence.tokens);
+      const obscure = tokens.find((token) => token.surface.toLowerCase() === "obscure");
+      if (obscure && !Reflect.get(window, "__initialGlossRendered")) {
+        Reflect.set(window, "__initialGlossRendered", true);
+        emit(glossToken(message.payload.scanId, obscure.id, "ready", { tokenId: obscure.id, targetText: obscure.surface, display: "晦涩" }));
+        emit(glossDone(message.payload.scanId));
+        return;
       }
+      Reflect.set(window, "__mutationGlossHeld", true);
+      Reflect.set(window, "__resolveMutationGloss", () => {
+        const dynamic = tokens.find((token) => token.surface.toLowerCase() === "dynamic");
+        if (dynamic) {
+          emit(glossToken(message.payload.scanId, dynamic.id, "ready", { tokenId: dynamic.id, targetText: dynamic.surface, display: "动态" }));
+        }
+        emit(glossDone(message.payload.scanId));
+      });
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
@@ -652,9 +441,139 @@ function overlaps(
     && left.bottom > right.top;
 }
 
+async function tokenGeometry(page: Page): Promise<{
+  label: { top: number; bottom: number; centerX: number };
+  surface: { top: number; bottom: number; centerX: number };
+}> {
+  return await page.evaluate(() => {
+    const wrapper = document.querySelector<HTMLElement>("[data-glossa-token]");
+    if (!wrapper) {
+      throw new Error("expected gloss token wrapper");
+    }
+    const label = wrapper.querySelector<HTMLElement>("[data-glossa-token-label]")!.getBoundingClientRect();
+    const surface = wrapper.querySelector<HTMLElement>("[data-glossa-token-surface]")!.getBoundingClientRect();
+    return {
+      label: rect(label),
+      surface: rect(surface)
+    };
+
+    function rect(value: DOMRect): { top: number; bottom: number; centerX: number } {
+      return {
+        top: value.top,
+        bottom: value.bottom,
+        centerX: value.left + value.width / 2
+      };
+    }
+  });
+}
+
 async function sentMessageTypes(page: Page): Promise<string[]> {
   return await page.evaluate(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
     return sent.map((message) => message.type);
   });
+}
+
+async function installChromeRuntime(page: Page, settings: RuntimeSettings): Promise<void> {
+  await page.evaluate((settings) => {
+    const sent: unknown[] = [];
+    const activationListeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
+    Reflect.set(window, "__glossaMessages", sent);
+    Reflect.set(window, "__glossaListeners", activationListeners);
+    Reflect.set(window, "glossToken", (scanId: string, tokenId: string, status: string, item?: unknown, message?: string) => ({
+      type: "gloss.token",
+      version: 1,
+      createdAt: Date.now(),
+      payload: {
+        scanId,
+        tokenId,
+        status,
+        ...(item ? { item } : {}),
+        ...(message ? { message } : {})
+      }
+    }));
+    Reflect.set(window, "glossDone", (scanId: string) => ({
+      type: "gloss.done",
+      version: 1,
+      createdAt: Date.now(),
+      payload: { scanId }
+    }));
+    Reflect.set(window, "chrome", {
+      runtime: {
+        getURL: () => "/missing-known-word-list.txt",
+        onMessage: {
+          addListener(listener: (message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void) {
+            activationListeners.push(listener);
+          }
+        },
+        connect() {
+          const messageListeners: Array<(message: unknown) => void> = [];
+          const disconnectListeners: Array<() => void> = [];
+          const port = {
+            name: "gloss.session",
+            onMessage: {
+              addListener(listener: (message: unknown) => void) {
+                messageListeners.push(listener);
+              }
+            },
+            onDisconnect: {
+              addListener(listener: () => void) {
+                disconnectListeners.push(listener);
+              }
+            },
+            postMessage(message: { type: string; payload?: { scanId?: string } }) {
+              sent.push(message);
+              if (message.type === "gloss.scan") {
+                const responder = Reflect.get(window, "__glossaOnScan");
+                if (typeof responder === "function") {
+                  responder(message, (response: unknown) => {
+                    for (const listener of messageListeners) {
+                      listener(response);
+                    }
+                  });
+                }
+              }
+            },
+            disconnect() {
+              for (const listener of disconnectListeners) {
+                listener();
+              }
+            }
+          };
+          return port;
+        },
+        sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
+          sent.push(message);
+          const override = Reflect.get(window, "__glossaOnSendMessage");
+          if (typeof override === "function") {
+            const result = override(message, callback);
+            if (result !== undefined) {
+              return result;
+            }
+          }
+          const response = message.type === "settings.get"
+            ? {
+              type: "settings.response",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { settings }
+            }
+            : {
+              type: "word.clicked.ok",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { noteId: 7 }
+            };
+          callback?.(response);
+          return Promise.resolve(response);
+        }
+      }
+    });
+  }, settings);
 }

@@ -59,6 +59,38 @@ export interface GlossResponsePayload {
   items: GlossItem[];
 }
 
+export interface GlossScanPayload {
+  scanId: string;
+  pageUrl: string;
+  sentences: SentenceCandidate[];
+}
+
+export type GlossTokenStatus = "ready" | "pending" | "hidden" | "error";
+
+export interface GlossTokenPayload {
+  scanId: string;
+  tokenId: string;
+  status: GlossTokenStatus;
+  item?: GlossItem;
+  message?: string;
+}
+
+export interface GlossDonePayload {
+  scanId: string;
+}
+
+export interface GlossPortErrorPayload {
+  scanId?: string;
+  message: string;
+}
+
+export interface GlossPortMessage<TType extends string, TPayload> {
+  type: TType;
+  version: MessageVersion;
+  createdAt: number;
+  payload: TPayload;
+}
+
 export interface UserWordClickPayload {
   pageUrl: string;
   sentence: string;
@@ -81,14 +113,21 @@ export interface ErrorPayload {
 
 export type GlossRequestMessage = MessageEnvelope<"gloss.request", "content-script", "service-worker", GlossRequestPayload>;
 export type GlossResponseMessage = MessageEnvelope<"gloss.response", "service-worker", "content-script", GlossResponsePayload>;
+export type GlossScanMessage = GlossPortMessage<"gloss.scan", GlossScanPayload>;
+export type GlossTokenMessage = GlossPortMessage<"gloss.token", GlossTokenPayload>;
+export type GlossDoneMessage = GlossPortMessage<"gloss.done", GlossDonePayload>;
+export type GlossPortErrorMessage = GlossPortMessage<"gloss.error", GlossPortErrorPayload>;
 export type UserWordClickMessage = MessageEnvelope<"word.clicked", "content-script", "service-worker", UserWordClickPayload>;
 export type WordClickedOkMessage = MessageEnvelope<"word.clicked.ok", "service-worker", "content-script", WordClickedOkPayload>;
 export type SettingsGetMessage = MessageEnvelope<"settings.get", "content-script", "service-worker", SettingsGetPayload>;
 export type SettingsGetResponseMessage = MessageEnvelope<"settings.response", "service-worker", "content-script", SettingsGetResponsePayload>;
 export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
 
-export type ContentToBackgroundMessage = GlossRequestMessage | UserWordClickMessage | SettingsGetMessage;
-export type BackgroundResponseMessage = GlossResponseMessage | WordClickedOkMessage | SettingsGetResponseMessage | ErrorMessage;
+export type GlossPortInboundMessage = GlossScanMessage;
+export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage;
+
+export type ContentToBackgroundMessage = UserWordClickMessage | SettingsGetMessage;
+export type BackgroundResponseMessage = WordClickedOkMessage | SettingsGetResponseMessage | ErrorMessage;
 
 export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";

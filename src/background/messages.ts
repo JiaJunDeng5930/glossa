@@ -9,11 +9,9 @@ import {
 import type { ExtensionStorage } from "../storage/db";
 import type { AiBackend } from "./ai";
 import type { AnkiClient } from "./anki";
-import { createGlossResolver, type GlossResolver } from "./glossResolver";
 import type {
   BackgroundResponseMessage,
-  ContentToBackgroundMessage,
-  SentenceCandidate
+  ContentToBackgroundMessage
 } from "../shared/types";
 import { GLOSS_TARGET_LANG } from "../shared/types";
 
@@ -26,15 +24,10 @@ export interface BackgroundMessageHandlerDeps {
 
 export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDeps) {
   const now = deps.now ?? Date.now;
-  const glossResolver = createGlossResolver({ storage: deps.storage, ai: deps.ai });
   return async function handleMessage(message: ContentToBackgroundMessage): Promise<BackgroundResponseMessage> {
     try {
       if (message.type === "settings.get") {
         return createBackgroundResponse(message, "settings.response", { settings: await deps.storage.settings.get() });
-      }
-      if (message.type === "gloss.request") {
-        const payload = await handleGlossRequest(message.payload.pageUrl, message.payload.sentences, deps, glossResolver, now());
-        return createBackgroundResponse(message, "gloss.response", payload);
       }
       const payload = await handleWordClicked(message.payload, deps, now());
       return createBackgroundResponse(message, "word.clicked.ok", payload);
@@ -44,17 +37,6 @@ export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDep
       });
     }
   };
-}
-
-async function handleGlossRequest(
-  pageUrl: string,
-  sentences: SentenceCandidate[],
-  deps: BackgroundMessageHandlerDeps,
-  glossResolver: GlossResolver,
-  now: number
-): ReturnType<GlossResolver["resolve"]> {
-  const settings = await deps.storage.settings.get();
-  return glossResolver.resolve(pageUrl, sentences, settings, now);
 }
 
 async function handleWordClicked(

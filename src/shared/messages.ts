@@ -2,8 +2,12 @@ import type {
   BackgroundResponseMessage,
   ContentToBackgroundMessage,
   ErrorPayload,
-  GlossRequestPayload,
-  GlossResponsePayload,
+  GlossDonePayload,
+  GlossPortInboundMessage,
+  GlossPortOutboundMessage,
+  GlossPortErrorPayload,
+  GlossScanPayload,
+  GlossTokenPayload,
   MessageEnvelope,
   MessageSource,
   SettingsGetPayload,
@@ -16,15 +20,20 @@ export const MESSAGE_VERSION = 1;
 
 type ContentPayloadByType = {
   "settings.get": SettingsGetPayload;
-  "gloss.request": GlossRequestPayload;
   "word.clicked": UserWordClickPayload;
 };
 
 type BackgroundPayloadByType = {
   "settings.response": SettingsGetResponsePayload;
-  "gloss.response": GlossResponsePayload;
   "word.clicked.ok": WordClickedOkPayload;
   error: ErrorPayload;
+};
+
+type GlossPortPayloadByType = {
+  "gloss.scan": GlossScanPayload;
+  "gloss.token": GlossTokenPayload;
+  "gloss.done": GlossDonePayload;
+  "gloss.error": GlossPortErrorPayload;
 };
 
 export function createContentMessage<TType extends keyof ContentPayloadByType>(
@@ -50,6 +59,18 @@ export function createBackgroundResponse<TType extends keyof BackgroundPayloadBy
   } as Extract<BackgroundResponseMessage, { type: TType }>;
 }
 
+export function createGlossPortMessage<TType extends keyof GlossPortPayloadByType>(
+  type: TType,
+  payload: GlossPortPayloadByType[TType]
+): Extract<GlossPortInboundMessage | GlossPortOutboundMessage, { type: TType }> {
+  return {
+    type,
+    version: MESSAGE_VERSION,
+    createdAt: Date.now(),
+    payload
+  } as Extract<GlossPortInboundMessage | GlossPortOutboundMessage, { type: TType }>;
+}
+
 export function validateContentMessage(value: unknown): ContentToBackgroundMessage {
   const envelope = validateEnvelope(value);
   if (envelope.version !== MESSAGE_VERSION) {
@@ -60,13 +81,6 @@ export function validateContentMessage(value: unknown): ContentToBackgroundMessa
   }
   if (envelope.type === "settings.get") {
     requirePlainPayload(envelope.payload);
-    return envelope as ContentToBackgroundMessage;
-  }
-  if (envelope.type === "gloss.request") {
-    const payload = requirePlainPayload(envelope.payload);
-    if (typeof payload.pageUrl !== "string" || !Array.isArray(payload.sentences)) {
-      throw new Error("Malformed gloss.request payload");
-    }
     return envelope as ContentToBackgroundMessage;
   }
   if (envelope.type === "word.clicked") {
@@ -92,7 +106,6 @@ export function validateBackgroundResponse(value: unknown, request: ContentToBac
   }
   if (
     envelope.type !== "settings.response"
-    && envelope.type !== "gloss.response"
     && envelope.type !== "word.clicked.ok"
     && envelope.type !== "error"
   ) {
@@ -100,6 +113,63 @@ export function validateBackgroundResponse(value: unknown, request: ContentToBac
   }
   requirePlainPayload(envelope.payload);
   return envelope as BackgroundResponseMessage;
+}
+
+export function validateGlossPortInbound(value: unknown): GlossPortInboundMessage {
+  const message = validateGlossPortEnvelope(value);
+  if (message.type !== "gloss.scan") {
+    throw new Error("Unknown gloss port message type");
+  }
+  const payload = requirePlainPayload(message.payload);
+  if (typeof payload.scanId !== "string" || typeof payload.pageUrl !== "string" || !Array.isArray(payload.sentences)) {
+    throw new Error("Malformed gloss.scan payload");
+  }
+  return message as GlossPortInboundMessage;
+}
+
+export function validateGlossPortOutbound(value: unknown, scanId?: string): GlossPortOutboundMessage {
+  const message = validateGlossPortEnvelope(value);
+  if (message.type === "gloss.token") {
+    const payload = requirePlainPayload(message.payload);
+    if (
+      typeof payload.scanId !== "string"
+      || typeof payload.tokenId !== "string"
+      || !isGlossTokenStatus(payload.status)
+    ) {
+      throw new Error("Malformed gloss.token payload");
+    }
+    if (scanId && payload.scanId !== scanId) {
+      throw new Error("Gloss port scanId mismatch");
+    }
+    if (payload.status === "ready" && !isPlainObject(payload.item)) {
+      throw new Error("Missing gloss token item");
+    }
+    if (payload.status === "error" && typeof payload.message !== "string") {
+      throw new Error("Missing gloss token error message");
+    }
+    return message as GlossPortOutboundMessage;
+  }
+  if (message.type === "gloss.done") {
+    const payload = requirePlainPayload(message.payload);
+    if (typeof payload.scanId !== "string") {
+      throw new Error("Malformed gloss.done payload");
+    }
+    if (scanId && payload.scanId !== scanId) {
+      throw new Error("Gloss port scanId mismatch");
+    }
+    return message as GlossPortOutboundMessage;
+  }
+  if (message.type === "gloss.error") {
+    const payload = requirePlainPayload(message.payload);
+    if ((payload.scanId !== undefined && typeof payload.scanId !== "string") || typeof payload.message !== "string") {
+      throw new Error("Malformed gloss.error payload");
+    }
+    if (scanId && payload.scanId !== undefined && payload.scanId !== scanId) {
+      throw new Error("Gloss port scanId mismatch");
+    }
+    return message as GlossPortOutboundMessage;
+  }
+  throw new Error("Unknown gloss port message type");
 }
 
 export function messageTimeoutError(message: Pick<ContentToBackgroundMessage, "type" | "requestId">): Error {
@@ -125,6 +195,23 @@ function createEnvelope<TType extends string, TSource extends MessageSource, TTa
 
 function createRequestId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `glossa-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function validateGlossPortEnvelope(value: unknown): { type: string; version: typeof MESSAGE_VERSION; createdAt: number; payload: unknown } {
+  if (!isPlainObject(value)) {
+    throw new Error("Invalid gloss port message");
+  }
+  const message = value as Record<string, unknown>;
+  if (typeof message.type !== "string") {
+    throw new Error("Missing gloss port message type");
+  }
+  if (message.version !== MESSAGE_VERSION) {
+    throw new Error("Unsupported gloss port message version");
+  }
+  if (typeof message.createdAt !== "number") {
+    throw new Error("Missing gloss port createdAt");
+  }
+  return message as { type: string; version: 1; createdAt: number; payload: unknown };
 }
 
 function validateEnvelope(value: unknown): MessageEnvelope<string, MessageSource, MessageSource, unknown> {
@@ -163,4 +250,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function isMessageSource(value: unknown): value is MessageSource {
   return value === "content-script" || value === "service-worker" || value === "options";
+}
+
+function isGlossTokenStatus(value: unknown): boolean {
+  return value === "ready" || value === "pending" || value === "hidden" || value === "error";
 }

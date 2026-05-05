@@ -1,11 +1,18 @@
 import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
-import { createContentMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
+import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
 import { matchesShortcut } from "../shared/shortcut";
-import type { BackgroundResponseMessage, ContentToBackgroundMessage } from "../shared/types";
+import type { BackgroundResponseMessage, ContentToBackgroundMessage, GlossPortOutboundMessage, SentenceCandidate } from "../shared/types";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
+
+interface GlossSession {
+  scanId: string;
+  version: number;
+  tokenMap: Map<string, ScannedToken>;
+  port: chrome.runtime.Port;
+}
 
 async function boot(): Promise<void> {
   const settingsResponse = await runtimeMessage(createContentMessage("settings.get", {}))
@@ -26,6 +33,7 @@ async function boot(): Promise<void> {
   let translationEnabled = autoTranslateEnabled;
   let selectionController: ReturnType<typeof createSelectionController> | undefined;
   let observer: MutationObserver | undefined;
+  let currentGlossSession: GlossSession | undefined;
 
   const stopContentScript = (reason: string): void => {
     if (stopped) {
@@ -36,6 +44,7 @@ async function boot(): Promise<void> {
       globalThis.clearTimeout(scanTimer);
       scanTimer = undefined;
     }
+    closeGlossSession();
     observer?.disconnect();
     selectionController?.detach();
     overlay.clear();
@@ -64,6 +73,7 @@ async function boot(): Promise<void> {
     if (routeUrl !== pageUrl) {
       pageUrl = routeUrl;
       scanVersion += 1;
+      closeGlossSession();
       overlay.clear();
       translationEnabled = options.manualActivation === true || autoTranslateEnabled;
     }
@@ -97,50 +107,130 @@ async function boot(): Promise<void> {
 
     overlay.pruneDisconnected();
     if (scan.tokens.length === 0) {
+      closeGlossSession();
       return;
     }
 
-    const response = await runtimeMessage(createContentMessage("gloss.request", {
+    startGlossSession({
+      reason,
+      version,
       pageUrl: location.href,
-      sentences: sentences.map(toSerializableSentence)
-    })).catch((error) => {
-      handleRuntimeError("gloss.request", error);
-      return undefined;
+      sentences: sentences.map(toSerializableSentence),
+      tokenMap
     });
-    if (stopped || version !== scanVersion || !response) {
+  };
+
+  const closeGlossSession = (): void => {
+    const session = currentGlossSession;
+    currentGlossSession = undefined;
+    if (!session) {
       return;
     }
-    if (response.type === "gloss.response") {
+    try {
+      session.port.disconnect();
+    } catch (error) {
+      if (isExtensionContextInvalidated(error)) {
+        stopContentScript("extension-context-invalidated");
+      }
+    }
+  };
+
+  const startGlossSession = (sessionInput: {
+    reason: string;
+    version: number;
+    pageUrl: string;
+    sentences: SentenceCandidate[];
+    tokenMap: Map<string, ScannedToken>;
+  }): void => {
+    closeGlossSession();
+    if (stopped) {
+      return;
+    }
+    const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
+    if (!runtime?.connect) {
+      reportError("gloss.session", new Error("chrome.runtime.connect is unavailable"));
+      return;
+    }
+    const scanId = createScanId();
+    let port: chrome.runtime.Port;
+    try {
+      port = runtime.connect({ name: "gloss.session" });
+    } catch (error) {
+      handleRuntimeError("gloss.session.connect", error);
+      return;
+    }
+    const session: GlossSession = {
+      scanId,
+      version: sessionInput.version,
+      tokenMap: sessionInput.tokenMap,
+      port
+    };
+    currentGlossSession = session;
+    port.onDisconnect.addListener(() => {
+      if (currentGlossSession === session) {
+        currentGlossSession = undefined;
+      }
+      const error = readRuntimeLastError();
+      if (error) {
+        handleRuntimeError("gloss.session.disconnect", new Error(error.message));
+      }
+    });
+    port.onMessage.addListener((rawMessage: unknown) => {
+      handleGlossPortMessage(rawMessage, session, sessionInput.reason);
+    });
+    try {
+      port.postMessage(createGlossPortMessage("gloss.scan", {
+        scanId,
+        pageUrl: sessionInput.pageUrl,
+        sentences: sessionInput.sentences
+      }));
+    } catch (error) {
+      handleRuntimeError("gloss.scan", error);
+    }
+  };
+
+  const handleGlossPortMessage = (rawMessage: unknown, session: GlossSession, reason: string): void => {
+    let message: GlossPortOutboundMessage;
+    try {
+      message = validateGlossPortOutbound(rawMessage, session.scanId);
+    } catch (error) {
+      reportError("gloss.session.message", error);
+      return;
+    }
+    if (stopped || currentGlossSession !== session || session.version !== scanVersion) {
+      return;
+    }
+    if (message.type === "gloss.token") {
+      const outcome = message.payload;
+      const token = session.tokenMap.get(outcome.tokenId);
+      const render = overlay.applyTokenOutcome(token, outcome, session.version);
       trace({
         component: "content-script",
-        operation: "content.render",
-        requestId: response.requestId,
+        operation: "content.token",
+        result: render.result === "skipped" ? "ignored" : "ok",
+        url: location.href,
+        details: {
+          reason,
+          scanId: session.scanId,
+          tokenId: outcome.tokenId,
+          status: outcome.status,
+          render: render.result,
+          skipReason: render.reason
+        }
+      });
+      return;
+    }
+    if (message.type === "gloss.done") {
+      trace({
+        component: "content-script",
+        operation: "content.scan.done",
         result: "ok",
         url: location.href,
-        details: { reason, items: response.payload.items.length }
+        details: { reason, scanId: session.scanId }
       });
-      if (response.payload.items.length > 0) {
-        const render = overlay.render(response.payload.items, tokenMap, version);
-        trace({
-          component: "content-script",
-          operation: "content.render.result",
-          requestId: response.requestId,
-          result: "ok",
-          url: location.href,
-          details: {
-            rendered: render.rendered,
-            skippedMissingToken: render.skippedMissingToken,
-            skippedStale: render.skippedStale,
-            skippedDuplicate: render.skippedDuplicate,
-            skippedOverlap: render.skippedOverlap,
-            preserved: render.preserved,
-            prunedDisconnected: render.prunedDisconnected
-          }
-        });
-      }
-    } else if (response.type === "error") {
-      reportError("background.error", response.payload.message, response.requestId);
+      return;
     }
+    reportError("gloss.session.error", message.payload.message);
   };
 
   const scheduleScan = (reason: string) => {
@@ -221,6 +311,7 @@ async function boot(): Promise<void> {
       return;
     }
     scanVersion += 1;
+    closeGlossSession();
     overlay.pruneDisconnected();
     observeOpenShadowRoots(document.body);
     scheduleScan("mutation");
@@ -301,6 +392,18 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
 
 function isExtensionContextInvalidated(error: unknown): boolean {
   return error instanceof Error && /Extension context invalidated/i.test(error.message);
+}
+
+function createScanId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `scan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function readRuntimeLastError(): chrome.runtime.LastError | undefined {
+  try {
+    return chrome.runtime.lastError;
+  } catch {
+    return undefined;
+  }
 }
 
 function handleBootError(error: unknown): void {
