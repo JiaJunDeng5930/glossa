@@ -194,6 +194,81 @@ test("content bundle replaces pending gloss spinners with ready labels", async (
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "等待");
 });
 
+test("content bundle resolves pending glosses after external page mutations", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Pending archive appears here.</p><p id=\"dynamic\"></p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const pending = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "pending");
+      if (pending && !Reflect.get(window, "__pendingGlossHeld")) {
+        Reflect.set(window, "__pendingGlossHeld", true);
+        emit(glossToken(message.payload.scanId, pending.id, "pending"));
+        Reflect.set(window, "__resolvePendingAfterMutation", () => {
+          emit(glossToken(message.payload.scanId, pending.id, "ready", { tokenId: pending.id, targetText: pending.surface, display: "等待" }));
+          emit(glossDone(message.payload.scanId));
+        });
+        return;
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+
+  await page.locator("#dynamic").evaluate((element) => {
+    element.textContent = "A dynamic paragraph appears after boot.";
+  });
+  await page.waitForFunction(() => {
+    const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+    return sent.filter((message) => message.type === "gloss.scan").length > 1;
+  });
+  await page.evaluate(() => {
+    (Reflect.get(window, "__resolvePendingAfterMutation") as () => void)();
+  });
+
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "等待");
+});
+
+test("content bundle drops pending glosses after their source text is replaced", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Pending archive appears here.</p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const pending = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "pending");
+      if (pending && !Reflect.get(window, "__removedPendingGlossHeld")) {
+        Reflect.set(window, "__removedPendingGlossHeld", true);
+        emit(glossToken(message.payload.scanId, pending.id, "pending"));
+        Reflect.set(window, "__resolveRemovedPendingGloss", () => {
+          emit(glossToken(message.payload.scanId, pending.id, "ready", { tokenId: pending.id, targetText: pending.surface, display: "等待" }));
+          emit(glossDone(message.payload.scanId));
+        });
+        return;
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+
+  await page.locator("#target").evaluate((element) => {
+    element.textContent = "Replacement archive appears here.";
+  });
+  await page.evaluate(() => {
+    (Reflect.get(window, "__resolveRemovedPendingGloss") as () => void)();
+  });
+
+  await page.waitForTimeout(300);
+  expect(await page.locator("[data-glossa-token-label]", { hasText: "等待" }).count()).toBe(0);
+});
+
 test("content bundle leaves hidden tokens as original page text", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Ignored archive appears here.</p></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });

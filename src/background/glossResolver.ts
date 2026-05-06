@@ -25,6 +25,21 @@ interface Miss {
   token: TokenCandidate;
   memoryKey: string;
   dbCacheKey: string;
+  inFlight: InFlightGloss;
+}
+
+interface ReusedMiss {
+  token: TokenCandidate;
+  inFlight: InFlightGloss;
+}
+
+type InFlightResult =
+  | { ok: true; item: GlossItem }
+  | { ok: false; message: string };
+
+interface InFlightGloss {
+  promise: Promise<InFlightResult>;
+  resolve(result: InFlightResult): void;
 }
 
 export interface GlossResolverSink {
@@ -36,6 +51,7 @@ const DEFAULT_MAX_MEMORY_ENTRIES = 512;
 
 export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
+  const inFlight = new Map<string, InFlightGloss>();
   const maxMemoryEntries = deps.maxMemoryEntries ?? DEFAULT_MAX_MEMORY_ENTRIES;
 
   const remember = (key: string, item: GlossItem) => {
@@ -64,6 +80,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
       const promptVersion = await promptCacheVersion(settings, settings.prompts.gloss);
       for (const sentence of sentences) {
         const misses: Miss[] = [];
+        const reusedMisses: ReusedMiss[] = [];
         for (const token of sentence.tokens) {
           if (sink.isActive?.() === false) {
             return;
@@ -92,14 +109,18 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
             await persistShownRecord(deps.storage, token, now);
           } else {
             sink.emit({ tokenId: token.id, status: "pending" });
-            misses.push({ token, memoryKey, dbCacheKey: cacheKey });
+            const active = inFlight.get(cacheKey);
+            if (active) {
+              reusedMisses.push({ token, inFlight: active });
+            } else {
+              const pending = createInFlightGloss();
+              inFlight.set(cacheKey, pending);
+              misses.push({ token, memoryKey, dbCacheKey: cacheKey, inFlight: pending });
+            }
           }
         }
 
         if (misses.length > 0) {
-          if (sink.isActive?.() === false) {
-            return;
-          }
           let response: { items: GlossItem[] };
           try {
             response = await deps.ai.gloss({
@@ -110,34 +131,85 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
           } catch (error) {
             const message = error instanceof Error ? error.message : "Gloss lookup failed";
             for (const miss of misses) {
-              sink.emit({ tokenId: miss.token.id, status: "error", message });
+              resolveInFlightMiss(inFlight, miss, { ok: false, message });
+              if (sink.isActive?.() !== false) {
+                sink.emit({ tokenId: miss.token.id, status: "error", message });
+              }
             }
+            await emitReusedMisses(deps.storage, reusedMisses, sink, now);
             continue;
           }
           const emitted = new Set<string>();
           for (const item of response.items) {
-            if (sink.isActive?.() === false) {
-              return;
-            }
             const miss = misses.find((candidate) => candidate.token.id === item.tokenId);
             if (!miss) {
               continue;
             }
             await deps.storage.glossCache.put(miss.dbCacheKey, item);
             remember(miss.memoryKey, item);
-            await persistShownRecord(deps.storage, miss.token, now);
-            sink.emit({ tokenId: miss.token.id, status: "ready", item });
+            if (sink.isActive?.() !== false) {
+              await persistShownRecord(deps.storage, miss.token, now);
+              sink.emit({ tokenId: miss.token.id, status: "ready", item });
+            }
+            resolveInFlightMiss(inFlight, miss, { ok: true, item });
             emitted.add(miss.token.id);
           }
           for (const miss of misses) {
             if (!emitted.has(miss.token.id)) {
-              sink.emit({ tokenId: miss.token.id, status: "error", message: "Gloss lookup returned no item" });
+              const message = "Gloss lookup returned no item";
+              resolveInFlightMiss(inFlight, miss, { ok: false, message });
+              if (sink.isActive?.() !== false) {
+                sink.emit({ tokenId: miss.token.id, status: "error", message });
+              }
             }
           }
         }
+        await emitReusedMisses(deps.storage, reusedMisses, sink, now);
       }
     }
   };
+}
+
+function createInFlightGloss(): InFlightGloss {
+  let resolvePromise: (result: InFlightResult) => void = () => undefined;
+  const promise = new Promise<InFlightResult>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve: resolvePromise
+  };
+}
+
+function resolveInFlightMiss(inFlight: Map<string, InFlightGloss>, miss: Miss, result: InFlightResult): void {
+  if (inFlight.get(miss.dbCacheKey) === miss.inFlight) {
+    inFlight.delete(miss.dbCacheKey);
+  }
+  miss.inFlight.resolve(result);
+}
+
+async function emitReusedMisses(
+  storage: ExtensionStorage,
+  reusedMisses: ReusedMiss[],
+  sink: GlossResolverSink,
+  now: number
+): Promise<void> {
+  for (const miss of reusedMisses) {
+    if (sink.isActive?.() === false) {
+      return;
+    }
+    const result = await miss.inFlight.promise;
+    if (sink.isActive?.() === false) {
+      return;
+    }
+    if (result.ok) {
+      const item = rehydrateCachedGloss(result.item, miss.token);
+      sink.emit({ tokenId: miss.token.id, status: "ready", item });
+      await persistShownRecord(storage, miss.token, now);
+    } else {
+      sink.emit({ tokenId: miss.token.id, status: "error", message: result.message });
+    }
+  }
 }
 
 async function glossCacheKey(

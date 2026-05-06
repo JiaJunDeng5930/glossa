@@ -4,6 +4,8 @@ import { validateTokenForRender } from "./range";
 
 export interface GlossOverlay {
   applyTokenOutcome(token: ScannedToken | undefined, outcome: GlossTokenPayload, scanVersion: number): RenderSummary;
+  applyStalePendingOutcome(outcome: GlossTokenPayload): RenderSummary;
+  markStalePendingAsError(tokenIds: Iterable<string>, message: string): void;
   clear(): void;
   pruneDisconnected(): number;
   ownsMutation(mutation: MutationRecord): boolean;
@@ -28,6 +30,7 @@ interface TextSegment {
 }
 
 const STYLE_ID = "glossa-inline-style";
+const FINGERPRINT_CONTEXT_CHARS = 16;
 
 export function createGlossOverlay(doc: Document, appearance: AppearanceSettings = DEFAULT_SETTINGS.appearance): GlossOverlay {
   const host = doc.createElement("div");
@@ -210,6 +213,38 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       }
       return renderToken({ token, display, status: outcome.status }, scanVersion);
     },
+    applyStalePendingOutcome(outcome) {
+      pruneDisconnectedNodes();
+      const existing = findRenderedToken(outcome.tokenId);
+      if (!existing || !isPendingNodeCurrent(existing)) {
+        return { result: "skipped", reason: "missing-token" };
+      }
+      if (outcome.status === "hidden") {
+        unwrapRenderedNode(existing);
+        return { result: "hidden" };
+      }
+      if (outcome.status === "error") {
+        updateRenderedNode(existing, outcome.message ?? "!", "error");
+        return { result: "updated" };
+      }
+      if (outcome.status === "pending") {
+        return { result: "preserved" };
+      }
+      const display = outcome.item?.display;
+      if (!display) {
+        return { result: "skipped", reason: "missing-token" };
+      }
+      updateRenderedNode(existing, display, "ready");
+      return { result: "updated" };
+    },
+    markStalePendingAsError(tokenIds, message) {
+      for (const tokenId of tokenIds) {
+        const existing = findRenderedToken(tokenId);
+        if (existing && isPendingNodeCurrent(existing)) {
+          updateRenderedNode(existing, message, "error");
+        }
+      }
+    },
     clear() {
       clearRenderedNodes();
     },
@@ -316,6 +351,15 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     wrapper.dataset.glossaLemma = candidate.token.lemma;
     wrapper.dataset.glossaOriginalStart = String(candidate.token.nodeStartOffset);
     wrapper.dataset.glossaOriginalEnd = String(candidate.token.nodeEndOffset);
+    const text = candidate.token.textNode.nodeValue ?? "";
+    wrapper.dataset.glossaContextBefore = text.slice(
+      Math.max(0, candidate.token.nodeStartOffset - FINGERPRINT_CONTEXT_CHARS),
+      candidate.token.nodeStartOffset
+    );
+    wrapper.dataset.glossaContextAfter = text.slice(
+      candidate.token.nodeEndOffset,
+      Math.min(text.length, candidate.token.nodeEndOffset + FINGERPRINT_CONTEXT_CHARS)
+    );
     wrapper.className = "notranslate";
     wrapper.setAttribute("translate", "no");
     applyAppearance(wrapper, appearance);
@@ -359,6 +403,49 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     node.dataset.glossaDisplay = display;
     node.dataset.glossaStatus = status;
     rememberMutationTarget(node);
+  }
+
+  function isPendingNodeCurrent(node: HTMLElement): boolean {
+    if (!node.isConnected || node.dataset.glossaStatus !== "pending") {
+      return false;
+    }
+    const parent = node.parentNode;
+    if (!parent) {
+      return false;
+    }
+    const contextBefore = node.dataset.glossaContextBefore ?? "";
+    const contextAfter = node.dataset.glossaContextAfter ?? "";
+    const context = textContextAroundNode(parent, node);
+    return context.before.endsWith(contextBefore) && context.after.startsWith(contextAfter);
+  }
+
+  function textContextAroundNode(parent: Node, target: HTMLElement): { before: string; after: string } {
+    let before = "";
+    let after = "";
+    let seenTarget = false;
+    for (const child of Array.from(parent.childNodes)) {
+      if (child === target) {
+        seenTarget = true;
+        continue;
+      }
+      const text = sourceTextForNode(child);
+      if (seenTarget) {
+        after += text;
+      } else {
+        before += text;
+      }
+    }
+    return { before, after };
+  }
+
+  function sourceTextForNode(node: Node): string {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.nodeValue ?? "";
+    }
+    if (node instanceof HTMLElement && node.dataset.glossaToken) {
+      return node.dataset.glossaSurface ?? "";
+    }
+    return node.textContent ?? "";
   }
 
   function locateTokenSegment(

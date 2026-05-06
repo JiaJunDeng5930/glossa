@@ -2,7 +2,7 @@ import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
 import { matchesShortcut } from "../shared/shortcut";
-import type { BackgroundResponseMessage, ContentToBackgroundMessage, GlossPortOutboundMessage, SentenceCandidate } from "../shared/types";
+import type { BackgroundResponseMessage, ContentToBackgroundMessage, GlossPortOutboundMessage, GlossTokenPayload, SentenceCandidate } from "../shared/types";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
@@ -11,6 +11,7 @@ interface GlossSession {
   scanId: string;
   version: number;
   tokenMap: Map<string, ScannedToken>;
+  pendingTokenIds: Set<string>;
   port: chrome.runtime.Port;
 }
 
@@ -34,6 +35,7 @@ async function boot(): Promise<void> {
   let selectionController: ReturnType<typeof createSelectionController> | undefined;
   let observer: MutationObserver | undefined;
   let currentGlossSession: GlossSession | undefined;
+  const glossSessions = new Set<GlossSession>();
 
   const stopContentScript = (reason: string): void => {
     if (stopped) {
@@ -44,7 +46,7 @@ async function boot(): Promise<void> {
       globalThis.clearTimeout(scanTimer);
       scanTimer = undefined;
     }
-    closeGlossSession();
+    closeAllGlossSessions();
     observer?.disconnect();
     selectionController?.detach();
     overlay.clear();
@@ -73,7 +75,7 @@ async function boot(): Promise<void> {
     if (routeUrl !== pageUrl) {
       pageUrl = routeUrl;
       scanVersion += 1;
-      closeGlossSession();
+      closeAllGlossSessions();
       overlay.clear();
       translationEnabled = options.manualActivation === true || autoTranslateEnabled;
     }
@@ -107,7 +109,6 @@ async function boot(): Promise<void> {
 
     overlay.pruneDisconnected();
     if (scan.tokens.length === 0) {
-      closeGlossSession();
       return;
     }
 
@@ -120,11 +121,16 @@ async function boot(): Promise<void> {
     });
   };
 
-  const closeGlossSession = (): void => {
-    const session = currentGlossSession;
-    currentGlossSession = undefined;
-    if (!session) {
-      return;
+  const closeAllGlossSessions = (): void => {
+    for (const session of Array.from(glossSessions)) {
+      closeGlossSession(session);
+    }
+  };
+
+  const closeGlossSession = (session: GlossSession): void => {
+    glossSessions.delete(session);
+    if (currentGlossSession === session) {
+      currentGlossSession = undefined;
     }
     try {
       session.port.disconnect();
@@ -142,7 +148,6 @@ async function boot(): Promise<void> {
     sentences: SentenceCandidate[];
     tokenMap: Map<string, ScannedToken>;
   }): void => {
-    closeGlossSession();
     if (stopped) {
       return;
     }
@@ -163,10 +168,13 @@ async function boot(): Promise<void> {
       scanId,
       version: sessionInput.version,
       tokenMap: sessionInput.tokenMap,
+      pendingTokenIds: new Set(),
       port
     };
+    glossSessions.add(session);
     currentGlossSession = session;
     port.onDisconnect.addListener(() => {
+      glossSessions.delete(session);
       if (currentGlossSession === session) {
         currentGlossSession = undefined;
       }
@@ -197,13 +205,16 @@ async function boot(): Promise<void> {
       reportError("gloss.session.message", error);
       return;
     }
-    if (stopped || currentGlossSession !== session || session.version !== scanVersion) {
+    if (stopped) {
       return;
     }
     if (message.type === "gloss.token") {
       const outcome = message.payload;
-      const token = session.tokenMap.get(outcome.tokenId);
-      const render = overlay.applyTokenOutcome(token, outcome, session.version);
+      const current = currentGlossSession === session && session.version === scanVersion;
+      const render = current
+        ? overlay.applyTokenOutcome(session.tokenMap.get(outcome.tokenId), outcome, session.version)
+        : overlay.applyStalePendingOutcome(outcome);
+      updatePendingTokenState(session, outcome, render);
       trace({
         component: "content-script",
         operation: "content.token",
@@ -215,7 +226,8 @@ async function boot(): Promise<void> {
           tokenId: outcome.tokenId,
           status: outcome.status,
           render: render.result,
-          skipReason: render.reason
+          skipReason: render.reason,
+          stale: !current
         }
       });
       return;
@@ -228,8 +240,11 @@ async function boot(): Promise<void> {
         url: location.href,
         details: { reason, scanId: session.scanId }
       });
+      closeGlossSession(session);
       return;
     }
+    overlay.markStalePendingAsError(session.pendingTokenIds, message.payload.message);
+    closeGlossSession(session);
     reportError("gloss.session.error", message.payload.message);
   };
 
@@ -311,7 +326,6 @@ async function boot(): Promise<void> {
       return;
     }
     scanVersion += 1;
-    closeGlossSession();
     overlay.pruneDisconnected();
     observeOpenShadowRoots(document.body);
     scheduleScan("mutation");
@@ -329,6 +343,16 @@ async function boot(): Promise<void> {
         observer?.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
         observeOpenShadowRoots(element.shadowRoot);
       }
+    }
+  }
+
+  function updatePendingTokenState(session: GlossSession, outcome: GlossTokenPayload, render: { result: string }): void {
+    if (outcome.status === "pending" && render.result !== "skipped") {
+      session.pendingTokenIds.add(outcome.tokenId);
+      return;
+    }
+    if (outcome.status === "ready" || outcome.status === "hidden" || outcome.status === "error") {
+      session.pendingTokenIds.delete(outcome.tokenId);
     }
   }
 }

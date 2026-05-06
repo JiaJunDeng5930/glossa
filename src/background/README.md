@@ -9,3 +9,5 @@
 5. For remaining misses, call the AI provider, write the result to IndexedDB cache, hydrate memory cache, record the show event in lexicon state, and return the display item.
 
 The in-memory cache is a bounded replay layer for the current page URL and background lifetime. IndexedDB remains the durable source for gloss cache and lexicon state. Marking a word as shown updates only lexicon state; it does not invalidate or mutate the gloss caches.
+
+AI misses also use an in-flight map keyed by the same durable gloss cache key. A duplicate miss attaches to the running lookup, emits its own `pending`, then receives the shared `ready` or `error` result with the current token id. The first lookup owns the AI call and cache write.

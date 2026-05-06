@@ -93,6 +93,140 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(otherPageEvents).toEqual([{ tokenId: "t-third", status: "hidden" }]);
     expect(ai.gloss).toHaveBeenCalledTimes(1);
   });
+
+  it("reuses in-flight AI lookups for the same cache key", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    let resolveAi: ((value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void) | undefined;
+    const ai = {
+      gloss: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+        resolveAi = resolve;
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai });
+    const sentence = "A novel archive appears.";
+    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const first = resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: (event) => firstEvents.push(event) });
+    await vi.waitFor(() => expect(ai.gloss).toHaveBeenCalledTimes(1));
+
+    const second = resolver.resolve("https://example.test/a", [{
+      id: "s2",
+      text: sentence,
+      tokens: [{ id: "t-second", sentenceId: "s2", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 200, { emit: (event) => secondEvents.push(event) });
+    await vi.waitFor(() => expect(secondEvents).toEqual([{ tokenId: "t-second", status: "pending" }]));
+
+    resolveAi?.({ items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }] });
+    await Promise.all([first, second]);
+
+    expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(firstEvents).toEqual([
+      { tokenId: "t-first", status: "pending" },
+      { tokenId: "t-first", status: "ready", item: { tokenId: "t-first", targetText: "novel", display: "新词" } }
+    ]);
+    expect(secondEvents).toEqual([
+      { tokenId: "t-second", status: "pending" },
+      { tokenId: "t-second", status: "ready", item: { tokenId: "t-second", targetText: "novel", display: "新词" } }
+    ]);
+  });
+
+  it("shares in-flight AI failures with duplicate lookups", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    let rejectAi: ((error: Error) => void) | undefined;
+    const ai = {
+      gloss: vi.fn(() => new Promise<{ items: [] }>((_resolve, reject) => {
+        rejectAi = reject;
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai });
+    const sentence = "A novel archive appears.";
+    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const first = resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: (event) => firstEvents.push(event) });
+    await vi.waitFor(() => expect(ai.gloss).toHaveBeenCalledTimes(1));
+
+    const second = resolver.resolve("https://example.test/a", [{
+      id: "s2",
+      text: sentence,
+      tokens: [{ id: "t-second", sentenceId: "s2", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 200, { emit: (event) => secondEvents.push(event) });
+    await vi.waitFor(() => expect(secondEvents).toEqual([{ tokenId: "t-second", status: "pending" }]));
+
+    rejectAi?.(new Error("backend unavailable"));
+    await Promise.all([first, second]);
+
+    expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(firstEvents).toEqual([
+      { tokenId: "t-first", status: "pending" },
+      { tokenId: "t-first", status: "error", message: "backend unavailable" }
+    ]);
+    expect(secondEvents).toEqual([
+      { tokenId: "t-second", status: "pending" },
+      { tokenId: "t-second", status: "error", message: "backend unavailable" }
+    ]);
+  });
+
+  it("finishes an in-flight lookup for active duplicate subscribers after the owner disconnects", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    let resolveAi: ((value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void) | undefined;
+    const ai = {
+      gloss: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+        resolveAi = resolve;
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai });
+    const sentence = "A novel archive appears.";
+    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    let firstActive = true;
+
+    const first = resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, {
+      emit: (event) => firstEvents.push(event),
+      isActive: () => firstActive
+    });
+    await vi.waitFor(() => expect(ai.gloss).toHaveBeenCalledTimes(1));
+
+    const second = resolver.resolve("https://example.test/a", [{
+      id: "s2",
+      text: sentence,
+      tokens: [{ id: "t-second", sentenceId: "s2", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 200, { emit: (event) => secondEvents.push(event) });
+    await vi.waitFor(() => expect(secondEvents).toEqual([{ tokenId: "t-second", status: "pending" }]));
+
+    firstActive = false;
+    resolveAi?.({ items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }] });
+    await Promise.all([first, second]);
+
+    expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(firstEvents).toEqual([{ tokenId: "t-first", status: "pending" }]);
+    expect(secondEvents).toEqual([
+      { tokenId: "t-second", status: "pending" },
+      { tokenId: "t-second", status: "ready", item: { tokenId: "t-second", targetText: "novel", display: "新词" } }
+    ]);
+  });
 });
 
 function testSettings(): GlossaSettings {
