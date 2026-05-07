@@ -93,6 +93,8 @@ test("content bundle renders inline glosses and captures shortcut word selection
     appearance: {
       textColor: "#ff5500",
       backgroundColor: "#113355",
+      cardSuccessBackgroundColor: "#228833",
+      cardErrorBackgroundColor: "#cc2222",
       backgroundOpacity: 0.65,
       fontFamily: "Georgia, Times New Roman, serif",
       fontSize: 18
@@ -122,8 +124,10 @@ test("content bundle renders inline glosses and captures shortcut word selection
     return sent.some((message) => message.type === "gloss.scan");
   });
   await page.keyboard.down("Alt");
+  await expect(page.locator("#glossa-overlay")).toHaveAttribute("data-glossa-selecting", "true");
   await page.locator("#save").click();
   await page.keyboard.up("Alt");
+  await expect(page.locator("#glossa-overlay")).not.toHaveAttribute("data-glossa-selecting", "true");
 
   expect(await page.evaluate(() => Reflect.get(window, "buttonClicks"))).toBe(0);
   messages.push(...await page.evaluate(() => Reflect.get(window, "__glossaMessages") as unknown[]));
@@ -131,6 +135,121 @@ test("content bundle renders inline glosses and captures shortcut word selection
     expect.objectContaining({ type: "gloss.scan" }),
     expect.objectContaining({ type: "word.clicked" })
   ]));
+  await page.waitForFunction(() => {
+    return Array.from(document.querySelectorAll<HTMLElement>("[data-glossa-token]")).some((node) => {
+      return node.dataset.glossaFeedback === "card-success"
+        && node.querySelector("[data-glossa-token-label]")?.textContent === "✓";
+    });
+  });
+});
+
+test("content bundle marks an existing gloss after confirmed card creation", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Press the submit button.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high",
+    appearance: {
+      textColor: "#ffffff",
+      backgroundColor: "#113355",
+      cardSuccessBackgroundColor: "#228833",
+      cardErrorBackgroundColor: "#cc2222",
+      backgroundOpacity: 0.65,
+      fontFamily: "Arial, sans-serif",
+      fontSize: 16
+    }
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const submit = message.payload.sentences.flatMap((sentence) => sentence.tokens).find((token) => token.surface.toLowerCase() === "submit");
+      if (submit) {
+        emit(glossToken(message.payload.scanId, submit.id, "ready", { tokenId: submit.id, targetText: submit.surface, display: "提交" }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "提交");
+
+  await page.keyboard.down("Alt");
+  await page.locator("[data-glossa-token]").click();
+  await page.keyboard.up("Alt");
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-success"
+      && node.querySelector("[data-glossa-token-label]")?.textContent === "提交";
+  });
+});
+
+test("content bundle marks card failures with the shared badge renderer", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high",
+    appearance: {
+      textColor: "#ffffff",
+      backgroundColor: "#113355",
+      cardSuccessBackgroundColor: "#228833",
+      cardErrorBackgroundColor: "#cc2222",
+      backgroundOpacity: 0.65,
+      fontFamily: "Arial, sans-serif",
+      fontSize: 16
+    }
+  });
+  await page.evaluate(() => {
+    let attempts = 0;
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) => {
+      if (message.type !== "word.clicked") {
+        return undefined;
+      }
+      attempts += 1;
+      const response = attempts === 1 ? {
+        type: "error",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { message: "AnkiConnect failed" }
+      } : {
+        type: "word.clicked.ok",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { noteId: 11 }
+      };
+      callback?.(response);
+      return Promise.resolve(response);
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-error"
+      && node.querySelector("[data-glossa-token-label]")?.textContent === "×";
+  });
+
+  await page.keyboard.down("Alt");
+  await page.locator("[data-glossa-token]").click();
+  await page.keyboard.up("Alt");
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-success"
+      && node.dataset.glossaDisplayKind === "feedback"
+      && node.querySelector("[data-glossa-token-label]")?.textContent === "✓";
+  });
 });
 
 test("content bundle scans text added after boot", async ({ page }) => {
@@ -352,6 +471,8 @@ test("content bundle lays out inline glosses without label or source overlap", a
     appearance: {
       textColor: "#111111",
       backgroundColor: "#ffffff",
+      cardSuccessBackgroundColor: "#16a34a",
+      cardErrorBackgroundColor: "#dc2626",
       backgroundOpacity: 1,
       fontFamily: "Arial, sans-serif",
       fontSize: 16

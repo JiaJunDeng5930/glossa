@@ -44,6 +44,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
 
   await page.locator("input[name=glossTextColor]").fill("#ff5500");
   await page.locator("input[name=glossBackgroundColor]").fill("#113355");
+  await page.locator("input[name=cardSuccessBackgroundColor]").fill("#228833");
+  await page.locator("input[name=cardErrorBackgroundColor]").fill("#cc2222");
   await page.locator("input[name=glossBackgroundOpacity]").fill("0.65");
   await page.locator("select[name=glossFontFamily]").selectOption("Georgia, Times New Roman, serif");
   await page.locator("input[name=glossFontSize]").fill("18");
@@ -61,6 +63,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#translate-shortcut-capture")).toHaveText("Alt+G");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("color", "rgb(255, 85, 0)");
   await expect(page.locator(".preview-gloss").first()).toHaveCSS("font-size", "18px");
+  await expect(page.locator(".preview-gloss-success")).toHaveCSS("background-color", "rgba(34, 136, 51, 0.65)");
+  await expect(page.locator(".preview-gloss-error")).toHaveCSS("background-color", "rgba(204, 34, 34, 0.65)");
   await expect(page.locator("#test-ai")).toHaveText("测试 AI");
   await expect(page.locator("#test-anki")).toHaveText("测试 Anki");
   const buttonPositions = await page.evaluate(() => {
@@ -100,6 +104,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     appearance: {
       textColor: "#ff5500",
       backgroundColor: "#113355",
+      cardSuccessBackgroundColor: "#228833",
+      cardErrorBackgroundColor: "#cc2222",
       backgroundOpacity: 0.65,
       fontFamily: "Georgia, Times New Roman, serif",
       fontSize: 18

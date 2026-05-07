@@ -52,6 +52,14 @@
               <input name="glossBackgroundColor" type="color">
             </label>
             <label>
+              制卡成功背景
+              <input name="cardSuccessBackgroundColor" type="color">
+            </label>
+            <label>
+              制卡失败背景
+              <input name="cardErrorBackgroundColor" type="color">
+            </label>
+            <label>
               深浅
               <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
             </label>
@@ -77,8 +85,13 @@
             </span>
             并理解
             <span class="preview-word">
-              <strong class="preview-gloss">复杂</strong>
+              <strong class="preview-gloss preview-gloss-success">复杂</strong>
               <span>complex</span>
+            </span>
+            ，标记
+            <span class="preview-word">
+              <strong class="preview-gloss preview-gloss-error">×</strong>
+              <span>failed</span>
             </span>
             的观点。
           </div>

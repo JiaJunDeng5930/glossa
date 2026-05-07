@@ -8,6 +8,8 @@ const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-cap
 const translateShortcutCapture = document.querySelector<HTMLButtonElement>("#translate-shortcut-capture")!;
 const glossPreview = document.querySelector<HTMLElement>("#gloss-preview")!;
 const glossPreviewLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss"));
+const glossPreviewSuccessLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss-success"));
+const glossPreviewErrorLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss-error"));
 const knownWordListSelect = form.elements.namedItem("knownWordList") as HTMLSelectElement;
 const testAiButton = document.querySelector<HTMLButtonElement>("#test-ai")!;
 const testAnkiButton = document.querySelector<HTMLButtonElement>("#test-anki")!;
@@ -81,6 +83,8 @@ async function loadSettings(): Promise<void> {
   setInput("knownWordList", settings.knownWordList);
   setInput("glossTextColor", settings.appearance.textColor);
   setInput("glossBackgroundColor", settings.appearance.backgroundColor);
+  setInput("cardSuccessBackgroundColor", settings.appearance.cardSuccessBackgroundColor);
+  setInput("cardErrorBackgroundColor", settings.appearance.cardErrorBackgroundColor);
   setInput("glossBackgroundOpacity", String(settings.appearance.backgroundOpacity));
   setInput("glossFontFamily", settings.appearance.fontFamily);
   setInput("glossFontSize", String(settings.appearance.fontSize));
@@ -114,6 +118,8 @@ function readFormSettings(): GlossaSettings {
     appearance: {
       textColor: readInput("glossTextColor") || DEFAULT_SETTINGS.appearance.textColor,
       backgroundColor: readInput("glossBackgroundColor") || DEFAULT_SETTINGS.appearance.backgroundColor,
+      cardSuccessBackgroundColor: readInput("cardSuccessBackgroundColor") || DEFAULT_SETTINGS.appearance.cardSuccessBackgroundColor,
+      cardErrorBackgroundColor: readInput("cardErrorBackgroundColor") || DEFAULT_SETTINGS.appearance.cardErrorBackgroundColor,
       backgroundOpacity: clamp(Number(readInput("glossBackgroundOpacity")) || DEFAULT_SETTINGS.appearance.backgroundOpacity, 0.2, 1),
       fontFamily: readInput("glossFontFamily") || DEFAULT_SETTINGS.appearance.fontFamily,
       fontSize: Math.max(9, Math.min(24, Number(readInput("glossFontSize")) || DEFAULT_SETTINGS.appearance.fontSize))
@@ -323,6 +329,12 @@ function updatePreview(settings: GlossaSettings): void {
     label.style.backgroundColor = hexToRgb(settings.appearance.backgroundColor, settings.appearance.backgroundOpacity);
     label.style.fontFamily = settings.appearance.fontFamily;
     label.style.fontSize = `${settings.appearance.fontSize}px`;
+  }
+  for (const label of glossPreviewSuccessLabels) {
+    label.style.backgroundColor = hexToRgb(settings.appearance.cardSuccessBackgroundColor, settings.appearance.backgroundOpacity);
+  }
+  for (const label of glossPreviewErrorLabels) {
+    label.style.backgroundColor = hexToRgb(settings.appearance.cardErrorBackgroundColor, settings.appearance.backgroundOpacity);
   }
 }
 

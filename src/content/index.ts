@@ -49,6 +49,7 @@ async function boot(): Promise<void> {
     closeAllGlossSessions();
     observer?.disconnect();
     selectionController?.detach();
+    overlay.setSelectionMode(false);
     overlay.clear();
     trace({
       component: "content-script",
@@ -308,9 +309,27 @@ async function boot(): Promise<void> {
         pageUrl: location.href,
         sentence: selection.sentence,
         token: selection.token
-      })).then(() => undefined).catch((error) => {
+      })).then((response) => {
+        const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
+        overlay.applyCardFeedback(selection.renderToken
+          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: created ? "card-success" : "card-error" }
+          : { tokenId: selection.token.id, feedback: created ? "card-success" : "card-error" });
+        if (!created && response.type === "error") {
+          reportError("word.clicked", response.payload.message, response.requestId);
+        }
+      }).catch((error) => {
+        if (isExtensionContextInvalidated(error)) {
+          handleRuntimeError("word.clicked", error);
+          return;
+        }
+        overlay.applyCardFeedback(selection.renderToken
+          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-error" }
+          : { tokenId: selection.token.id, feedback: "card-error" });
         handleRuntimeError("word.clicked", error);
       });
+    },
+    onSelectionModeChange(active) {
+      overlay.setSelectionMode(active);
     },
     onError(error) {
       handleRuntimeError("word.clicked", error);

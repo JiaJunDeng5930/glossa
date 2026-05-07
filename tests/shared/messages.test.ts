@@ -39,6 +39,8 @@ describe("extension message envelopes", () => {
         appearance: {
           textColor: "#ffffff",
           backgroundColor: "#0f172a",
+          cardSuccessBackgroundColor: "#16a34a",
+          cardErrorBackgroundColor: "#dc2626",
           backgroundOpacity: 0.9,
           fontFamily: "system-ui",
           fontSize: 11

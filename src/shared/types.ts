@@ -150,6 +150,8 @@ export interface AnkiSettings {
 export interface AppearanceSettings {
   textColor: string;
   backgroundColor: string;
+  cardSuccessBackgroundColor: string;
+  cardErrorBackgroundColor: string;
   backgroundOpacity: number;
   fontFamily: string;
   fontSize: number;
@@ -191,6 +193,8 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   appearance: {
     textColor: "#ffffff",
     backgroundColor: "#0f172a",
+    cardSuccessBackgroundColor: "#16a34a",
+    cardErrorBackgroundColor: "#dc2626",
     backgroundOpacity: 0.9,
     fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
     fontSize: 11
