@@ -15,7 +15,7 @@ describe("AnkiConnect adapter diagnostics", () => {
     };
     expect(body.params.note).toMatchObject({
       deckName: "Glossa",
-      modelName: "KaTeX and Markdown Basic",
+      modelName: "Basic",
       fields: { Front: "submit", Back: "提交<br>Submit the form." }
     });
   });

@@ -47,7 +47,7 @@ describe("extension message envelopes", () => {
         },
         prompts: { gloss: "gloss", ankiCard: "card" },
         ai: { provider: "glossa-backend", endpoint: "https://example.test", reasoningEffort: "medium" },
-        anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "KaTeX and Markdown Basic" }
+        anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "Basic" }
       }
     });
 

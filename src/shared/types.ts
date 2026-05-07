@@ -217,6 +217,6 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   anki: {
     endpoint: "http://127.0.0.1:8765",
     deck: "Glossa",
-    modelName: "KaTeX and Markdown Basic"
+    modelName: "Basic"
   }
 };
