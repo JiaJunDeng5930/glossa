@@ -305,6 +305,9 @@ async function boot(): Promise<void> {
     document,
     shortcutKey: settings?.shortcutKey ?? "Alt",
     onWordSelected(selection) {
+      overlay.applyCardFeedback(selection.renderToken
+        ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-pending" }
+        : { tokenId: selection.token.id, feedback: "card-pending" });
       return runtimeMessage(createContentMessage("word.clicked", {
         pageUrl: location.href,
         sentence: selection.sentence,

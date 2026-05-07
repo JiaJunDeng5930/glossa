@@ -18,7 +18,7 @@ export interface RenderSummary {
   reason?: "missing-token" | "stale-token" | "stale-scan" | "detached-node" | "changed-text" | "invisible-range" | "overlap";
 }
 
-export type CardFeedback = "card-success" | "card-error";
+export type CardFeedback = "card-pending" | "card-success" | "card-error";
 
 export interface CardFeedbackInput {
   tokenId: string;
@@ -148,6 +148,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       }
       [data-glossa-token][data-glossa-status="error"] [data-glossa-token-label] {
         background: color-mix(in srgb, var(--glossa-card-error-bg-color) var(--glossa-bg-alpha), transparent);
+      }
+      [data-glossa-token][data-glossa-feedback="card-pending"] [data-glossa-token-label] {
+        background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
+        min-width: 1.25em;
+        text-align: center;
       }
       [data-glossa-token][data-glossa-feedback="card-success"] [data-glossa-token-label] {
         background: color-mix(in srgb, var(--glossa-card-success-bg-color) var(--glossa-bg-alpha), transparent);
@@ -409,6 +414,9 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     wrapper.dataset.glossaSurface = candidate.token.sourceText;
     wrapper.dataset.glossaDisplay = candidate.display;
     wrapper.dataset.glossaDisplayKind = candidate.displayKind ?? "gloss";
+    if (candidate.status === "ready" && !candidate.feedback) {
+      wrapper.dataset.glossaGlossDisplay = candidate.display;
+    }
     wrapper.dataset.glossaStatus = candidate.status;
     if (candidate.feedback) {
       wrapper.dataset.glossaFeedback = candidate.feedback;
@@ -462,24 +470,29 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     displayKind: BadgeDisplayKind = "gloss"
   ): void {
     const nextFeedback = feedback ?? readFeedback(node);
+    const nextKind = visibleDisplayKind(displayKind, nextFeedback);
+    const nextDisplay = visibleDisplay(display, displayKind, nextFeedback);
     if (
-      node.dataset.glossaDisplay === display
-      && node.dataset.glossaDisplayKind === displayKind
+      node.dataset.glossaDisplay === nextDisplay
+      && node.dataset.glossaDisplayKind === nextKind
       && node.dataset.glossaStatus === status
       && node.dataset.glossaFeedback === nextFeedback
     ) {
       return;
     }
+    if (displayKind === "gloss" && status === "ready") {
+      node.dataset.glossaGlossDisplay = display;
+    }
     const label = node.querySelector<HTMLElement>("[data-glossa-token-label]");
     const width = node.querySelector<HTMLElement>("[data-glossa-token-width]");
     if (label) {
-      label.textContent = display;
+      label.textContent = nextDisplay;
     }
     if (width) {
-      width.textContent = display;
+      width.textContent = nextDisplay;
     }
-    node.dataset.glossaDisplay = display;
-    node.dataset.glossaDisplayKind = displayKind;
+    node.dataset.glossaDisplay = nextDisplay;
+    node.dataset.glossaDisplayKind = nextKind;
     node.dataset.glossaStatus = status;
     if (nextFeedback) {
       node.dataset.glossaFeedback = nextFeedback;
@@ -496,15 +509,36 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
 
   function readFeedback(node: HTMLElement): CardFeedback | undefined {
     const feedback = node.dataset.glossaFeedback;
-    return feedback === "card-success" || feedback === "card-error" ? feedback : undefined;
+    return feedback === "card-pending" || feedback === "card-success" || feedback === "card-error" ? feedback : undefined;
   }
 
   function badgeForFeedback(node: HTMLElement, feedback: CardFeedback): { display: string; displayKind: BadgeDisplayKind } {
+    if (feedback === "card-pending") {
+      return { display: feedbackFallback(feedback), displayKind: "feedback" };
+    }
+    const glossDisplay = node.dataset.glossaGlossDisplay;
+    if (glossDisplay) {
+      return { display: glossDisplay, displayKind: "gloss" };
+    }
     const display = node.dataset.glossaDisplay;
     if (node.dataset.glossaStatus === "ready" && node.dataset.glossaDisplayKind === "gloss" && display) {
       return { display, displayKind: "gloss" };
     }
     return { display: feedbackFallback(feedback), displayKind: "feedback" };
+  }
+
+  function visibleDisplay(display: string, displayKind: BadgeDisplayKind, feedback?: CardFeedback): string {
+    if (displayKind === "gloss" && feedback === "card-pending") {
+      return feedbackFallback(feedback);
+    }
+    return display;
+  }
+
+  function visibleDisplayKind(displayKind: BadgeDisplayKind, feedback?: CardFeedback): BadgeDisplayKind {
+    if (displayKind === "gloss" && feedback === "card-pending") {
+      return "feedback";
+    }
+    return displayKind;
   }
 
   function isPendingNodeCurrent(node: HTMLElement): boolean {
@@ -652,5 +686,8 @@ function applyAppearance(host: HTMLElement, appearance: AppearanceSettings): voi
 }
 
 function feedbackFallback(feedback: CardFeedback): string {
+  if (feedback === "card-pending") {
+    return "...";
+  }
   return feedback === "card-success" ? "✓" : "×";
 }

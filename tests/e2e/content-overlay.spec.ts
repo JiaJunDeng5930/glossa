@@ -252,6 +252,60 @@ test("content bundle marks card failures with the shared badge renderer", async 
   });
 });
 
+test("content bundle shows card loading feedback before creation finishes", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) => {
+      if (message.type !== "word.clicked") {
+        return undefined;
+      }
+      return new Promise((resolve) => {
+        Reflect.set(window, "__resolveCardClick", () => {
+          const response = {
+            type: "word.clicked.ok",
+            version: 1,
+            requestId: message.requestId,
+            source: "service-worker",
+            target: message.source,
+            createdAt: Date.now(),
+            payload: { noteId: 12 }
+          };
+          callback?.(response);
+          resolve(response);
+        });
+      });
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-pending"
+      && node.dataset.glossaDisplayKind === "feedback"
+      && node.querySelector("[data-glossa-token-label]")?.textContent === "...";
+  });
+
+  await page.evaluate(() => {
+    const resolveCardClick = Reflect.get(window, "__resolveCardClick") as () => void;
+    resolveCardClick();
+  });
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-success"
+      && node.querySelector("[data-glossa-token-label]")?.textContent === "✓";
+  });
+});
+
 test("content bundle scans text added after boot", async ({ page }) => {
   await page.setContent("<main id=\"app\"></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
