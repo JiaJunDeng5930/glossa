@@ -1,4 +1,5 @@
 import { buildGlossCacheKey } from "../core/cache";
+import { diagnosticPayloadFrom } from "../shared/errors";
 import { hashText } from "../shared/hash";
 import {
   createCandidateRecord,
@@ -8,7 +9,7 @@ import {
 } from "../core/state";
 import type { ExtensionStorage } from "../storage/db";
 import type { AiBackend } from "./ai";
-import type { GlossaSettings, GlossItem, GlossTokenPayload, SentenceCandidate, TokenCandidate, VocabularyRecord } from "../shared/types";
+import type { ErrorPayload, GlossaSettings, GlossItem, GlossTokenPayload, SentenceCandidate, TokenCandidate, VocabularyRecord } from "../shared/types";
 import { GLOSS_TARGET_LANG } from "../shared/types";
 
 export interface GlossResolver {
@@ -35,7 +36,7 @@ interface ReusedMiss {
 
 type InFlightResult =
   | { ok: true; item: GlossItem }
-  | { ok: false; message: string };
+  | { ok: false; error: ErrorPayload };
 
 interface InFlightGloss {
   promise: Promise<InFlightResult>;
@@ -129,11 +130,15 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
               tokens: misses.map((miss) => miss.token)
             });
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Gloss lookup failed";
+            const payload = diagnosticPayloadFrom(error, {
+              reason: "service-error",
+              message: "Gloss lookup failed",
+              service: "ai"
+            });
             for (const miss of misses) {
-              resolveInFlightMiss(inFlight, miss, { ok: false, message });
+              resolveInFlightMiss(inFlight, miss, { ok: false, error: payload });
               if (sink.isActive?.() !== false) {
-                sink.emit({ tokenId: miss.token.id, status: "error", message });
+                sink.emit({ tokenId: miss.token.id, status: "error", message: payload.message, error: payload });
               }
             }
             await emitReusedMisses(deps.storage, reusedMisses, sink, now);
@@ -156,10 +161,14 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
           }
           for (const miss of misses) {
             if (!emitted.has(miss.token.id)) {
-              const message = "Gloss lookup returned no item";
-              resolveInFlightMiss(inFlight, miss, { ok: false, message });
+              const payload: ErrorPayload = {
+                reason: "invalid-response",
+                message: "Gloss lookup returned no item",
+                service: "ai"
+              };
+              resolveInFlightMiss(inFlight, miss, { ok: false, error: payload });
               if (sink.isActive?.() !== false) {
-                sink.emit({ tokenId: miss.token.id, status: "error", message });
+                sink.emit({ tokenId: miss.token.id, status: "error", message: payload.message, error: payload });
               }
             }
           }
@@ -207,7 +216,7 @@ async function emitReusedMisses(
       sink.emit({ tokenId: miss.token.id, status: "ready", item });
       await persistShownRecord(storage, miss.token, now);
     } else {
-      sink.emit({ tokenId: miss.token.id, status: "error", message: result.message });
+      sink.emit({ tokenId: miss.token.id, status: "error", message: result.error.message, error: result.error });
     }
   }
 }

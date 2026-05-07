@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossTokenPayload } from "../shared/types";
+import { userMessageForError } from "../shared/userMessages";
 import type { ScannedToken } from "./scanner";
 import { validateTokenForRender } from "./range";
 
@@ -24,6 +25,7 @@ export interface CardFeedbackInput {
   tokenId: string;
   token?: ScannedToken;
   feedback: CardFeedback;
+  message?: string;
 }
 
 type BadgeDisplayKind = "gloss" | "feedback";
@@ -34,6 +36,7 @@ interface RenderCandidate {
   token: ScannedToken;
   feedback?: CardFeedback;
   displayKind?: BadgeDisplayKind;
+  userMessage?: string;
 }
 
 interface TextSegment {
@@ -234,11 +237,12 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         return { result: "skipped", reason: "missing-token" };
       }
       if (outcome.status === "error") {
+        const userMessage = userMessageForError(outcome.error, "ai");
         if (existing) {
-          updateRenderedNode(existing, "×", "error", "card-error", "feedback");
+          updateRenderedNode(existing, "×", "error", "card-error", "feedback", userMessage);
           return { result: "updated" };
         }
-        return renderToken({ token, display: "×", status: "error", feedback: "card-error", displayKind: "feedback" }, scanVersion);
+        return renderToken({ token, display: "×", status: "error", feedback: "card-error", displayKind: "feedback", userMessage }, scanVersion);
       }
       const display = outcome.status === "ready" ? outcome.item?.display : "...";
       if (!display) {
@@ -264,7 +268,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         return { result: "hidden" };
       }
       if (outcome.status === "error") {
-        updateRenderedNode(existing, "×", "error", "card-error", "feedback");
+        updateRenderedNode(existing, "×", "error", "card-error", "feedback", userMessageForError(outcome.error, "ai"));
         return { result: "updated" };
       }
       if (outcome.status === "pending") {
@@ -283,7 +287,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       if (existing) {
         const status = readTokenStatus(existing);
         const badge = badgeForFeedback(existing, input.feedback);
-        updateRenderedNode(existing, badge.display, status, input.feedback, badge.displayKind);
+        updateRenderedNode(existing, badge.display, status, input.feedback, badge.displayKind, input.message);
         return { result: "updated" };
       }
       if (!input.token) {
@@ -294,7 +298,8 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         display: feedbackFallback(input.feedback),
         status: "ready",
         feedback: input.feedback,
-        displayKind: "feedback"
+        displayKind: "feedback",
+        ...(input.message ? { userMessage: input.message } : {})
       }, input.token.scanVersion);
     },
     setSelectionMode(active) {
@@ -308,7 +313,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       for (const tokenId of tokenIds) {
         const existing = findRenderedToken(tokenId);
         if (existing && isPendingNodeCurrent(existing)) {
-          updateRenderedNode(existing, "×", "error", "card-error", "feedback");
+          updateRenderedNode(existing, "×", "error", "card-error", "feedback", message);
         }
       }
     },
@@ -436,6 +441,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     );
     wrapper.className = "notranslate";
     wrapper.setAttribute("translate", "no");
+    applyUserMessage(wrapper, candidate.userMessage);
     applyAppearance(wrapper, appearance);
 
     const label = doc.createElement("span");
@@ -467,7 +473,8 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     display: string,
     status: GlossTokenPayload["status"],
     feedback?: CardFeedback,
-    displayKind: BadgeDisplayKind = "gloss"
+    displayKind: BadgeDisplayKind = "gloss",
+    userMessage?: string
   ): void {
     const nextFeedback = feedback ?? readFeedback(node);
     const nextKind = visibleDisplayKind(displayKind, nextFeedback);
@@ -477,6 +484,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       && node.dataset.glossaDisplayKind === nextKind
       && node.dataset.glossaStatus === status
       && node.dataset.glossaFeedback === nextFeedback
+      && node.dataset.glossaUserMessage === userMessage
     ) {
       return;
     }
@@ -494,12 +502,25 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     node.dataset.glossaDisplay = nextDisplay;
     node.dataset.glossaDisplayKind = nextKind;
     node.dataset.glossaStatus = status;
+    applyUserMessage(node, userMessage);
     if (nextFeedback) {
       node.dataset.glossaFeedback = nextFeedback;
     } else {
       delete node.dataset.glossaFeedback;
     }
     rememberMutationTarget(node);
+  }
+
+  function applyUserMessage(node: HTMLElement, message: string | undefined): void {
+    if (message) {
+      node.dataset.glossaUserMessage = message;
+      node.title = message;
+      node.setAttribute("aria-label", message);
+      return;
+    }
+    delete node.dataset.glossaUserMessage;
+    node.removeAttribute("title");
+    node.removeAttribute("aria-label");
   }
 
   function readTokenStatus(node: HTMLElement): GlossTokenPayload["status"] {

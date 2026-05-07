@@ -1,8 +1,10 @@
 import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
+import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
 import { matchesShortcut } from "../shared/shortcut";
-import type { BackgroundResponseMessage, ContentToBackgroundMessage, GlossPortOutboundMessage, GlossTokenPayload, SentenceCandidate } from "../shared/types";
+import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload, SentenceCandidate } from "../shared/types";
+import { userMessageForError } from "../shared/userMessages";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
@@ -244,9 +246,9 @@ async function boot(): Promise<void> {
       closeGlossSession(session);
       return;
     }
-    overlay.markStalePendingAsError(session.pendingTokenIds, message.payload.message);
+    overlay.markStalePendingAsError(session.pendingTokenIds, userMessageForError(message.payload, "ai"));
     closeGlossSession(session);
-    reportError("gloss.session.error", message.payload.message);
+    reportError("gloss.session.error", message.payload);
   };
 
   const scheduleScan = (reason: string) => {
@@ -287,7 +289,12 @@ async function boot(): Promise<void> {
       sendResponse({ ok: true });
     }).catch((error) => {
       handleRuntimeError("content.activate", error);
-      sendResponse({ ok: false, message: error instanceof Error ? error.message : "Translation activation failed" });
+      const payload = diagnosticPayloadFrom(error, {
+        reason: "runtime",
+        message: "Translation activation failed",
+        service: "runtime"
+      });
+      sendResponse({ ok: false, message: payload.message, error: payload } satisfies TranslateActivationResponse);
     });
     return true;
   });
@@ -314,11 +321,21 @@ async function boot(): Promise<void> {
         token: selection.token
       })).then((response) => {
         const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
+        const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
         overlay.applyCardFeedback(selection.renderToken
-          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: created ? "card-success" : "card-error" }
-          : { tokenId: selection.token.id, feedback: created ? "card-success" : "card-error" });
+          ? {
+            tokenId: selection.token.id,
+            token: selection.renderToken,
+            feedback: created ? "card-success" : "card-error",
+            ...(failureMessage ? { message: failureMessage } : {})
+          }
+          : {
+            tokenId: selection.token.id,
+            feedback: created ? "card-success" : "card-error",
+            ...(failureMessage ? { message: failureMessage } : {})
+          });
         if (!created && response.type === "error") {
-          reportError("word.clicked", response.payload.message, response.requestId);
+          reportError("word.clicked", response.payload, response.requestId);
         }
       }).catch((error) => {
         if (isExtensionContextInvalidated(error)) {
@@ -326,8 +343,8 @@ async function boot(): Promise<void> {
           return;
         }
         overlay.applyCardFeedback(selection.renderToken
-          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-error" }
-          : { tokenId: selection.token.id, feedback: "card-error" });
+          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-error", message: userMessageForError(undefined, "runtime") }
+          : { tokenId: selection.token.id, feedback: "card-error", message: userMessageForError(undefined, "runtime") });
         handleRuntimeError("word.clicked", error);
       });
     },
@@ -507,3 +524,5 @@ function isTranslateActivationMessage(value: unknown): value is { type: "glossa.
     && "type" in value
     && value.type === "glossa.activateTranslation";
 }
+
+type TranslateActivationResponse = { ok: true } | { ok: false; message: string; error?: ErrorPayload };

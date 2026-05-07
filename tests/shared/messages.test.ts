@@ -82,11 +82,27 @@ describe("extension message envelopes", () => {
       item: { tokenId: "t1", targetText: "submit", display: "提交" }
     });
     const done = createGlossPortMessage("gloss.done", { scanId: "scan-1" });
-    const error = createGlossPortMessage("gloss.error", { scanId: "scan-1", message: "failed" });
+    const errorPayload = { reason: "service-error" as const, message: "failed", service: "ai" as const };
+    const error = createGlossPortMessage("gloss.error", { scanId: "scan-1", ...errorPayload });
 
     expect(validateGlossPortOutbound(token, "scan-1")).toMatchObject({ type: "gloss.token", payload: { status: "ready" } });
     expect(validateGlossPortOutbound(done, "scan-1")).toMatchObject({ type: "gloss.done" });
-    expect(validateGlossPortOutbound(error, "scan-1")).toMatchObject({ type: "gloss.error", payload: { message: "failed" } });
+    expect(validateGlossPortOutbound(error, "scan-1")).toMatchObject({ type: "gloss.error", payload: errorPayload });
+  });
+
+  it("rejects malformed diagnostic error payloads", () => {
+    const request = createContentMessage("settings.get", {});
+    const response = createBackgroundResponse(request, "error", {
+      reason: "service-error",
+      message: "failed",
+      service: "ai"
+    });
+
+    expect(validateBackgroundResponse(response, request)).toMatchObject({
+      type: "error",
+      payload: { reason: "service-error", message: "failed", service: "ai" }
+    });
+    expect(() => validateBackgroundResponse({ ...response, payload: { message: "failed" } }, request)).toThrow("Malformed error payload");
   });
 
   it("rejects malformed message routes", () => {

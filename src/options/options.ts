@@ -1,6 +1,8 @@
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
+import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { formatShortcutFromEvent } from "../shared/shortcut";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type GlossaSettings, type KnownWordListId } from "../shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type ErrorService, type GlossaSettings, type KnownWordListId } from "../shared/types";
+import { userMessageForError } from "../shared/userMessages";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
@@ -25,11 +27,11 @@ form.addEventListener("submit", (event) => {
 });
 
 testAiButton.addEventListener("click", () => {
-  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "AI");
+  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "ai");
 });
 
 testAnkiButton.addEventListener("click", () => {
-  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "AnkiConnect");
+  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "anki");
 });
 
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
@@ -159,27 +161,13 @@ async function testAi(settings: GlossaSettings): Promise<void> {
       : settings.ai.provider === "openai-completions"
         ? { model: settings.modelVersion, prompt: "Return {\"items\":[]} as JSON.", temperature: 0 }
         : { model: settings.modelVersion, input: "Return {\"items\":[]} as JSON.", ...reasoningBody(settings) };
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(settings.ai.apiKey ? { authorization: `Bearer ${settings.ai.apiKey}` } : {})
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    throw new EndpointStatusError("AI", response.status);
-  }
+  await postConnectionTest(endpoint, body, "ai", settings.ai.apiKey);
 }
 
 async function testAnki(settings: GlossaSettings): Promise<void> {
-  const response = await fetch(settings.anki.endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "version", version: 6 })
-  });
-  if (!response.ok) {
-    throw new EndpointStatusError("AnkiConnect", response.status);
+  const result = await postConnectionTest(settings.anki.endpoint, { action: "version", version: 6 }, "anki") as { error?: string };
+  if (result.error) {
+    throw createDiagnosticError("service-error", result.error, { service: "anki" });
   }
 }
 
@@ -239,7 +227,7 @@ function isKnownWordList(value: unknown): value is KnownWordListId {
 async function runConnectionTest(
   button: HTMLButtonElement,
   run: () => Promise<void>,
-  serviceName: string
+  service: ErrorService
 ): Promise<void> {
   setStatus("");
   setTestState(button, "loading");
@@ -248,7 +236,11 @@ async function runConnectionTest(
     setTestState(button, "success");
   } catch (error) {
     setTestState(button, "error");
-    setStatus(friendlyConnectionError(serviceName, error));
+    setStatus(userMessageForError(diagnosticErrorFrom(error, {
+      reason: "service-error",
+      message: "Connection test failed",
+      service
+    }).payload, service));
   }
 }
 
@@ -257,34 +249,6 @@ type TestState = "idle" | "loading" | "success" | "error";
 function setTestState(button: HTMLButtonElement, state: TestState): void {
   button.dataset.state = state;
   button.disabled = state === "loading";
-}
-
-class EndpointStatusError extends Error {
-  constructor(readonly serviceName: string, readonly status: number) {
-    super(`${serviceName} returned HTTP ${status}`);
-  }
-}
-
-function friendlyConnectionError(serviceName: string, error: unknown): string {
-  if (error instanceof EndpointStatusError) {
-    if (error.status === 401 || error.status === 403) {
-      return `${serviceName} 拒绝了请求，请检查 API 密钥或访问权限。`;
-    }
-    if (error.status === 404) {
-      return `${serviceName} 接口可以访问，但测试路径不存在，请检查接口地址。`;
-    }
-    if (error.status >= 500) {
-      return `${serviceName} 接口可以访问，但服务返回了错误，请在服务恢复后重试。`;
-    }
-    return `${serviceName} 接口返回 HTTP ${error.status}，请检查接口设置。`;
-  }
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return `${serviceName} 测试超时，请检查接口服务是否正在运行且可以访问。`;
-  }
-  if (error instanceof TypeError) {
-    return `${serviceName} 接口无法访问，请检查地址和网络连接。`;
-  }
-  return `${serviceName} 测试失败，请检查接口设置。`;
 }
 
 function defaultEndpointForProvider(provider: AiSettings["provider"]): string {
@@ -298,6 +262,42 @@ function defaultEndpointForProvider(provider: AiSettings["provider"]): string {
     return "http://127.0.0.1:8787";
   }
   return DEFAULT_SETTINGS.ai.endpoint;
+}
+
+async function postConnectionTest(endpoint: string, body: unknown, service: Extract<ErrorService, "ai" | "anki">, apiKey?: string): Promise<unknown> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const payload = errorPayloadFromHttpStatus(service, response.status);
+      throw createDiagnosticError(payload.reason, `${service} HTTP ${response.status}`, {
+        service,
+        status: response.status
+      });
+    }
+    try {
+      return await response.json();
+    } catch (error) {
+      throw createDiagnosticError("invalid-response", `${service} returned invalid JSON`, { service, cause: error });
+    }
+  } catch (error) {
+    throw requestDiagnosticErrorFrom(error, {
+      reason: "service-error",
+      message: "Connection test failed",
+      service
+    });
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
 }
 
 function reasoningBody(settings: GlossaSettings): { reasoning?: { effort: Exclude<GlossaSettings["ai"]["reasoningEffort"], "none"> } } {

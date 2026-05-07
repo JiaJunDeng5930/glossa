@@ -9,8 +9,9 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
     Reflect.set(window, "__glossaStore", store);
-    Reflect.set(window, "fetch", (url: string) => Promise.resolve(new Response(null, {
-      status: url.includes("8765") ? 401 : 200
+    Reflect.set(window, "fetch", (url: string) => Promise.resolve(new Response(JSON.stringify({ result: null }), {
+      status: url.includes("8765") ? 401 : 200,
+      headers: { "content-type": "application/json" }
     })));
     Reflect.set(window, "chrome", {
       runtime: {

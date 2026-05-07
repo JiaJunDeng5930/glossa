@@ -3,6 +3,7 @@ import { createAiBackend } from "./ai";
 import { createGlossResolver } from "./glossResolver";
 import { createBackgroundMessageHandler } from "./messages";
 import { trace } from "../shared/diagnostics";
+import { diagnosticPayloadFrom } from "../shared/errors";
 import { createGlossPortMessage, MESSAGE_VERSION, validateContentMessage, validateGlossPortInbound } from "../shared/messages";
 import { createExtensionStorage } from "../storage/db";
 import type { ErrorMessage } from "../shared/types";
@@ -95,7 +96,11 @@ chrome.runtime.onConnect.addListener((port) => {
       });
       safePost(port, createGlossPortMessage("gloss.error", {
         ...(scanId ? { scanId } : {}),
-        message: error instanceof Error ? error.message : "Unknown gloss session error"
+        ...diagnosticPayloadFrom(error, {
+          reason: "runtime",
+          message: "Gloss session failed",
+          service: "runtime"
+        })
       }));
     });
   });
@@ -116,7 +121,11 @@ function createInvalidMessageResponse(value: unknown, error: unknown): ErrorMess
     source: "service-worker",
     target: "content-script",
     createdAt: Date.now(),
-    payload: { message: error instanceof Error ? error.message : "Unknown background error" }
+    payload: diagnosticPayloadFrom(error, {
+      reason: "runtime",
+      message: "Invalid background message",
+      service: "runtime"
+    })
   };
 }
 

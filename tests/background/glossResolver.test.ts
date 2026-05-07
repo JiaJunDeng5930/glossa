@@ -174,11 +174,21 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.gloss).toHaveBeenCalledTimes(1);
     expect(firstEvents).toEqual([
       { tokenId: "t-first", status: "pending" },
-      { tokenId: "t-first", status: "error", message: "backend unavailable" }
+      {
+        tokenId: "t-first",
+        status: "error",
+        message: "backend unavailable",
+        error: { reason: "service-error", message: "backend unavailable", service: "ai" }
+      }
     ]);
     expect(secondEvents).toEqual([
       { tokenId: "t-second", status: "pending" },
-      { tokenId: "t-second", status: "error", message: "backend unavailable" }
+      {
+        tokenId: "t-second",
+        status: "error",
+        message: "backend unavailable",
+        error: { reason: "service-error", message: "backend unavailable", service: "ai" }
+      }
     ]);
   });
 

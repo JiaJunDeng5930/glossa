@@ -39,6 +39,8 @@ export interface GlossItem {
 export type MessageSource = "content-script" | "service-worker" | "options";
 export type MessageTarget = MessageSource;
 export type MessageVersion = 1;
+export type ErrorReason = "network" | "timeout" | "unauthorized" | "not-found" | "service-error" | "invalid-response" | "runtime";
+export type ErrorService = "ai" | "anki" | "runtime";
 
 export interface MessageEnvelope<TType extends string, TSource extends MessageSource, TTarget extends MessageTarget, TPayload> {
   type: TType;
@@ -73,15 +75,15 @@ export interface GlossTokenPayload {
   status: GlossTokenStatus;
   item?: GlossItem;
   message?: string;
+  error?: ErrorPayload;
 }
 
 export interface GlossDonePayload {
   scanId: string;
 }
 
-export interface GlossPortErrorPayload {
+export interface GlossPortErrorPayload extends ErrorPayload {
   scanId?: string;
-  message: string;
 }
 
 export interface GlossPortMessage<TType extends string, TPayload> {
@@ -108,7 +110,10 @@ export interface SettingsGetResponsePayload {
 }
 
 export interface ErrorPayload {
+  reason: ErrorReason;
   message: string;
+  service?: ErrorService;
+  status?: number;
 }
 
 export type GlossRequestMessage = MessageEnvelope<"gloss.request", "content-script", "service-worker", GlossRequestPayload>;

@@ -1,5 +1,6 @@
 import { buildCardCacheKey } from "../core/cache";
 import { hashText } from "../shared/hash";
+import { diagnosticPayloadFrom } from "../shared/errors";
 import { createBackgroundResponse } from "../shared/messages";
 import {
   createCandidateRecord,
@@ -32,9 +33,11 @@ export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDep
       const payload = await handleWordClicked(message.payload, deps, now());
       return createBackgroundResponse(message, "word.clicked.ok", payload);
     } catch (error) {
-      return createBackgroundResponse(message, "error", {
-        message: error instanceof Error ? error.message : "Unknown background error"
-      });
+      return createBackgroundResponse(message, "error", diagnosticPayloadFrom(error, {
+        reason: "service-error",
+        message: "Background request failed",
+        service: "runtime"
+      }));
     }
   };
 }

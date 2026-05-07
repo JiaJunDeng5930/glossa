@@ -214,7 +214,7 @@ test("content bundle marks card failures with the shared badge renderer", async 
         source: "service-worker",
         target: message.source,
         createdAt: Date.now(),
-        payload: { message: "AnkiConnect failed" }
+        payload: { reason: "network", message: "AnkiConnect failed", service: "anki" }
       } : {
         type: "word.clicked.ok",
         version: 1,
@@ -237,7 +237,8 @@ test("content bundle marks card failures with the shared badge renderer", async 
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-error"
-      && node.querySelector("[data-glossa-token-label]")?.textContent === "×";
+      && node.querySelector("[data-glossa-token-label]")?.textContent === "×"
+      && node.title === "Anki 服务未启动或无法访问";
   });
 
   await page.keyboard.down("Alt");
@@ -249,6 +250,40 @@ test("content bundle marks card failures with the shared badge renderer", async 
     return node?.dataset.glossaFeedback === "card-success"
       && node.dataset.glossaDisplayKind === "feedback"
       && node.querySelector("[data-glossa-token-label]")?.textContent === "✓";
+  });
+});
+
+test("content bundle exposes user-readable gloss failure text", async ({ page }) => {
+  await page.setContent("<main><p>Unusual archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown, error?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const unusual = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "unusual");
+      if (unusual) {
+        emit(glossToken(message.payload.scanId, unusual.id, "error", undefined, {
+          reason: "invalid-response",
+          message: "bad json",
+          service: "ai"
+        }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaStatus === "error"
+      && node.title === "AI 返回格式错误"
+      && node.getAttribute("aria-label") === "AI 返回格式错误";
   });
 });
 
@@ -730,7 +765,7 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
     const activationListeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
     Reflect.set(window, "__glossaMessages", sent);
     Reflect.set(window, "__glossaListeners", activationListeners);
-    Reflect.set(window, "glossToken", (scanId: string, tokenId: string, status: string, item?: unknown, message?: string) => ({
+    Reflect.set(window, "glossToken", (scanId: string, tokenId: string, status: string, item?: unknown, error?: { message?: string }) => ({
       type: "gloss.token",
       version: 1,
       createdAt: Date.now(),
@@ -739,7 +774,7 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
         tokenId,
         status,
         ...(item ? { item } : {}),
-        ...(message ? { message } : {})
+        ...(error ? { message: error.message, error } : {})
       }
     }));
     Reflect.set(window, "glossDone", (scanId: string) => ({

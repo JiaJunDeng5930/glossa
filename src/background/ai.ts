@@ -1,3 +1,4 @@
+import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { GLOSS_TARGET_LANG, type AnkiCard, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
 
 export interface GlossBackendInput {
@@ -128,7 +129,11 @@ function systemInstruction(): string {
 }
 
 function parseJsonOutput<T>(value: string): T {
-  return JSON.parse(value) as T;
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    throw createDiagnosticError("invalid-response", "AI returned invalid JSON", { service: "ai", cause: error });
+  }
 }
 
 async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey?: string): Promise<T> {
@@ -148,16 +153,28 @@ async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, 
         signal: controller.signal
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw createDiagnosticErrorFromPayload(response.status);
       }
-      return await response.json() as T;
+      try {
+        return await response.json() as T;
+      } catch (error) {
+        throw createDiagnosticError("invalid-response", "AI returned invalid JSON", { service: "ai", cause: error });
+      }
     } catch (error) {
-      lastError = error;
+      lastError = requestDiagnosticErrorFrom(error, { reason: "service-error", message: "AI backend request failed", service: "ai" });
     } finally {
       globalThis.clearTimeout(timeout);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("AI backend request failed");
+  throw diagnosticErrorFrom(lastError, { reason: "service-error", message: "AI backend request failed", service: "ai" });
+}
+
+function createDiagnosticErrorFromPayload(status: number): Error {
+  return createDiagnosticError(
+    errorPayloadFromHttpStatus("ai", status).reason,
+    `AI HTTP ${status}`,
+    { service: "ai", status }
+  );
 }
 
 function trimSlash(value: string): string {

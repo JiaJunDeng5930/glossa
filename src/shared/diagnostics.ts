@@ -1,3 +1,5 @@
+import { isErrorPayload } from "./errors";
+
 export type TraceComponent = "service-worker" | "content-script" | "options";
 export type TraceResult = "ok" | "error" | "timeout" | "ignored";
 
@@ -83,6 +85,12 @@ export function sanitizeError(error: unknown): SafeTraceEvent["error"] {
       name: error.name,
       message: error.message,
       ...(error.stack ? { stack: error.stack } : {})
+    };
+  }
+  if (isErrorPayload(error)) {
+    return {
+      name: error.service ? `${error.service}:${error.reason}` : error.reason,
+      message: error.message
     };
   }
   return {

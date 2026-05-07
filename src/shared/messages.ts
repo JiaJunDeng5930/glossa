@@ -15,6 +15,7 @@ import type {
   UserWordClickPayload,
   WordClickedOkPayload
 } from "./types";
+import { isErrorPayload } from "./errors";
 
 export const MESSAGE_VERSION = 1;
 
@@ -111,7 +112,10 @@ export function validateBackgroundResponse(value: unknown, request: ContentToBac
   ) {
     throw new Error("Unknown response type");
   }
-  requirePlainPayload(envelope.payload);
+  const payload = requirePlainPayload(envelope.payload);
+  if (envelope.type === "error" && !isErrorPayload(payload)) {
+    throw new Error("Malformed error payload");
+  }
   return envelope as BackgroundResponseMessage;
 }
 
@@ -144,7 +148,7 @@ export function validateGlossPortOutbound(value: unknown, scanId?: string): Glos
     if (payload.status === "ready" && !isPlainObject(payload.item)) {
       throw new Error("Missing gloss token item");
     }
-    if (payload.status === "error" && typeof payload.message !== "string") {
+    if (payload.status === "error" && !isErrorPayload(payload.error)) {
       throw new Error("Missing gloss token error message");
     }
     return message as GlossPortOutboundMessage;
@@ -161,7 +165,7 @@ export function validateGlossPortOutbound(value: unknown, scanId?: string): Glos
   }
   if (message.type === "gloss.error") {
     const payload = requirePlainPayload(message.payload);
-    if ((payload.scanId !== undefined && typeof payload.scanId !== "string") || typeof payload.message !== "string") {
+    if ((payload.scanId !== undefined && typeof payload.scanId !== "string") || !isErrorPayload(payload)) {
       throw new Error("Malformed gloss.error payload");
     }
     if (scanId && payload.scanId !== undefined && payload.scanId !== scanId) {

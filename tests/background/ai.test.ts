@@ -66,6 +66,47 @@ describe("AI backend adapters", () => {
     expect(body.reasoning).toBeUndefined();
     expect(result).toMatchObject({ front: "submit", back: "提交" });
   });
+
+  it("classifies HTTP auth failures as AI diagnostic errors", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: "bad key" }, 401));
+    const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
+
+    await expect(createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: []
+    })).rejects.toMatchObject({
+      payload: { reason: "unauthorized", service: "ai", status: 401 }
+    });
+  });
+
+  it("classifies network failures as AI diagnostic errors", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
+
+    await expect(createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: []
+    })).rejects.toMatchObject({
+      payload: { reason: "network", service: "ai" }
+    });
+  });
+
+  it("classifies invalid model JSON as an AI response diagnostic error", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "not json" }));
+    const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
+
+    await expect(createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: []
+    })).rejects.toMatchObject({
+      payload: { reason: "invalid-response", service: "ai" }
+    });
+  });
 });
 
 function settingsFor(
@@ -85,9 +126,9 @@ function settingsFor(
   };
 }
 
-function jsonResponse(value: unknown): Response {
+function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
-    status: 200,
+    status,
     headers: { "content-type": "application/json" }
   });
 }
