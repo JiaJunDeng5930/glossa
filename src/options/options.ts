@@ -13,8 +13,11 @@ const glossPreviewLabels = Array.from(document.querySelectorAll<HTMLElement>(".p
 const glossPreviewSuccessLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss-success"));
 const glossPreviewErrorLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss-error"));
 const knownWordListSelect = form.elements.namedItem("knownWordList") as HTMLSelectElement;
+const ankiDeckSelect = form.elements.namedItem("ankiDeck") as HTMLSelectElement;
+const ankiModelNameSelect = form.elements.namedItem("ankiModelName") as HTMLSelectElement;
 const testAiButton = document.querySelector<HTMLButtonElement>("#test-ai")!;
 const testAnkiButton = document.querySelector<HTMLButtonElement>("#test-anki")!;
+const refreshAnkiButton = document.querySelector<HTMLButtonElement>("#refresh-anki")!;
 let capturingShortcutName: "shortcutKey" | "translateShortcutKey" | undefined;
 let pendingShortcut = "";
 
@@ -32,6 +35,10 @@ testAiButton.addEventListener("click", () => {
 
 testAnkiButton.addEventListener("click", () => {
   void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "anki");
+});
+
+refreshAnkiButton.addEventListener("click", () => {
+  void refreshAnkiOptions(readFormSettings(), { reportStatus: true });
 });
 
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
@@ -96,10 +103,13 @@ async function loadSettings(): Promise<void> {
   setInput("reasoningEffort", settings.ai.reasoningEffort);
   setInput("modelVersion", settings.modelVersion);
   setInput("ankiEndpoint", settings.anki.endpoint);
-  setInput("ankiDeck", settings.anki.deck);
+  setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
+  setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
+  setAnkiSelectsEnabled(false);
   setInput("glossPrompt", settings.prompts.gloss);
   setInput("ankiPrompt", settings.prompts.ankiCard);
   updatePreview(settings);
+  void refreshAnkiOptions(settings, { reportStatus: false });
 }
 
 async function saveSettings(settings: GlossaSettings): Promise<void> {
@@ -138,7 +148,8 @@ function readFormSettings(): GlossaSettings {
     },
     anki: {
       endpoint: readInput("ankiEndpoint").trim() || DEFAULT_SETTINGS.anki.endpoint,
-      deck: readInput("ankiDeck").trim() || DEFAULT_SETTINGS.anki.deck
+      deck: readInput("ankiDeck").trim() || DEFAULT_SETTINGS.anki.deck,
+      modelName: readInput("ankiModelName").trim() || DEFAULT_SETTINGS.anki.modelName
     }
   };
 }
@@ -165,9 +176,12 @@ async function testAi(settings: GlossaSettings): Promise<void> {
 }
 
 async function testAnki(settings: GlossaSettings): Promise<void> {
-  const result = await postConnectionTest(settings.anki.endpoint, { action: "version", version: 6 }, "anki") as { error?: string };
-  if (result.error) {
-    throw createDiagnosticError("service-error", result.error, { service: "anki" });
+  const catalog = await loadAnkiCatalog(settings.anki.endpoint);
+  if (!catalog.decks.includes(settings.anki.deck)) {
+    throw createDiagnosticError("service-error", "Anki deck was not found", { service: "anki" });
+  }
+  if (!catalog.modelNames.includes(settings.anki.modelName)) {
+    throw createDiagnosticError("service-error", "Anki model was not found", { service: "anki" });
   }
 }
 
@@ -204,6 +218,11 @@ function setChecked(name: string, value: boolean): void {
 
 function setStatus(value: string): void {
   statusOutput.value = value;
+}
+
+function setAnkiSelectsEnabled(enabled: boolean): void {
+  ankiDeckSelect.disabled = !enabled;
+  ankiModelNameSelect.disabled = !enabled;
 }
 
 function populateKnownWordLists(): void {
@@ -246,6 +265,16 @@ async function runConnectionTest(
 
 type TestState = "idle" | "loading" | "success" | "error";
 
+interface AnkiCatalog {
+  decks: string[];
+  modelNames: string[];
+}
+
+interface AnkiActionResponse<T> {
+  result?: T;
+  error?: string | null;
+}
+
 function setTestState(button: HTMLButtonElement, state: TestState): void {
   button.dataset.state = state;
   button.disabled = state === "loading";
@@ -262,6 +291,92 @@ function defaultEndpointForProvider(provider: AiSettings["provider"]): string {
     return "http://127.0.0.1:8787";
   }
   return DEFAULT_SETTINGS.ai.endpoint;
+}
+
+async function refreshAnkiOptions(settings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
+  setTestState(refreshAnkiButton, "loading");
+  setAnkiSelectsEnabled(false);
+  try {
+    const catalog = await loadAnkiCatalog(settings.anki.endpoint);
+    const deck = pickExistingValue(settings.anki.deck, catalog.decks);
+    const modelName = pickExistingValue(settings.anki.modelName, catalog.modelNames);
+    setSelectOptions(ankiDeckSelect, catalog.decks, deck);
+    setSelectOptions(ankiModelNameSelect, catalog.modelNames, modelName);
+    setAnkiSelectsEnabled(true);
+    setTestState(refreshAnkiButton, "idle");
+    if (options.reportStatus) {
+      setStatus("");
+    }
+  } catch (error) {
+    setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
+    setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
+    setAnkiSelectsEnabled(false);
+    setTestState(refreshAnkiButton, "error");
+    if (options.reportStatus) {
+      setStatus(userMessageForError(diagnosticErrorFrom(error, {
+        reason: "service-error",
+        message: "Connection test failed",
+        service: "anki"
+      }).payload, "anki"));
+    }
+  }
+}
+
+async function loadAnkiCatalog(endpoint: string): Promise<AnkiCatalog> {
+  await ankiAction<number>(endpoint, "version");
+  const decks = await ankiAction<string[]>(endpoint, "deckNames");
+  const modelNames = await ankiAction<string[]>(endpoint, "modelNames");
+  if (!isStringArray(decks) || !isStringArray(modelNames)) {
+    throw createDiagnosticError("invalid-response", "AnkiConnect returned invalid catalog data", { service: "anki" });
+  }
+  const compatibleModels: string[] = [];
+  for (const modelName of modelNames) {
+    const fields = await ankiAction<string[]>(endpoint, "modelFieldNames", { modelName });
+    if (isStringArray(fields) && fields.includes("Front") && fields.includes("Back")) {
+      compatibleModels.push(modelName);
+    }
+  }
+  if (compatibleModels.length === 0) {
+    throw createDiagnosticError("service-error", "No compatible Anki model was found", { service: "anki" });
+  }
+  return { decks, modelNames: compatibleModels };
+}
+
+async function ankiAction<T>(endpoint: string, action: string, params?: Record<string, unknown>): Promise<T> {
+  const response = await postConnectionTest(endpoint, {
+    action,
+    version: 6,
+    ...(params ? { params } : {})
+  }, "anki") as AnkiActionResponse<T>;
+  if (!response || typeof response !== "object") {
+    throw createDiagnosticError("invalid-response", "AnkiConnect returned invalid response data", { service: "anki" });
+  }
+  if (response.error) {
+    throw createDiagnosticError("service-error", response.error, { service: "anki" });
+  }
+  if (response.result === undefined) {
+    throw createDiagnosticError("invalid-response", "AnkiConnect response is missing result", { service: "anki" });
+  }
+  return response.result;
+}
+
+function setSelectOptions(select: HTMLSelectElement, values: string[], selected: string): void {
+  const uniqueValues = [...new Set(values.filter((value) => value.length > 0))];
+  select.replaceChildren(...uniqueValues.map((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    return option;
+  }));
+  select.value = uniqueValues.includes(selected) ? selected : uniqueValues[0] ?? "";
+}
+
+function pickExistingValue(value: string, values: string[]): string {
+  return values.includes(value) ? value : values[0] ?? value;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 async function postConnectionTest(endpoint: string, body: unknown, service: Extract<ErrorService, "ai" | "anki">, apiKey?: string): Promise<unknown> {

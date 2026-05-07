@@ -150,6 +150,7 @@ export interface AiSettings {
 export interface AnkiSettings {
   endpoint: string;
   deck: string;
+  modelName: string;
 }
 
 export interface AppearanceSettings {
@@ -206,7 +207,7 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   },
   prompts: {
     gloss: "只把每个陌生英文单词或短语在当前语境中的意思翻译成简体中文。返回适合显示在原词上方的简短行内标签。",
-    ankiCard: "为点击的英文单词创建简洁的 Anki Basic 卡片字段。覆盖常见含义、当前语境含义，并给出一个自然例句。"
+    ankiCard: "为点击的英文单词创建简洁的 Anki 卡片字段。覆盖常见含义、当前语境含义，并给出一个自然例句。"
   },
   ai: {
     provider: "openai-responses",
@@ -215,6 +216,7 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   },
   anki: {
     endpoint: "http://127.0.0.1:8765",
-    deck: "Glossa"
+    deck: "Glossa",
+    modelName: "KaTeX and Markdown Basic"
   }
 };

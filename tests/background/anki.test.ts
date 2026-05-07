@@ -4,6 +4,22 @@ import { createAnkiClient } from "../../src/background/anki";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
 describe("AnkiConnect adapter diagnostics", () => {
+  it("uses the configured Anki model when creating notes", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ result: 42, error: null }));
+
+    await expect(createAnkiClient(fetchImpl as never).createNote(noteInput())).resolves.toBe(42);
+
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const body = JSON.parse(calls[0]?.[1].body as string) as {
+      params: { note: { deckName: string; modelName: string; fields: Record<string, string> } };
+    };
+    expect(body.params.note).toMatchObject({
+      deckName: "Glossa",
+      modelName: "KaTeX and Markdown Basic",
+      fields: { Front: "submit", Back: "提交<br>Submit the form." }
+    });
+  });
+
   it("classifies unavailable AnkiConnect as a network diagnostic error", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError("fetch failed");

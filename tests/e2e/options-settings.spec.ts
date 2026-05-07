@@ -9,10 +9,25 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
     Reflect.set(window, "__glossaStore", store);
-    Reflect.set(window, "fetch", (url: string) => Promise.resolve(new Response(JSON.stringify({ result: null }), {
-      status: url.includes("8765") ? 401 : 200,
-      headers: { "content-type": "application/json" }
-    })));
+    Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
+      if (!url.includes("8765")) {
+        return new Response(JSON.stringify({ result: null }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      const body = JSON.parse(init?.body as string) as { action: string; params?: { modelName?: string } };
+      const resultByAction: Record<string, unknown> = {
+        version: 6,
+        deckNames: ["general", "Glossa", "temp"],
+        modelNames: ["KaTeX and Markdown Basic", "问答题"],
+        modelFieldNames: body.params?.modelName === "KaTeX and Markdown Basic" ? ["Front", "Back"] : ["正面", "背面"]
+      };
+      return new Response(JSON.stringify({ result: resultByAction[body.action], error: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
     Reflect.set(window, "chrome", {
       runtime: {
         lastError: undefined
@@ -57,6 +72,11 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
   await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
+  await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
+  await expect(page.locator("select[name=ankiDeck] option")).toHaveCount(3);
+  await expect(page.locator("select[name=ankiModelName] option")).toHaveCount(1);
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
+  await page.locator("select[name=ankiDeck]").selectOption("temp");
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
 
@@ -71,7 +91,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   const buttonPositions = await page.evaluate(() => {
     const reasoning = document.querySelector("select[name=reasoningEffort]")!.getBoundingClientRect();
     const testAi = document.querySelector("#test-ai")!.getBoundingClientRect();
-    const ankiDeck = document.querySelector("input[name=ankiDeck]")!.getBoundingClientRect();
+    const ankiDeck = document.querySelector("select[name=ankiDeck]")!.getBoundingClientRect();
     const testAnki = document.querySelector("#test-anki")!.getBoundingClientRect();
     return {
       aiBelowReasoning: testAi.top >= reasoning.bottom,
@@ -88,11 +108,11 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#status")).toHaveText("");
 
   await page.locator("#test-anki").click();
-  await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#test-anki .test-label")).not.toBeVisible();
-  await expect(page.locator("#test-anki .test-icon-error")).toBeVisible();
+  await expect(page.locator("#test-anki .test-icon-success")).toBeVisible();
   await expect(page.locator("#test-anki")).toHaveCSS("width", "44px");
-  await expect(page.locator("#status")).toContainText("AnkiConnect 拒绝了请求");
+  await expect(page.locator("#status")).toHaveText("");
 
   await page.locator("button[type=submit]").click();
 
@@ -118,6 +138,70 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     ai: {
       provider: "openai-chat-completions",
       reasoningEffort: "high"
+    },
+    anki: {
+      deck: "temp",
+      modelName: "KaTeX and Markdown Basic"
     }
   });
+});
+
+test("options page disables Anki selectors until refresh reaches AnkiConnect", async ({ page }) => {
+  const html = await readFile(resolve("dist/options/options.html"), "utf8");
+  await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "").replace("<script type=\"module\" src=\"../options.js\"></script>", ""));
+  await page.addStyleTag({ path: resolve("dist/assets/options.css") });
+  await page.evaluate(() => {
+    const store: Record<string, unknown> = {};
+    Reflect.set(window, "__glossaStore", store);
+    Reflect.set(window, "__ankiUp", false);
+    Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
+      if (!url.includes("8765")) {
+        return new Response(JSON.stringify({ result: null }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      if (!Reflect.get(window, "__ankiUp")) {
+        throw new TypeError("fetch failed");
+      }
+      const body = JSON.parse(init?.body as string) as { action: string; params?: { modelName?: string } };
+      const resultByAction: Record<string, unknown> = {
+        version: 6,
+        deckNames: ["Glossa"],
+        modelNames: ["KaTeX and Markdown Basic"],
+        modelFieldNames: ["Front", "Back"]
+      };
+      return new Response(JSON.stringify({ result: resultByAction[body.action], error: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+    Reflect.set(window, "chrome", {
+      runtime: { lastError: undefined },
+      storage: {
+        local: {
+          get(key: string, callback: (result: Record<string, unknown>) => void) {
+            callback({ [key]: store[key] });
+          },
+          set(value: Record<string, unknown>, callback?: () => void) {
+            Object.assign(store, value);
+            callback?.();
+          }
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
+
+  await expect(page.locator("select[name=ankiDeck]")).toBeDisabled();
+  await expect(page.locator("select[name=ankiModelName]")).toBeDisabled();
+  await expect(page.locator("#refresh-anki")).toBeEnabled();
+
+  await page.evaluate(() => Reflect.set(window, "__ankiUp", true));
+  await page.locator("#refresh-anki").click();
+
+  await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
+  await expect(page.locator("select[name=ankiModelName]")).toBeEnabled();
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Glossa");
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
 });

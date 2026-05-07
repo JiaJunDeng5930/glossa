@@ -15,7 +15,7 @@ describe("background message handler", () => {
       promptVersion: "gloss-v1",
       modelVersion: "gpt-4.1-mini",
       ai: { provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" },
-      anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa" }
+      anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "KaTeX and Markdown Basic" }
     });
     const message = createContentMessage("word.clicked", {
       pageUrl: "https://example.test",

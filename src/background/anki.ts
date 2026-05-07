@@ -20,7 +20,7 @@ export function createAnkiClient(fetchImpl: typeof fetch = fetch): AnkiClient {
             params: {
               note: {
                 deckName: input.settings.anki.deck,
-                modelName: "Basic",
+                modelName: input.settings.anki.modelName,
                 fields: {
                   Front: input.card.front,
                   Back: [input.card.back, ...input.card.examples].join("<br>")
