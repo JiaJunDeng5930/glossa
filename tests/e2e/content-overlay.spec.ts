@@ -39,7 +39,7 @@ test("content bundle waits for manual activation before requesting glosses", asy
   expect(await sentMessageTypes(page)).toContain("gloss.scan");
 });
 
-test("content bundle uses the configured translation shortcut for manual activation", async ({ page }) => {
+test("content bundle toggles page translation with the configured shortcut", async ({ page }) => {
   await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
   await installChromeRuntime(page, {
     shortcutKey: "Alt",
@@ -64,14 +64,72 @@ test("content bundle uses the configured translation shortcut for manual activat
   await page.waitForTimeout(300);
   expect(await sentMessageTypes(page)).toEqual(["settings.get"]);
 
-  await page.keyboard.down("Control");
-  await page.keyboard.down("Shift");
-  await page.keyboard.press("KeyG");
-  await page.keyboard.up("Shift");
-  await page.keyboard.up("Control");
+  await pressTranslationShortcut(page);
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
   expect(await sentMessageTypes(page)).toContain("gloss.scan");
+
+  const scanCount = (await sentMessageTypes(page)).filter((type) => type === "gloss.scan").length;
+
+  await pressTranslationShortcut(page);
+
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await expect(page.locator("p")).toHaveText("Shortcut archive appears here.");
+
+  await page.locator("p").evaluate((element) => {
+    element.textContent = "Shortcut archive mutates while closed.";
+  });
+  await page.waitForTimeout(250);
+
+  expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan")).toHaveLength(scanCount);
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+
+  await pressTranslationShortcut(page);
+
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
+  expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan").length).toBe(scanCount + 1);
+});
+
+test("content bundle drops pending shortcut glosses after translation is toggled off", async ({ page }) => {
+  await page.setContent("<main><p>Pending archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Ctrl+Shift+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const pendingToken = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "pending");
+      if (!pendingToken) {
+        return;
+      }
+      emit(glossToken(message.payload.scanId, pendingToken.id, "pending"));
+      Reflect.set(window, "__glossaEmitLateReady", () => {
+        emit(glossToken(message.payload.scanId, pendingToken.id, "ready", { tokenId: pendingToken.id, targetText: pendingToken.surface, display: "待定" }));
+      });
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForTimeout(300);
+
+  await pressTranslationShortcut(page);
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+
+  await pressTranslationShortcut(page);
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__glossaDisconnects"))).toBe(1);
+
+  await page.evaluate(() => {
+    (Reflect.get(window, "__glossaEmitLateReady") as () => void)();
+  });
+  await page.waitForTimeout(200);
+
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await expect(page.locator("p")).toHaveText("Pending archive appears here.");
 });
 
 test("content bundle renders inline glosses and captures shortcut word selection", async ({ page }) => {
@@ -824,12 +882,21 @@ async function sentMessageTypes(page: Page): Promise<string[]> {
   });
 }
 
+async function pressTranslationShortcut(page: Page): Promise<void> {
+  await page.keyboard.down("Control");
+  await page.keyboard.down("Shift");
+  await page.keyboard.press("KeyG");
+  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
+}
+
 async function installChromeRuntime(page: Page, settings: RuntimeSettings): Promise<void> {
   await page.evaluate((settings) => {
     const sent: unknown[] = [];
     const activationListeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
     Reflect.set(window, "__glossaMessages", sent);
     Reflect.set(window, "__glossaListeners", activationListeners);
+    Reflect.set(window, "__glossaDisconnects", 0);
     Reflect.set(window, "glossToken", (scanId: string, tokenId: string, status: string, item?: unknown, error?: { message?: string }) => ({
       type: "gloss.token",
       version: 1,
@@ -885,6 +952,8 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
               }
             },
             disconnect() {
+              const disconnects = Reflect.get(window, "__glossaDisconnects") as number;
+              Reflect.set(window, "__glossaDisconnects", disconnects + 1);
               for (const listener of disconnectListeners) {
                 listener();
               }

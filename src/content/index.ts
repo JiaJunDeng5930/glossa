@@ -266,7 +266,7 @@ async function boot(): Promise<void> {
     }, 150);
   };
 
-  const activateTranslation = async (reason: string): Promise<void> => {
+  const enableTranslation = async (reason: string): Promise<void> => {
     if (stopped) {
       return;
     }
@@ -274,11 +274,40 @@ async function boot(): Promise<void> {
     await scanAndRender(reason, { manualActivation: true });
   };
 
+  const disableTranslation = (reason: string): void => {
+    if (stopped) {
+      return;
+    }
+    translationEnabled = false;
+    if (scanTimer) {
+      globalThis.clearTimeout(scanTimer);
+      scanTimer = undefined;
+    }
+    scanVersion += 1;
+    closeAllGlossSessions();
+    overlay.clear();
+    trace({
+      component: "content-script",
+      operation: "content.translation.disable",
+      result: "ok",
+      url: location.href,
+      details: { reason }
+    });
+  };
+
+  const toggleTranslation = async (reason: string): Promise<void> => {
+    if (translationEnabled) {
+      disableTranslation(reason);
+      return;
+    }
+    await enableTranslation(reason);
+  };
+
   const onShortcutKeyDown = (event: KeyboardEvent): void => {
     if (matchesShortcut(event, settings?.translateShortcutKey ?? "Alt+G")) {
       event.preventDefault();
       event.stopPropagation();
-      void activateTranslation("shortcut");
+      void toggleTranslation("shortcut");
     }
   };
 
@@ -287,7 +316,7 @@ async function boot(): Promise<void> {
     if (!isTranslateActivationMessage(message)) {
       return false;
     }
-    void activateTranslation("popup").then(() => {
+    void enableTranslation("popup").then(() => {
       sendResponse({ ok: true });
     }).catch((error) => {
       handleRuntimeError("content.activate", error);
