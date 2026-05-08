@@ -57,6 +57,7 @@ chrome.runtime.onConnect.addListener((port) => {
   }
   let active = true;
   let session: ReturnType<typeof glossResolver.createSession> | undefined;
+  let sessionPromise: Promise<ReturnType<typeof glossResolver.createSession>> | undefined;
   let scanId: string | undefined;
   let pageUrl: string | undefined;
   port.onDisconnect.addListener(() => {
@@ -66,20 +67,21 @@ chrome.runtime.onConnect.addListener((port) => {
     void (async () => {
       const message = validateGlossPortInbound(rawMessage);
       if (message.type === "gloss.scan.start") {
-        const settings = await storage.settings.get();
         scanId = message.payload.scanId;
         pageUrl = message.payload.pageUrl;
-        session = glossResolver.createSession(pageUrl, settings, Date.now(), {
+        const startPayload = message.payload;
+        sessionPromise = storage.settings.get().then((settings) => glossResolver.createSession(startPayload.pageUrl, settings, Date.now(), {
           emit(outcome) {
             safePost(port, createGlossPortMessage("gloss.token", {
               ...outcome,
-              scanId: message.payload.scanId
+              scanId: startPayload.scanId
             }));
           },
           isActive() {
             return active;
           }
-        });
+        }));
+        session = await sessionPromise;
         trace({
           component: "service-worker",
           operation: message.type,
@@ -90,9 +92,10 @@ chrome.runtime.onConnect.addListener((port) => {
         return;
       }
       if (message.type === "gloss.scan.chunk") {
-        if (!session || scanId !== message.payload.scanId) {
+        if (!sessionPromise || scanId !== message.payload.scanId) {
           throw new Error("Gloss scan chunk received before scan start");
         }
+        session = await sessionPromise;
         const acceptedTokens = message.payload.sentences.reduce((total, sentence) => total + sentence.tokens.length, 0);
         session.acceptChunk(message.payload.chunkId, message.payload.chunkIndex, message.payload.sentences);
         safePost(port, createGlossPortMessage("gloss.chunk.ack", {
@@ -115,9 +118,10 @@ chrome.runtime.onConnect.addListener((port) => {
         return;
       }
       if (message.type === "gloss.scan.end") {
-        if (!session || scanId !== message.payload.scanId) {
+        if (!sessionPromise || scanId !== message.payload.scanId) {
           throw new Error("Gloss scan end received before scan start");
         }
+        session = await sessionPromise;
         trace({
           component: "service-worker",
           operation: message.type,

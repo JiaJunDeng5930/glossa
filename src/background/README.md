@@ -18,4 +18,6 @@ The AI outlet frames owner misses by count or time: 32 misses or 50ms closes a f
 
 Card creation uses the word-click request path. The AI card payload has its own system instruction and returns `{ "cards": [{ "front": "...", "back": "..." }] }`. Each card becomes one Anki note using the configured model's `Front` and `Back` fields. When the prompt does not ask for a card count, the AI creates one card.
 
+For `glossa-backend`, `/gloss` receives the same frame-shaped payload: `{ items: Array<{ sentence, token }>, targetLang, prompt, reasoningEffort, promptVersion, modelVersion }`. The single-sentence `gloss(...)` adapter remains for legacy callers and tests.
+
 Performance traces use aggregate operations: `service-worker.lookup.chunk`, `service-worker.db.read`, `service-worker.ai.frame`, and `service-worker.scan.done`. These logs report counts, queue depth, and elapsed times for locating DB pressure, lookup backlog, and AI outlet latency.
