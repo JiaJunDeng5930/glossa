@@ -9,6 +9,8 @@ import { createGlossOverlay } from "./overlay";
 import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
 
+const WORD_CLICK_TIMEOUT_MS = 60_000;
+
 interface GlossSession {
   scanId: string;
   version: number;
@@ -319,7 +321,7 @@ async function boot(): Promise<void> {
         pageUrl: location.href,
         sentence: selection.sentence,
         token: selection.token
-      })).then((response) => {
+      }), WORD_CLICK_TIMEOUT_MS).then((response) => {
         const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
         const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
         overlay.applyCardFeedback(selection.renderToken
@@ -343,8 +345,8 @@ async function boot(): Promise<void> {
           return;
         }
         overlay.applyCardFeedback(selection.renderToken
-          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-error", message: userMessageForError(undefined, "runtime") }
-          : { tokenId: selection.token.id, feedback: "card-error", message: userMessageForError(undefined, "runtime") });
+          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-error", message: runtimeFailureMessage(error) }
+          : { tokenId: selection.token.id, feedback: "card-error", message: runtimeFailureMessage(error) });
         handleRuntimeError("word.clicked", error);
       });
     },
@@ -491,6 +493,18 @@ function reportError(operation: string, error: unknown, requestId?: string): voi
     url: location.href,
     error
   });
+}
+
+function runtimeFailureMessage(error: unknown): string {
+  return userMessageForError(diagnosticPayloadFrom(error, {
+    reason: isMessageTimeout(error) ? "timeout" : "runtime",
+    message: "Runtime request failed",
+    service: "runtime"
+  }), "runtime");
+}
+
+function isMessageTimeout(error: unknown): boolean {
+  return error instanceof Error && /^Message timeout for /.test(error.message);
 }
 
 function urlWithoutHash(value: string): string {

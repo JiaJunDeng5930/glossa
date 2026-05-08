@@ -341,6 +341,54 @@ test("content bundle shows card loading feedback before creation finishes", asyn
   });
 });
 
+test("content bundle keeps waiting for slow card creation Anki errors", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) => {
+      if (message.type !== "word.clicked") {
+        return undefined;
+      }
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          const response = {
+            type: "error",
+            version: 1,
+            requestId: message.requestId,
+            source: "service-worker",
+            target: message.source,
+            createdAt: Date.now(),
+            payload: { reason: "service-error", message: "model was not found: Basic", service: "anki" }
+          };
+          callback?.(response);
+          resolve(response);
+        }, 5_200);
+      });
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-pending";
+  });
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-error"
+      && node.querySelector("[data-glossa-token-label]")?.textContent === "×"
+      && node.title === "Anki 卡片模板不存在";
+  }, undefined, { timeout: 10_000 });
+});
+
 test("content bundle scans text added after boot", async ({ page }) => {
   await page.setContent("<main id=\"app\"></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });

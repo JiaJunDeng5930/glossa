@@ -52,6 +52,9 @@ function ankiMessage(error: ErrorPayload | undefined): string {
   if (error.reason === "invalid-response") {
     return "Anki 服务返回格式错误";
   }
+  if (error.reason === "service-error") {
+    return ankiServiceMessage(error.message);
+  }
   return "Anki 服务返回错误";
 }
 
@@ -60,4 +63,20 @@ function runtimeMessage(error: ErrorPayload | undefined): string {
     return "扩展请求超时";
   }
   return "扩展运行时错误";
+}
+
+function ankiServiceMessage(message: string): string {
+  if (/model.*not found|Anki model was not found/i.test(message)) {
+    return "Anki 卡片模板不存在";
+  }
+  if (/deck.*not found|Anki deck was not found/i.test(message)) {
+    return "Anki 牌组不存在";
+  }
+  if (/No compatible Anki model was found/i.test(message)) {
+    return "Anki 没有可用的卡片模板";
+  }
+  if (/empty/i.test(message)) {
+    return "Anki 卡片内容为空";
+  }
+  return "Anki 服务返回错误";
 }
