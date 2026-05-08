@@ -713,6 +713,7 @@ function aiFrameKey(settings: GlossaSettings): string {
     settings.ai.provider,
     settings.ai.endpoint,
     settings.ai.reasoningEffort,
+    settings.ai.apiKey ? hashSmall(settings.ai.apiKey) : "",
     settings.promptVersion,
     settings.modelVersion,
     settings.prompts.gloss
