@@ -31,6 +31,7 @@ interface GlossSession {
   queuedOutcomes: GlossTokenPayload[];
   doneAfterQueuedOutcomes: boolean;
   terminalError?: ErrorPayload;
+  aborted: boolean;
   port: chrome.runtime.Port;
 }
 
@@ -120,7 +121,7 @@ async function boot(): Promise<void> {
           maxTokensPerChunk: SCAN_CHUNK_MAX_TOKENS,
           maxChunkDelayMs: SCAN_CHUNK_MAX_MS
         }, async (chunk) => {
-          if (stopped || version !== scanVersion) {
+          if (stopped || version !== scanVersion || session?.aborted === true) {
             return false;
           }
           if (!session) {
@@ -190,6 +191,7 @@ async function boot(): Promise<void> {
     session.queuedOutcomes = [];
     session.doneAfterQueuedOutcomes = false;
     delete session.terminalError;
+    session.aborted = true;
     resolvePendingChunkAcks(session);
     try {
       session.port.disconnect();
@@ -231,6 +233,7 @@ async function boot(): Promise<void> {
       pendingChunkAcks: new Map(),
       queuedOutcomes: [],
       doneAfterQueuedOutcomes: false,
+      aborted: false,
       port
     };
     glossSessions.add(session);
@@ -323,6 +326,8 @@ async function boot(): Promise<void> {
     }
     if (scanInProgress > 0) {
       session.terminalError = message.payload;
+      session.aborted = true;
+      resolvePendingChunkAcks(session);
       return;
     }
     failGlossSession(session, message.payload);
@@ -390,7 +395,7 @@ async function boot(): Promise<void> {
 
   const sendGlossChunk = async (session: GlossSession, chunk: ScanChunk, isCurrent: () => boolean): Promise<boolean> => {
     await waitForChunkCapacity(session);
-    if (stopped || !isCurrent()) {
+    if (stopped || session.aborted || !isCurrent()) {
       return false;
     }
     const chunkId = `${session.scanId}:${chunk.chunkIndex}`;
@@ -427,6 +432,9 @@ async function boot(): Promise<void> {
   };
 
   const sendGlossScanEnd = (session: GlossSession): void => {
+    if (session.aborted) {
+      return;
+    }
     try {
       session.port.postMessage(createGlossPortMessage("gloss.scan.end", {
         scanId: session.scanId
@@ -437,7 +445,7 @@ async function boot(): Promise<void> {
   };
 
   async function waitForChunkCapacity(session: GlossSession): Promise<void> {
-    while (!stopped && session.pendingChunkAcks.size >= MAX_UNACKED_SCAN_CHUNKS) {
+    while (!stopped && !session.aborted && session.pendingChunkAcks.size >= MAX_UNACKED_SCAN_CHUNKS) {
       await Promise.race(Array.from(session.pendingChunkAcks.values()).map((ack) => ack.promise));
     }
   }

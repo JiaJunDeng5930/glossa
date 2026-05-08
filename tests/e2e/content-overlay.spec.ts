@@ -917,6 +917,30 @@ test("content bundle replays queued ready outcomes after scan invalidation", asy
   await expect(page.locator("#mutating")).toHaveText("after");
 });
 
+test("content bundle aborts chunk scans after a deferred gloss error", async ({ page }) => {
+  const words = largeWordList(150);
+  await page.setContent(`<main><p>${words.join(" ")}.</p></main>`);
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaSuppressChunkAck", true);
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string } }, emit: (response: unknown) => void) => {
+      if (Reflect.get(window, "__glossaErrorSent")) {
+        return;
+      }
+      Reflect.set(window, "__glossaErrorSent", true);
+      const glossError = Reflect.get(window, "glossError") as (scanId: string, message: string) => unknown;
+      emit(glossError(message.payload.scanId, "boom"));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.waitForFunction(() => Reflect.get(window, "__glossaErrorSent") === true);
+  await page.waitForTimeout(300);
+  const sentTypes = await sentMessageTypes(page);
+  expect(sentTypes.filter((type) => type === "gloss.scan.chunk")).toHaveLength(1);
+  expect(sentTypes).not.toContain("gloss.scan.end");
+});
+
 function largeWordList(count: number): string[] {
   return Array.from({ length: count }, (_, index) => `word${letters(index)}`);
 }
@@ -1009,6 +1033,12 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
       createdAt: Date.now(),
       payload: { scanId }
     }));
+    Reflect.set(window, "glossError", (scanId: string, message: string) => ({
+      type: "gloss.error",
+      version: 1,
+      createdAt: Date.now(),
+      payload: { scanId, reason: "runtime", service: "runtime", message }
+    }));
     const glossChunkAck = (scanId: string, chunkId: string, acceptedTokens: number) => ({
       type: "gloss.chunk.ack",
       version: 1,
@@ -1077,7 +1107,9 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
                 const acceptedTokens = message.payload.sentences.reduce((total: number, sentence: { tokens?: unknown[] }) => {
                   return total + (Array.isArray(sentence.tokens) ? sentence.tokens.length : 0);
                 }, 0);
-                emit(glossChunkAck(message.payload.scanId, message.payload.chunkId, acceptedTokens));
+                if (Reflect.get(window, "__glossaSuppressChunkAck") !== true) {
+                  emit(glossChunkAck(message.payload.scanId, message.payload.chunkId, acceptedTokens));
+                }
                 const legacyScan = {
                   type: "gloss.scan",
                   version: 1,
