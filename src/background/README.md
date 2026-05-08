@@ -14,7 +14,7 @@ DB reads pass through a short-window coalescer. Individual token lookups ask for
 
 AI misses use an in-flight map keyed by the same durable gloss cache key. A duplicate miss attaches to the running lookup, emits its own `pending`, then receives the shared `ready` or `error` result with the current token id. The first lookup owns the AI frame entry and cache write.
 
-The AI outlet frames owner misses by count or time: 32 misses or 50ms closes a frame. Frames are real AI requests and execute through a global serial outlet with concurrency 1. A frame request sends multiple `{ sentence, token }` items and returns per-token `GlossItem` results. Returned token ids consume one unresolved miss at a time, so duplicate DOM token ids in the same frame still resolve independently.
+The AI outlet frames owner misses by count or time: 32 misses or 50ms closes a frame. Frames are real AI requests and execute through a global serial outlet with concurrency 1. A frame request sends multiple `{ sentence, token }` items and returns per-token `GlossItem` results. Returned token ids consume one unresolved miss at a time, so duplicate DOM token ids in the same frame still resolve independently. A closed sink stops after pending DB reads and before AI enqueue.
 
 Card creation uses the word-click request path. The AI card payload has its own system instruction and returns `{ "cards": [{ "front": "...", "back": "..." }] }`. Each card becomes one Anki note using the configured model's `Front` and `Back` fields. When the prompt does not ask for a card count, the AI creates one card.
 

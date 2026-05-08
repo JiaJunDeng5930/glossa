@@ -24,9 +24,13 @@ interface ChunkAck {
 interface GlossSession {
   scanId: string;
   version: number;
+  reason: string;
   tokenMap: Map<string, ScannedToken>;
   pendingTokenIds: Set<string>;
   pendingChunkAcks: Map<string, ChunkAck>;
+  queuedOutcomes: GlossTokenPayload[];
+  doneAfterQueuedOutcomes: boolean;
+  terminalError?: ErrorPayload;
   port: chrome.runtime.Port;
 }
 
@@ -51,6 +55,7 @@ async function boot(): Promise<void> {
   let observer: MutationObserver | undefined;
   let currentGlossSession: GlossSession | undefined;
   const glossSessions = new Set<GlossSession>();
+  let scanInProgress = 0;
 
   const stopContentScript = (reason: string): void => {
     if (stopped) {
@@ -106,36 +111,46 @@ async function boot(): Promise<void> {
     const startedAt = nowMs();
 
     overlay.pruneDisconnected();
-    const stats = await scanDocumentTextInChunks(document, knownWords, {
-      scanVersion: version,
-      requireRenderableRange: true,
-      maxTokensPerChunk: SCAN_CHUNK_MAX_TOKENS,
-      maxChunkDelayMs: SCAN_CHUNK_MAX_MS
-    }, async (chunk) => {
-      if (stopped || version !== scanVersion) {
-        return false;
-      }
-      if (!session) {
-        session = startGlossSession({
-          reason,
-          version,
-          pageUrl: location.href,
-          tokenMap
+    scanInProgress += 1;
+    const stats = await (async () => {
+      try {
+        return await scanDocumentTextInChunks(document, knownWords, {
+          scanVersion: version,
+          requireRenderableRange: true,
+          maxTokensPerChunk: SCAN_CHUNK_MAX_TOKENS,
+          maxChunkDelayMs: SCAN_CHUNK_MAX_MS
+        }, async (chunk) => {
+          if (stopped || version !== scanVersion) {
+            return false;
+          }
+          if (!session) {
+            session = startGlossSession({
+              reason,
+              version,
+              pageUrl: location.href,
+              tokenMap
+            });
+            if (!session) {
+              return false;
+            }
+          }
+          for (const token of chunk.tokens) {
+            tokenMap.set(token.id, token);
+          }
+          const sent = await sendGlossChunk(session, chunk, () => version === scanVersion);
+          if (sent) {
+            chunks += 1;
+            tokens += chunk.tokens.length;
+          }
+          return sent;
         });
-        if (!session) {
-          return false;
+      } finally {
+        scanInProgress -= 1;
+        if (scanInProgress === 0) {
+          flushQueuedGlossOutcomes();
         }
       }
-      for (const token of chunk.tokens) {
-        tokenMap.set(token.id, token);
-      }
-      const sent = await sendGlossChunk(session, chunk, () => version === scanVersion);
-      if (sent) {
-        chunks += 1;
-        tokens += chunk.tokens.length;
-      }
-      return sent;
-    });
+    })();
     trace({
       component: "content-script",
       operation: "content.scan",
@@ -172,6 +187,9 @@ async function boot(): Promise<void> {
     if (currentGlossSession === session) {
       currentGlossSession = undefined;
     }
+    session.queuedOutcomes = [];
+    session.doneAfterQueuedOutcomes = false;
+    delete session.terminalError;
     resolvePendingChunkAcks(session);
     try {
       session.port.disconnect();
@@ -207,9 +225,12 @@ async function boot(): Promise<void> {
     const session: GlossSession = {
       scanId,
       version: sessionInput.version,
+      reason: sessionInput.reason,
       tokenMap: sessionInput.tokenMap,
       pendingTokenIds: new Set(),
       pendingChunkAcks: new Map(),
+      queuedOutcomes: [],
+      doneAfterQueuedOutcomes: false,
       port
     };
     glossSessions.add(session);
@@ -272,43 +293,98 @@ async function boot(): Promise<void> {
       return;
     }
     if (message.type === "gloss.token") {
-      const outcome = message.payload;
-      const current = currentGlossSession === session && session.version === scanVersion;
-      const render = current
-        ? overlay.applyTokenOutcome(session.tokenMap.get(outcome.tokenId), outcome, session.version)
-        : overlay.applyStalePendingOutcome(outcome);
-      updatePendingTokenState(session, outcome, render);
-      trace({
-        component: "content-script",
-        operation: "content.token",
-        result: render.result === "skipped" ? "ignored" : "ok",
-        url: location.href,
-        details: {
-          reason,
-          scanId: session.scanId,
-          tokenId: outcome.tokenId,
-          status: outcome.status,
-          render: render.result,
-          skipReason: render.reason,
-          stale: !current
-        }
-      });
+      if (scanInProgress > 0) {
+        session.queuedOutcomes.push(message.payload);
+        trace({
+          component: "content-script",
+          operation: "content.token.queue",
+          result: "ok",
+          url: location.href,
+          details: {
+            reason,
+            scanId: session.scanId,
+            tokenId: message.payload.tokenId,
+            status: message.payload.status,
+            queued: session.queuedOutcomes.length
+          }
+        });
+        return;
+      }
+      applyGlossOutcome(session, message.payload, reason, false);
       return;
     }
     if (message.type === "gloss.done") {
-      trace({
-        component: "content-script",
-        operation: "content.scan.done",
-        result: "ok",
-        url: location.href,
-        details: { reason, scanId: session.scanId }
-      });
-      closeGlossSession(session);
+      if (scanInProgress > 0 && session.queuedOutcomes.length > 0) {
+        session.doneAfterQueuedOutcomes = true;
+        return;
+      }
+      completeGlossSession(session, reason);
       return;
     }
-    overlay.markStalePendingAsError(session.pendingTokenIds, userMessageForError(message.payload, "ai"));
+    if (scanInProgress > 0) {
+      session.terminalError = message.payload;
+      return;
+    }
+    failGlossSession(session, message.payload);
+  };
+
+  const applyGlossOutcome = (session: GlossSession, outcome: GlossTokenPayload, reason: string, queued: boolean): void => {
+    const current = currentGlossSession === session && session.version === scanVersion;
+    const render = current
+      ? overlay.applyTokenOutcome(session.tokenMap.get(outcome.tokenId), outcome, session.version)
+      : overlay.applyStalePendingOutcome(outcome);
+    updatePendingTokenState(session, outcome, render);
+    trace({
+      component: "content-script",
+      operation: "content.token",
+      result: render.result === "skipped" ? "ignored" : "ok",
+      url: location.href,
+      details: {
+        reason,
+        scanId: session.scanId,
+        tokenId: outcome.tokenId,
+        status: outcome.status,
+        render: render.result,
+        skipReason: render.reason,
+        stale: !current,
+        queued
+      }
+    });
+  };
+
+  const flushQueuedGlossOutcomes = (): void => {
+    for (const session of Array.from(glossSessions)) {
+      while (session.queuedOutcomes.length > 0) {
+        applyGlossOutcome(session, session.queuedOutcomes.shift()!, session.reason, true);
+      }
+      if (session.terminalError) {
+        const error = session.terminalError;
+        delete session.terminalError;
+        failGlossSession(session, error);
+        continue;
+      }
+      if (session.doneAfterQueuedOutcomes) {
+        session.doneAfterQueuedOutcomes = false;
+        completeGlossSession(session, session.reason);
+      }
+    }
+  };
+
+  const completeGlossSession = (session: GlossSession, reason: string): void => {
+    trace({
+      component: "content-script",
+      operation: "content.scan.done",
+      result: "ok",
+      url: location.href,
+      details: { reason, scanId: session.scanId }
+    });
     closeGlossSession(session);
-    reportError("gloss.session.error", message.payload);
+  };
+
+  const failGlossSession = (session: GlossSession, error: ErrorPayload): void => {
+    overlay.markStalePendingAsError(session.pendingTokenIds, userMessageForError(error, "ai"));
+    closeGlossSession(session);
+    reportError("gloss.session.error", error);
   };
 
   const sendGlossChunk = async (session: GlossSession, chunk: ScanChunk, isCurrent: () => boolean): Promise<boolean> => {

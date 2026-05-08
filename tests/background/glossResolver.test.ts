@@ -189,6 +189,39 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(events.filter((event) => event.status === "ready")).toHaveLength(2);
   });
 
+  it("stops before AI enqueue when the sink closes during async reads", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async () => ({ items: [] })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      dbReadCoalesceMs: 50,
+      aiFrameMaxMs: 1
+    });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    let active = true;
+
+    const done = resolver.resolve("https://example.test/page", [{
+      id: "s1",
+      text: "A novel archive appears.",
+      tokens: [{ id: "t-novel", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, {
+      emit: (event) => events.push(event),
+      isActive: () => active
+    });
+    active = false;
+    await done;
+
+    expect(events).toEqual([]);
+    expect(ai.glossFrame).not.toHaveBeenCalled();
+  });
+
   it("reuses in-flight AI lookups for the same cache key", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();

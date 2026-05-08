@@ -839,6 +839,55 @@ test("content bundle preserves existing glosses while mutation rescans wait for 
   });
 });
 
+test("content bundle defers chunk outcomes until a large text-node scan finishes", async ({ page }) => {
+  const toLetters = (value: number): string => {
+    let current = value;
+    let output = "";
+    do {
+      output = String.fromCharCode(97 + (current % 26)) + output;
+      current = Math.floor(current / 26) - 1;
+    } while (current >= 0);
+    return output;
+  };
+  const words = Array.from({ length: 150 }, (_, index) => `word${toLetters(index)}`);
+  const target = words[140]!;
+  await page.setContent(`<main><p>${words.join(" ")}.</p></main>`);
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      for (const token of message.payload.sentences.flatMap((sentence) => sentence.tokens)) {
+        emit(glossToken(message.payload.scanId, token.id, "ready", {
+          tokenId: token.id,
+          targetText: token.surface,
+          display: token.surface.toUpperCase()
+        }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.waitForFunction((surface) => {
+    if (typeof surface !== "string") {
+      return false;
+    }
+    const wrapper = document.querySelector<HTMLElement>(`[data-glossa-surface="${surface}"]`);
+    return wrapper?.querySelector("[data-glossa-token-label]")?.textContent === surface.toUpperCase();
+  }, target);
+
+  const scannedTokenCount = await page.evaluate(() => {
+    const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string; payload?: { sentences?: Array<{ tokens?: unknown[] }> } }>;
+    return sent
+      .filter((message) => message.type === "gloss.scan")
+      .reduce((total, message) => total + (message.payload?.sentences ?? []).reduce((innerTotal, sentence) => {
+        return innerTotal + (sentence.tokens?.length ?? 0);
+      }, 0), 0);
+  });
+  expect(scannedTokenCount).toBe(words.length);
+});
+
 function overlaps(
   left: { left: number; right: number; top: number; bottom: number },
   right: { left: number; right: number; top: number; bottom: number }

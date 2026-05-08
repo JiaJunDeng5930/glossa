@@ -320,12 +320,18 @@ async function resolveToken(input: {
     }
 
     const record = await currentRecord(input.lexiconReads, input.deps.storage, input.token, input.now, input.trackWrite);
+    if (input.sink.isActive?.() === false) {
+      return;
+    }
     if (record?.state === "known" || record?.state === "ignored") {
       input.emit({ tokenId: input.token.id, status: "hidden" });
       return;
     }
 
     const cached = await input.glossCacheReads.get(cacheKey);
+    if (input.sink.isActive?.() === false) {
+      return;
+    }
     if (cached) {
       const item = rehydrateCachedGloss(cached, input.token);
       input.remember(memoryKey, item);
