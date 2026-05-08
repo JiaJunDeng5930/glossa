@@ -22,6 +22,12 @@ export interface ScanResult {
   stats: ScanStats;
 }
 
+export interface ScanChunk {
+  chunkIndex: number;
+  sentences: ScannedSentence[];
+  tokens: ScannedToken[];
+}
+
 export interface ScanStats {
   scannedTextNodes: number;
   rejectedBySubtree: number;
@@ -39,6 +45,11 @@ export interface ScanOptions {
   minWordLength?: number;
   minContextChars?: number;
   requireRenderableRange?: boolean;
+}
+
+export interface ScanChunkOptions extends ScanOptions {
+  maxTokensPerChunk?: number;
+  maxChunkDelayMs?: number;
 }
 
 const WORD_RE = /[A-Za-z]+(?:['-][A-Za-z]+)*/g;
@@ -166,6 +177,134 @@ export function scanDocumentText(
   return { sentences, tokens, stats };
 }
 
+export async function scanDocumentTextInChunks(
+  doc: Document,
+  knownWords: ReadonlySet<string>,
+  options: ScanChunkOptions,
+  onChunk: (chunk: ScanChunk) => Promise<boolean | void> | boolean | void
+): Promise<ScanStats> {
+  const stats = createScanStats();
+  const textNodes = doc.body ? collectTextNodes(doc.body, stats) : [];
+  const lemmaCounts = new Map<string, number>();
+  let sentenceIndex = 0;
+  let chunkIndex = 0;
+  let chunkStartedAt = nowMs();
+  let chunkSentences: ScannedSentence[] = [];
+  let chunkTokens: ScannedToken[] = [];
+  const scanVersion = options.scanVersion ?? 0;
+  const maxOccurrencesPerLemma = options.maxOccurrencesPerLemma ?? 1;
+  const minWordLength = options.minWordLength ?? 3;
+  const minContextChars = options.minContextChars ?? 12;
+  const maxTokensPerChunk = options.maxTokensPerChunk ?? 64;
+  const maxChunkDelayMs = options.maxChunkDelayMs ?? 16;
+
+  const flushChunk = async (): Promise<boolean> => {
+    if (chunkTokens.length === 0) {
+      chunkStartedAt = nowMs();
+      return true;
+    }
+    const chunk: ScanChunk = {
+      chunkIndex,
+      sentences: chunkSentences,
+      tokens: chunkTokens
+    };
+    chunkIndex += 1;
+    chunkSentences = [];
+    chunkTokens = [];
+    chunkStartedAt = nowMs();
+    const keepGoing = await onChunk(chunk);
+    return keepGoing !== false;
+  };
+
+  for (const textNode of textNodes) {
+    stats.scannedTextNodes += 1;
+    const text = textNode.nodeValue ?? "";
+    for (const sentenceMatch of text.matchAll(SENTENCE_RE)) {
+      const raw = sentenceMatch[0];
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) {
+        stats.rejectedByText += 1;
+        continue;
+      }
+      if (trimmed.length < minContextChars) {
+        stats.rejectedByText += 1;
+        continue;
+      }
+      const leading = raw.length - raw.trimStart().length;
+      const sentenceStart = (sentenceMatch.index ?? 0) + leading;
+      const sentenceId = `s${sentenceIndex++}`;
+      const sentenceTokens: ScannedToken[] = [];
+
+      for (const wordMatch of trimmed.matchAll(WORD_RE)) {
+        const surface = wordMatch[0];
+        if (!isEligibleSurface(surface, minWordLength)) {
+          stats.rejectedByShape += 1;
+          continue;
+        }
+        const lemma = normalizeLemma(surface);
+        if (isKnownLemma(knownWords, lemma)) {
+          stats.rejectedByKnownWord += 1;
+          continue;
+        }
+        const count = lemmaCounts.get(lemma) ?? 0;
+        if (count >= maxOccurrencesPerLemma) {
+          stats.rejectedByFrequency += 1;
+          continue;
+        }
+        const startOffset = wordMatch.index ?? 0;
+        const endOffset = startOffset + surface.length;
+        const nodeStartOffset = sentenceStart + startOffset;
+        const nodeEndOffset = sentenceStart + endOffset;
+        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset)) {
+          stats.rejectedByVisibility += 1;
+          continue;
+        }
+        const sourceFingerprint = createSourceFingerprint(text, nodeStartOffset, nodeEndOffset);
+        const token: ScannedToken = {
+          id: createTokenId(textNode, surface, lemma, sentenceStart, sourceFingerprint),
+          sentenceId,
+          surface,
+          lemma,
+          startOffset,
+          endOffset,
+          textNode,
+          nodeStartOffset,
+          nodeEndOffset,
+          sentenceText: trimmed,
+          sourceText: surface,
+          sourceFingerprint,
+          scanVersion
+        };
+        sentenceTokens.push(token);
+        chunkTokens.push(token);
+        lemmaCounts.set(lemma, count + 1);
+        stats.candidateWords += 1;
+      }
+
+      if (sentenceTokens.length > 0) {
+        chunkSentences.push({
+          id: sentenceId,
+          text: trimmed,
+          tokens: sentenceTokens
+        });
+      }
+    }
+
+    if (
+      chunkTokens.length >= maxTokensPerChunk
+      || (chunkTokens.length > 0 && nowMs() - chunkStartedAt >= maxChunkDelayMs)
+    ) {
+      const keepGoing = await flushChunk();
+      if (!keepGoing) {
+        return stats;
+      }
+    }
+  }
+
+  await flushChunk();
+  return stats;
+}
+
 function createTokenId(
   textNode: Text,
   surface: string,
@@ -233,6 +372,10 @@ function collectTextNodes(root: HTMLElement, stats: ScanStats): Text[] {
   };
   visit(root);
   return nodes;
+}
+
+function nowMs(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function createScanStats(): ScanStats {

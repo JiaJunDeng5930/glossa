@@ -2,11 +2,15 @@ import type {
   BackgroundResponseMessage,
   ContentToBackgroundMessage,
   ErrorPayload,
+  GlossChunkAckPayload,
   GlossDonePayload,
+  GlossScanChunkPayload,
+  GlossScanEndPayload,
   GlossPortInboundMessage,
   GlossPortOutboundMessage,
   GlossPortErrorPayload,
   GlossScanPayload,
+  GlossScanStartPayload,
   GlossTokenPayload,
   MessageEnvelope,
   MessageSource,
@@ -32,6 +36,10 @@ type BackgroundPayloadByType = {
 
 type GlossPortPayloadByType = {
   "gloss.scan": GlossScanPayload;
+  "gloss.scan.start": GlossScanStartPayload;
+  "gloss.scan.chunk": GlossScanChunkPayload;
+  "gloss.scan.end": GlossScanEndPayload;
+  "gloss.chunk.ack": GlossChunkAckPayload;
   "gloss.token": GlossTokenPayload;
   "gloss.done": GlossDonePayload;
   "gloss.error": GlossPortErrorPayload;
@@ -121,18 +129,59 @@ export function validateBackgroundResponse(value: unknown, request: ContentToBac
 
 export function validateGlossPortInbound(value: unknown): GlossPortInboundMessage {
   const message = validateGlossPortEnvelope(value);
-  if (message.type !== "gloss.scan") {
-    throw new Error("Unknown gloss port message type");
+  if (message.type === "gloss.scan") {
+    const payload = requirePlainPayload(message.payload);
+    if (typeof payload.scanId !== "string" || typeof payload.pageUrl !== "string" || !Array.isArray(payload.sentences)) {
+      throw new Error("Malformed gloss.scan payload");
+    }
+    return message as GlossPortInboundMessage;
   }
-  const payload = requirePlainPayload(message.payload);
-  if (typeof payload.scanId !== "string" || typeof payload.pageUrl !== "string" || !Array.isArray(payload.sentences)) {
-    throw new Error("Malformed gloss.scan payload");
+  if (message.type === "gloss.scan.start") {
+    const payload = requirePlainPayload(message.payload);
+    if (typeof payload.scanId !== "string" || typeof payload.pageUrl !== "string") {
+      throw new Error("Malformed gloss.scan.start payload");
+    }
+    return message as GlossPortInboundMessage;
   }
-  return message as GlossPortInboundMessage;
+  if (message.type === "gloss.scan.chunk") {
+    const payload = requirePlainPayload(message.payload);
+    if (
+      typeof payload.scanId !== "string"
+      || typeof payload.chunkId !== "string"
+      || typeof payload.chunkIndex !== "number"
+      || typeof payload.pageUrl !== "string"
+      || !Array.isArray(payload.sentences)
+    ) {
+      throw new Error("Malformed gloss.scan.chunk payload");
+    }
+    return message as GlossPortInboundMessage;
+  }
+  if (message.type === "gloss.scan.end") {
+    const payload = requirePlainPayload(message.payload);
+    if (typeof payload.scanId !== "string") {
+      throw new Error("Malformed gloss.scan.end payload");
+    }
+    return message as GlossPortInboundMessage;
+  }
+  throw new Error("Unknown gloss port message type");
 }
 
 export function validateGlossPortOutbound(value: unknown, scanId?: string): GlossPortOutboundMessage {
   const message = validateGlossPortEnvelope(value);
+  if (message.type === "gloss.chunk.ack") {
+    const payload = requirePlainPayload(message.payload);
+    if (
+      typeof payload.scanId !== "string"
+      || typeof payload.chunkId !== "string"
+      || typeof payload.acceptedTokens !== "number"
+    ) {
+      throw new Error("Malformed gloss.chunk.ack payload");
+    }
+    if (scanId && payload.scanId !== scanId) {
+      throw new Error("Gloss port scanId mismatch");
+    }
+    return message as GlossPortOutboundMessage;
+  }
   if (message.type === "gloss.token") {
     const payload = requirePlainPayload(message.payload);
     if (

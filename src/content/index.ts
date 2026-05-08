@@ -3,19 +3,30 @@ import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
 import { matchesShortcut } from "../shared/shortcut";
-import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload, SentenceCandidate } from "../shared/types";
+import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import { createGlossOverlay } from "./overlay";
-import { scanDocumentText, toSerializableSentence, type ScannedToken } from "./scanner";
+import { scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
 
 const WORD_CLICK_TIMEOUT_MS = 60_000;
+const SCAN_CHUNK_MAX_TOKENS = 64;
+const SCAN_CHUNK_MAX_MS = 16;
+const MAX_UNACKED_SCAN_CHUNKS = 4;
+
+interface ChunkAck {
+  chunkId: string;
+  sentAt: number;
+  promise: Promise<void>;
+  resolve(): void;
+}
 
 interface GlossSession {
   scanId: string;
   version: number;
   tokenMap: Map<string, ScannedToken>;
   pendingTokenIds: Set<string>;
+  pendingChunkAcks: Map<string, ChunkAck>;
   port: chrome.runtime.Port;
 }
 
@@ -88,12 +99,43 @@ async function boot(): Promise<void> {
       return;
     }
     const version = ++scanVersion;
-    const scan = scanDocumentText(document, knownWords, {
+    const tokenMap = new Map<string, ScannedToken>();
+    let session: GlossSession | undefined;
+    let chunks = 0;
+    let tokens = 0;
+    const startedAt = nowMs();
+
+    overlay.pruneDisconnected();
+    const stats = await scanDocumentTextInChunks(document, knownWords, {
       scanVersion: version,
-      requireRenderableRange: true
+      requireRenderableRange: true,
+      maxTokensPerChunk: SCAN_CHUNK_MAX_TOKENS,
+      maxChunkDelayMs: SCAN_CHUNK_MAX_MS
+    }, async (chunk) => {
+      if (stopped || version !== scanVersion) {
+        return false;
+      }
+      if (!session) {
+        session = startGlossSession({
+          reason,
+          version,
+          pageUrl: location.href,
+          tokenMap
+        });
+        if (!session) {
+          return false;
+        }
+      }
+      for (const token of chunk.tokens) {
+        tokenMap.set(token.id, token);
+      }
+      const sent = await sendGlossChunk(session, chunk, () => version === scanVersion);
+      if (sent) {
+        chunks += 1;
+        tokens += chunk.tokens.length;
+      }
+      return sent;
     });
-    const tokenMap = new Map<string, ScannedToken>(scan.tokens.map((token) => [token.id, token]));
-    const sentences = scan.sentences.filter((sentence) => sentence.tokens.length > 0);
     trace({
       component: "content-script",
       operation: "content.scan",
@@ -101,29 +143,22 @@ async function boot(): Promise<void> {
       url: location.href,
       details: {
         reason,
-        sentences: sentences.length,
-        tokens: scan.tokens.length,
-        scannedTextNodes: scan.stats.scannedTextNodes,
-        rejectedBySubtree: scan.stats.rejectedBySubtree,
-        rejectedByVisibility: scan.stats.rejectedByVisibility,
-        rejectedByKnownWord: scan.stats.rejectedByKnownWord,
-        rejectedByShape: scan.stats.rejectedByShape,
-        rejectedByFrequency: scan.stats.rejectedByFrequency
+        chunks,
+        tokens,
+        elapsedMs: elapsedMs(startedAt),
+        scannedTextNodes: stats.scannedTextNodes,
+        rejectedBySubtree: stats.rejectedBySubtree,
+        rejectedByVisibility: stats.rejectedByVisibility,
+        rejectedByKnownWord: stats.rejectedByKnownWord,
+        rejectedByShape: stats.rejectedByShape,
+        rejectedByFrequency: stats.rejectedByFrequency
       }
     });
 
-    overlay.pruneDisconnected();
-    if (scan.tokens.length === 0) {
+    if (!session) {
       return;
     }
-
-    startGlossSession({
-      reason,
-      version,
-      pageUrl: location.href,
-      sentences: sentences.map(toSerializableSentence),
-      tokenMap
-    });
+    sendGlossScanEnd(session);
   };
 
   const closeAllGlossSessions = (): void => {
@@ -137,6 +172,7 @@ async function boot(): Promise<void> {
     if (currentGlossSession === session) {
       currentGlossSession = undefined;
     }
+    resolvePendingChunkAcks(session);
     try {
       session.port.disconnect();
     } catch (error) {
@@ -150,16 +186,15 @@ async function boot(): Promise<void> {
     reason: string;
     version: number;
     pageUrl: string;
-    sentences: SentenceCandidate[];
     tokenMap: Map<string, ScannedToken>;
-  }): void => {
+  }): GlossSession | undefined => {
     if (stopped) {
-      return;
+      return undefined;
     }
     const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
     if (!runtime?.connect) {
       reportError("gloss.session", new Error("chrome.runtime.connect is unavailable"));
-      return;
+      return undefined;
     }
     const scanId = createScanId();
     let port: chrome.runtime.Port;
@@ -167,19 +202,21 @@ async function boot(): Promise<void> {
       port = runtime.connect({ name: "gloss.session" });
     } catch (error) {
       handleRuntimeError("gloss.session.connect", error);
-      return;
+      return undefined;
     }
     const session: GlossSession = {
       scanId,
       version: sessionInput.version,
       tokenMap: sessionInput.tokenMap,
       pendingTokenIds: new Set(),
+      pendingChunkAcks: new Map(),
       port
     };
     glossSessions.add(session);
     currentGlossSession = session;
     port.onDisconnect.addListener(() => {
       glossSessions.delete(session);
+      resolvePendingChunkAcks(session);
       if (currentGlossSession === session) {
         currentGlossSession = undefined;
       }
@@ -192,14 +229,15 @@ async function boot(): Promise<void> {
       handleGlossPortMessage(rawMessage, session, sessionInput.reason);
     });
     try {
-      port.postMessage(createGlossPortMessage("gloss.scan", {
+      port.postMessage(createGlossPortMessage("gloss.scan.start", {
         scanId,
-        pageUrl: sessionInput.pageUrl,
-        sentences: sessionInput.sentences
+        pageUrl: sessionInput.pageUrl
       }));
     } catch (error) {
-      handleRuntimeError("gloss.scan", error);
+      handleRuntimeError("gloss.scan.start", error);
+      return undefined;
     }
+    return session;
   };
 
   const handleGlossPortMessage = (rawMessage: unknown, session: GlossSession, reason: string): void => {
@@ -211,6 +249,26 @@ async function boot(): Promise<void> {
       return;
     }
     if (stopped) {
+      return;
+    }
+    if (message.type === "gloss.chunk.ack") {
+      const ack = session.pendingChunkAcks.get(message.payload.chunkId);
+      if (ack) {
+        session.pendingChunkAcks.delete(message.payload.chunkId);
+        ack.resolve();
+        trace({
+          component: "content-script",
+          operation: "content.scan.chunk",
+          result: "ok",
+          url: location.href,
+          details: {
+            reason,
+            scanId: session.scanId,
+            acceptedTokens: message.payload.acceptedTokens,
+            ackMs: elapsedMs(ack.sentAt)
+          }
+        });
+      }
       return;
     }
     if (message.type === "gloss.token") {
@@ -252,6 +310,80 @@ async function boot(): Promise<void> {
     closeGlossSession(session);
     reportError("gloss.session.error", message.payload);
   };
+
+  const sendGlossChunk = async (session: GlossSession, chunk: ScanChunk, isCurrent: () => boolean): Promise<boolean> => {
+    await waitForChunkCapacity(session);
+    if (stopped || !isCurrent()) {
+      return false;
+    }
+    const chunkId = `${session.scanId}:${chunk.chunkIndex}`;
+    const ack = createChunkAck(chunkId);
+    session.pendingChunkAcks.set(chunkId, ack);
+    try {
+      session.port.postMessage(createGlossPortMessage("gloss.scan.chunk", {
+        scanId: session.scanId,
+        chunkId,
+        chunkIndex: chunk.chunkIndex,
+        pageUrl: location.href,
+        sentences: chunk.sentences.map(toSerializableSentence)
+      }));
+    } catch (error) {
+      session.pendingChunkAcks.delete(chunkId);
+      ack.resolve();
+      handleRuntimeError("gloss.scan.chunk", error);
+      return false;
+    }
+    trace({
+      component: "content-script",
+      operation: "content.scan.chunk",
+      result: "ok",
+      url: location.href,
+      details: {
+        scanId: session.scanId,
+        chunkIndex: chunk.chunkIndex,
+        tokens: chunk.tokens.length,
+        sentences: chunk.sentences.length,
+        pendingAcks: session.pendingChunkAcks.size
+      }
+    });
+    return true;
+  };
+
+  const sendGlossScanEnd = (session: GlossSession): void => {
+    try {
+      session.port.postMessage(createGlossPortMessage("gloss.scan.end", {
+        scanId: session.scanId
+      }));
+    } catch (error) {
+      handleRuntimeError("gloss.scan.end", error);
+    }
+  };
+
+  async function waitForChunkCapacity(session: GlossSession): Promise<void> {
+    while (!stopped && session.pendingChunkAcks.size >= MAX_UNACKED_SCAN_CHUNKS) {
+      await Promise.race(Array.from(session.pendingChunkAcks.values()).map((ack) => ack.promise));
+    }
+  }
+
+  function createChunkAck(chunkId: string): ChunkAck {
+    let resolveAck: () => void = () => undefined;
+    const promise = new Promise<void>((resolve) => {
+      resolveAck = resolve;
+    });
+    return {
+      chunkId,
+      sentAt: nowMs(),
+      promise,
+      resolve: resolveAck
+    };
+  }
+
+  function resolvePendingChunkAcks(session: GlossSession): void {
+    for (const ack of session.pendingChunkAcks.values()) {
+      ack.resolve();
+    }
+    session.pendingChunkAcks.clear();
+  }
 
   const scheduleScan = (reason: string) => {
     if (stopped || !translationEnabled) {
@@ -544,6 +676,14 @@ function urlWithoutHash(value: string): string {
   } catch {
     return value;
   }
+}
+
+function nowMs(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.round(nowMs() - startedAt);
 }
 
 function isGlossaOwnedMutation(mutation: MutationRecord): boolean {

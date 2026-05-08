@@ -11,6 +11,16 @@ export interface GlossBackendOutput {
   items: GlossItem[];
 }
 
+export interface GlossFrameItem {
+  sentence: string;
+  token: TokenCandidate;
+}
+
+export interface GlossFrameBackendInput {
+  settings: GlossaSettings;
+  items: GlossFrameItem[];
+}
+
 export interface AnkiCardInput {
   settings: GlossaSettings;
   sentence: string;
@@ -19,6 +29,7 @@ export interface AnkiCardInput {
 
 export interface AiBackend {
   gloss(input: GlossBackendInput): Promise<GlossBackendOutput>;
+  glossFrame(input: GlossFrameBackendInput): Promise<GlossBackendOutput>;
   ankiCard(input: AnkiCardInput): Promise<AnkiCardOutput>;
 }
 
@@ -38,6 +49,27 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
       return postJson<GlossBackendOutput>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/gloss`, {
         sentence: input.sentence,
         tokens: input.tokens,
+        targetLang: GLOSS_TARGET_LANG,
+        prompt: input.settings.prompts.gloss,
+        reasoningEffort: input.settings.ai.reasoningEffort,
+        promptVersion: input.settings.promptVersion,
+        modelVersion: input.settings.modelVersion
+      });
+    },
+    async glossFrame(input) {
+      if (isOpenAiProvider(input.settings.ai.provider)) {
+        const output = await callOpenAiForTask(fetchImpl, input.settings, glossSystemInstruction(), {
+          task: "gloss-frame",
+          prompt: input.settings.prompts.gloss,
+          targetLang: GLOSS_TARGET_LANG,
+          items: input.items
+        });
+        return parseJsonOutput<GlossBackendOutput>(output);
+      }
+      return postJson<GlossBackendOutput>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/gloss`, {
+        // glossa-backend accepts the same frame shape as the serial AI outlet:
+        // one request carries multiple sentence-grounded token lookups.
+        items: input.items,
         targetLang: GLOSS_TARGET_LANG,
         prompt: input.settings.prompts.gloss,
         reasoningEffort: input.settings.ai.reasoningEffort,

@@ -67,6 +67,29 @@ export interface GlossScanPayload {
   sentences: SentenceCandidate[];
 }
 
+export interface GlossScanStartPayload {
+  scanId: string;
+  pageUrl: string;
+}
+
+export interface GlossScanChunkPayload {
+  scanId: string;
+  chunkId: string;
+  chunkIndex: number;
+  pageUrl: string;
+  sentences: SentenceCandidate[];
+}
+
+export interface GlossScanEndPayload {
+  scanId: string;
+}
+
+export interface GlossChunkAckPayload {
+  scanId: string;
+  chunkId: string;
+  acceptedTokens: number;
+}
+
 export type GlossTokenStatus = "ready" | "pending" | "hidden" | "error";
 
 export interface GlossTokenPayload {
@@ -120,6 +143,10 @@ export interface ErrorPayload {
 export type GlossRequestMessage = MessageEnvelope<"gloss.request", "content-script", "service-worker", GlossRequestPayload>;
 export type GlossResponseMessage = MessageEnvelope<"gloss.response", "service-worker", "content-script", GlossResponsePayload>;
 export type GlossScanMessage = GlossPortMessage<"gloss.scan", GlossScanPayload>;
+export type GlossScanStartMessage = GlossPortMessage<"gloss.scan.start", GlossScanStartPayload>;
+export type GlossScanChunkMessage = GlossPortMessage<"gloss.scan.chunk", GlossScanChunkPayload>;
+export type GlossScanEndMessage = GlossPortMessage<"gloss.scan.end", GlossScanEndPayload>;
+export type GlossChunkAckMessage = GlossPortMessage<"gloss.chunk.ack", GlossChunkAckPayload>;
 export type GlossTokenMessage = GlossPortMessage<"gloss.token", GlossTokenPayload>;
 export type GlossDoneMessage = GlossPortMessage<"gloss.done", GlossDonePayload>;
 export type GlossPortErrorMessage = GlossPortMessage<"gloss.error", GlossPortErrorPayload>;
@@ -129,8 +156,8 @@ export type SettingsGetMessage = MessageEnvelope<"settings.get", "content-script
 export type SettingsGetResponseMessage = MessageEnvelope<"settings.response", "service-worker", "content-script", SettingsGetResponsePayload>;
 export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
 
-export type GlossPortInboundMessage = GlossScanMessage;
-export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage;
+export type GlossPortInboundMessage = GlossScanMessage | GlossScanStartMessage | GlossScanChunkMessage | GlossScanEndMessage;
+export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage | GlossChunkAckMessage;
 
 export type ContentToBackgroundMessage = UserWordClickMessage | SettingsGetMessage;
 export type BackgroundResponseMessage = WordClickedOkMessage | SettingsGetResponseMessage | ErrorMessage;

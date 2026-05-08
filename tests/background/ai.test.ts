@@ -43,6 +43,28 @@ describe("AI backend adapters", () => {
     expect(result.items[0]).toMatchObject({ display: "提交" });
   });
 
+  it("sends frame-shaped gloss batches to the backend", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      items: [{ tokenId: "t1", targetText: "submit", display: "提交" }]
+    }));
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
+
+    const result = await createAiBackend(fetchImpl as never).glossFrame({
+      settings,
+      items: [{
+        sentence: "Submit the form.",
+        token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
+      }]
+    });
+
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const body = JSON.parse(calls[0]![1].body as string) as { items: unknown[]; targetLang: string };
+    expect(calls[0]![0]).toBe("https://ai.example.test/gloss");
+    expect(body.items).toHaveLength(1);
+    expect(body.targetLang).toBe("zh-CN");
+    expect(result.items[0]).toMatchObject({ display: "提交" });
+  });
+
   it("supports legacy Completions request and response shape", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       choices: [{ text: "{\"cards\":[{\"front\":\"<b>Submit</b> the form.\",\"back\":\"提交\"}]}" }]

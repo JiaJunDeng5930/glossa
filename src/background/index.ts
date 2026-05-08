@@ -56,12 +56,79 @@ chrome.runtime.onConnect.addListener((port) => {
     return;
   }
   let active = true;
+  let session: ReturnType<typeof glossResolver.createSession> | undefined;
+  let scanId: string | undefined;
+  let pageUrl: string | undefined;
   port.onDisconnect.addListener(() => {
     active = false;
   });
   port.onMessage.addListener((rawMessage: unknown) => {
     void (async () => {
       const message = validateGlossPortInbound(rawMessage);
+      if (message.type === "gloss.scan.start") {
+        const settings = await storage.settings.get();
+        scanId = message.payload.scanId;
+        pageUrl = message.payload.pageUrl;
+        session = glossResolver.createSession(pageUrl, settings, Date.now(), {
+          emit(outcome) {
+            safePost(port, createGlossPortMessage("gloss.token", {
+              ...outcome,
+              scanId: message.payload.scanId
+            }));
+          },
+          isActive() {
+            return active;
+          }
+        });
+        trace({
+          component: "service-worker",
+          operation: message.type,
+          result: "ok",
+          url: message.payload.pageUrl,
+          details: { scanId: message.payload.scanId }
+        });
+        return;
+      }
+      if (message.type === "gloss.scan.chunk") {
+        if (!session || scanId !== message.payload.scanId) {
+          throw new Error("Gloss scan chunk received before scan start");
+        }
+        const acceptedTokens = message.payload.sentences.reduce((total, sentence) => total + sentence.tokens.length, 0);
+        session.acceptChunk(message.payload.chunkId, message.payload.chunkIndex, message.payload.sentences);
+        safePost(port, createGlossPortMessage("gloss.chunk.ack", {
+          scanId: message.payload.scanId,
+          chunkId: message.payload.chunkId,
+          acceptedTokens
+        }));
+        trace({
+          component: "service-worker",
+          operation: message.type,
+          result: "ok",
+          url: message.payload.pageUrl,
+          details: {
+            scanId: message.payload.scanId,
+            chunkIndex: message.payload.chunkIndex,
+            tokens: acceptedTokens,
+            sentences: message.payload.sentences.length
+          }
+        });
+        return;
+      }
+      if (message.type === "gloss.scan.end") {
+        if (!session || scanId !== message.payload.scanId) {
+          throw new Error("Gloss scan end received before scan start");
+        }
+        trace({
+          component: "service-worker",
+          operation: message.type,
+          result: "ok",
+          url: pageUrl,
+          details: { scanId: message.payload.scanId }
+        });
+        await session.finish();
+        safePost(port, createGlossPortMessage("gloss.done", { scanId: message.payload.scanId }));
+        return;
+      }
       trace({
         component: "service-worker",
         operation: message.type,

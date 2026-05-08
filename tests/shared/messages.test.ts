@@ -74,6 +74,31 @@ describe("extension message envelopes", () => {
     });
   });
 
+  it("validates chunked gloss scan port messages", () => {
+    const start = createGlossPortMessage("gloss.scan.start", {
+      scanId: "scan-1",
+      pageUrl: "https://example.test/path"
+    });
+    const chunk = createGlossPortMessage("gloss.scan.chunk", {
+      scanId: "scan-1",
+      chunkId: "scan-1:0",
+      chunkIndex: 0,
+      pageUrl: "https://example.test/path",
+      sentences: []
+    });
+    const end = createGlossPortMessage("gloss.scan.end", { scanId: "scan-1" });
+    const ack = createGlossPortMessage("gloss.chunk.ack", {
+      scanId: "scan-1",
+      chunkId: "scan-1:0",
+      acceptedTokens: 2
+    });
+
+    expect(validateGlossPortInbound(start)).toMatchObject({ type: "gloss.scan.start" });
+    expect(validateGlossPortInbound(chunk)).toMatchObject({ type: "gloss.scan.chunk", payload: { chunkIndex: 0 } });
+    expect(validateGlossPortInbound(end)).toMatchObject({ type: "gloss.scan.end" });
+    expect(validateGlossPortOutbound(ack, "scan-1")).toMatchObject({ type: "gloss.chunk.ack", payload: { acceptedTokens: 2 } });
+  });
+
   it("validates gloss token, done and error port messages", () => {
     const token = createGlossPortMessage("gloss.token", {
       scanId: "scan-1",

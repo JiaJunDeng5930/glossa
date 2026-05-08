@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createBackgroundMessageHandler } from "../../src/background/messages";
 import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, type AnkiCard, type GlossItem, type VocabularyRecord } from "../../src/shared/types";
 
 describe("background message handler", () => {
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
@@ -24,6 +24,7 @@ describe("background message handler", () => {
     });
     const ai = {
       gloss: vi.fn(),
+      glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
         cards: [
           { front: "A <b>submit</b> button finishes the form.", back: "提交" },
@@ -66,6 +67,9 @@ export function createMemoryStorage(): ExtensionStorage {
       async get(key) {
         return lexicon.get(key) as never;
       },
+      async getMany(keys) {
+        return readMany<VocabularyRecord>(lexicon, keys);
+      },
       async put(record) {
         lexicon.set(record.key, record);
       }
@@ -73,6 +77,9 @@ export function createMemoryStorage(): ExtensionStorage {
     glossCache: {
       async get(key) {
         return glossCache.get(key) as never;
+      },
+      async getMany(keys) {
+        return readMany<GlossItem>(glossCache, keys);
       },
       async put(key, value) {
         glossCache.set(key, value);
@@ -82,9 +89,22 @@ export function createMemoryStorage(): ExtensionStorage {
       async get(key) {
         return cardCache.get(key) as never;
       },
+      async getMany(keys) {
+        return readMany<AnkiCard & { noteId?: number }>(cardCache, keys);
+      },
       async put(key, value) {
         cardCache.set(key, value);
       }
     }
   };
+}
+
+function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T> {
+  const result = new Map<string, T>();
+  for (const key of keys) {
+    if (store.has(key)) {
+      result.set(key, store.get(key) as T);
+    }
+  }
+  return result;
 }

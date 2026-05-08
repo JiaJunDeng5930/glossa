@@ -3,11 +3,13 @@ import { DEFAULT_SETTINGS } from "../shared/types";
 
 export interface KeyValueStore<T> {
   get(key: string): Promise<T | undefined>;
+  getMany(keys: string[]): Promise<Map<string, T>>;
   put(key: string, value: T): Promise<void>;
 }
 
 export interface LexiconStore {
   get(key: string): Promise<VocabularyRecord | undefined>;
+  getMany(keys: string[]): Promise<Map<string, VocabularyRecord>>;
   put(record: VocabularyRecord): Promise<void>;
 }
 
@@ -112,6 +114,24 @@ function createIndexedStore<T>(name: StoreName): KeyValueStore<T> {
       const db = await openDatabase();
       return requestToPromise<T | undefined>(db.transaction(name, "readonly").objectStore(name).get(key));
     },
+    async getMany(keys) {
+      const uniqueKeys = Array.from(new Set(keys));
+      const db = await openDatabase();
+      const tx = db.transaction(name, "readonly");
+      const store = tx.objectStore(name);
+      const entries = await Promise.all(uniqueKeys.map(async (key) => {
+        const value = await requestToPromise<T | undefined>(store.get(key));
+        return [key, value] as const;
+      }));
+      await transactionDone(tx);
+      const result = new Map<string, T>();
+      for (const [key, value] of entries) {
+        if (value !== undefined) {
+          result.set(key, value);
+        }
+      }
+      return result;
+    },
     async put(key, value) {
       const db = await openDatabase();
       const tx = db.transaction(name, "readwrite");
@@ -125,6 +145,7 @@ function createLexiconStore(): LexiconStore {
   const store = createIndexedStore<VocabularyRecord>("lexicon");
   return {
     get: store.get,
+    getMany: store.getMany,
     put(record) {
       return store.put(record.key, record);
     }

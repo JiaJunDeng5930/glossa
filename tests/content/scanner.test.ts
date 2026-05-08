@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { scanDocumentText } from "../../src/content/scanner";
+import { scanDocumentText, scanDocumentTextInChunks } from "../../src/content/scanner";
 
 describe("content scanner", () => {
   it("extracts English word candidates with sentence context and skips inert text", () => {
@@ -90,5 +90,28 @@ describe("content scanner", () => {
     const result = scanDocumentText(document, new Set());
 
     expect(result.tokens.map((token) => token.surface)).toEqual(["Shadow", "archive", "appears", "clearly"]);
+  });
+
+  it("streams scan chunks by token count between text nodes", async () => {
+    document.body.innerHTML = `
+      <main>
+        <p>Alpha archive emerges slowly.</p>
+        <p>Beta quarry appears clearly.</p>
+      </main>
+    `;
+    const chunks: string[][] = [];
+
+    const stats = await scanDocumentTextInChunks(document, new Set(), {
+      maxTokensPerChunk: 3,
+      maxChunkDelayMs: 1_000
+    }, (chunk) => {
+      chunks.push(chunk.tokens.map((token) => token.surface));
+    });
+
+    expect(chunks).toEqual([
+      ["Alpha", "archive", "emerges", "slowly"],
+      ["Beta", "quarry", "appears", "clearly"]
+    ]);
+    expect(stats.candidateWords).toBe(8);
   });
 });

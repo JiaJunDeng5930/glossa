@@ -4,7 +4,7 @@ import { buildGlossCacheKey } from "../../src/core/cache";
 import { createGlossResolver } from "../../src/background/glossResolver";
 import { hashText } from "../../src/shared/hash";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type GlossaSettings, type GlossTokenPayload } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCard, type GlossaSettings, type GlossItem, type GlossTokenPayload, type VocabularyRecord } from "../../src/shared/types";
 
 describe("gloss resolver lookup-first pipeline", () => {
   it("emits hidden, ready, pending and AI ready outcomes in lookup order", async () => {
@@ -20,7 +20,8 @@ describe("gloss resolver lookup-first pipeline", () => {
       display: "缓存"
     });
     const ai = {
-      gloss: vi.fn(async () => ({
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async () => ({
         items: [{ tokenId: "t-novel", targetText: "novel", display: "新词" }]
       })),
       ankiCard: vi.fn()
@@ -39,16 +40,19 @@ describe("gloss resolver lookup-first pipeline", () => {
       ]
     }], settings, 100, { emit: (event) => events.push(event) });
 
-    expect(events).toEqual([
+    expect(events).toEqual(expect.arrayContaining([
       { tokenId: "t-known", status: "hidden" },
       { tokenId: "t-ignored", status: "hidden" },
       { tokenId: "t-cached", status: "ready", item: { tokenId: "t-cached", targetText: "cached", display: "缓存" } },
       { tokenId: "t-novel", status: "pending" },
       { tokenId: "t-novel", status: "ready", item: { tokenId: "t-novel", targetText: "novel", display: "新词" } }
-    ]);
-    expect(ai.gloss).toHaveBeenCalledWith(expect.objectContaining({
-      sentence: "Known ignored cached novel words.",
-      tokens: [expect.objectContaining({ id: "t-novel" })]
+    ]));
+    expect(events).toHaveLength(5);
+    expect(ai.glossFrame).toHaveBeenCalledWith(expect.objectContaining({
+      items: [expect.objectContaining({
+        sentence: "Known ignored cached novel words.",
+        token: expect.objectContaining({ id: "t-novel" })
+      })]
     }));
     expect(await storage.lexicon.get("en:cached")).toMatchObject({ shownCount: 1, lastShownAt: 100 });
     expect(await storage.lexicon.get("en:novel")).toMatchObject({ state: "known", shownCount: 1 });
@@ -59,7 +63,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     const settings = testSettings();
     await storage.settings.set(settings);
     const ai = {
-      gloss: vi.fn(async () => ({
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async () => ({
         items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
       })),
       ankiCard: vi.fn()
@@ -91,7 +96,55 @@ describe("gloss resolver lookup-first pipeline", () => {
       { tokenId: "t-second", status: "ready", item: { tokenId: "t-second", targetText: "novel", display: "新词" } }
     ]);
     expect(otherPageEvents).toEqual([{ tokenId: "t-third", status: "hidden" }]);
-    expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups cache misses into a size-triggered AI frame", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async (input: { items: Array<{ sentence: string; token: { id: string; surface: string } }> }) => ({
+        items: input.items.map((item) => ({
+          tokenId: item.token.id,
+          targetText: item.token.surface,
+          display: item.token.surface === "novel" ? "新词" : "晦涩"
+        }))
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 2,
+      aiFrameMaxMs: 1_000,
+      dbReadCoalesceMs: 0
+    });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    await resolver.resolve("https://example.test/page", [{
+      id: "s1",
+      text: "A novel obscure archive appears.",
+      tokens: [
+        { id: "t-novel", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 },
+        { id: "t-obscure", sentenceId: "s1", surface: "obscure", lemma: "obscure", startOffset: 8, endOffset: 15 }
+      ]
+    }], settings, 100, { emit: (event) => events.push(event) });
+
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
+    expect(ai.glossFrame).toHaveBeenCalledWith(expect.objectContaining({
+      items: [
+        expect.objectContaining({ token: expect.objectContaining({ id: "t-novel" }) }),
+        expect.objectContaining({ token: expect.objectContaining({ id: "t-obscure" }) })
+      ]
+    }));
+    expect(events).toEqual(expect.arrayContaining([
+      { tokenId: "t-novel", status: "pending" },
+      { tokenId: "t-obscure", status: "pending" },
+      { tokenId: "t-novel", status: "ready", item: { tokenId: "t-novel", targetText: "novel", display: "新词" } },
+      { tokenId: "t-obscure", status: "ready", item: { tokenId: "t-obscure", targetText: "obscure", display: "晦涩" } }
+    ]));
   });
 
   it("reuses in-flight AI lookups for the same cache key", async () => {
@@ -100,7 +153,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     await storage.settings.set(settings);
     let resolveAi: ((value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void) | undefined;
     const ai = {
-      gloss: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
         resolveAi = resolve;
       })),
       ankiCard: vi.fn()
@@ -115,7 +169,7 @@ describe("gloss resolver lookup-first pipeline", () => {
       text: sentence,
       tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
     }], settings, 100, { emit: (event) => firstEvents.push(event) });
-    await vi.waitFor(() => expect(ai.gloss).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
     const second = resolver.resolve("https://example.test/a", [{
       id: "s2",
@@ -127,7 +181,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     resolveAi?.({ items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }] });
     await Promise.all([first, second]);
 
-    expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
     expect(firstEvents).toEqual([
       { tokenId: "t-first", status: "pending" },
       { tokenId: "t-first", status: "ready", item: { tokenId: "t-first", targetText: "novel", display: "新词" } }
@@ -144,7 +198,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     await storage.settings.set(settings);
     let rejectAi: ((error: Error) => void) | undefined;
     const ai = {
-      gloss: vi.fn(() => new Promise<{ items: [] }>((_resolve, reject) => {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(() => new Promise<{ items: [] }>((_resolve, reject) => {
         rejectAi = reject;
       })),
       ankiCard: vi.fn()
@@ -159,7 +214,7 @@ describe("gloss resolver lookup-first pipeline", () => {
       text: sentence,
       tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
     }], settings, 100, { emit: (event) => firstEvents.push(event) });
-    await vi.waitFor(() => expect(ai.gloss).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
     const second = resolver.resolve("https://example.test/a", [{
       id: "s2",
@@ -171,7 +226,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     rejectAi?.(new Error("backend unavailable"));
     await Promise.all([first, second]);
 
-    expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
     expect(firstEvents).toEqual([
       { tokenId: "t-first", status: "pending" },
       {
@@ -198,7 +253,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     await storage.settings.set(settings);
     let resolveAi: ((value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void) | undefined;
     const ai = {
-      gloss: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
         resolveAi = resolve;
       })),
       ankiCard: vi.fn()
@@ -217,7 +273,7 @@ describe("gloss resolver lookup-first pipeline", () => {
       emit: (event) => firstEvents.push(event),
       isActive: () => firstActive
     });
-    await vi.waitFor(() => expect(ai.gloss).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
     const second = resolver.resolve("https://example.test/a", [{
       id: "s2",
@@ -230,7 +286,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     resolveAi?.({ items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }] });
     await Promise.all([first, second]);
 
-    expect(ai.gloss).toHaveBeenCalledTimes(1);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
     expect(firstEvents).toEqual([{ tokenId: "t-first", status: "pending" }]);
     expect(secondEvents).toEqual([
       { tokenId: "t-second", status: "pending" },
@@ -295,6 +351,9 @@ function createMemoryStorage(): ExtensionStorage {
       async get(key) {
         return lexicon.get(key) as never;
       },
+      async getMany(keys) {
+        return readMany<VocabularyRecord>(lexicon, keys);
+      },
       async put(value) {
         lexicon.set(value.key, value);
       }
@@ -302,6 +361,9 @@ function createMemoryStorage(): ExtensionStorage {
     glossCache: {
       async get(key) {
         return glossCache.get(key) as never;
+      },
+      async getMany(keys) {
+        return readMany<GlossItem>(glossCache, keys);
       },
       async put(key, value) {
         glossCache.set(key, value);
@@ -311,9 +373,22 @@ function createMemoryStorage(): ExtensionStorage {
       async get(key) {
         return cardCache.get(key) as never;
       },
+      async getMany(keys) {
+        return readMany<AnkiCard & { noteId?: number }>(cardCache, keys);
+      },
       async put(key, value) {
         cardCache.set(key, value);
       }
     }
   };
+}
+
+function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T> {
+  const result = new Map<string, T>();
+  for (const key of keys) {
+    if (store.has(key)) {
+      result.set(key, store.get(key) as T);
+    }
+  }
+  return result;
 }

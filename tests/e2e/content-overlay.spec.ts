@@ -894,6 +894,8 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
   await page.evaluate((settings) => {
     const sent: unknown[] = [];
     const activationListeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
+    const endedScans = new Set<string>();
+    const pendingDone = new Map<string, unknown>();
     Reflect.set(window, "__glossaMessages", sent);
     Reflect.set(window, "__glossaListeners", activationListeners);
     Reflect.set(window, "__glossaDisconnects", 0);
@@ -915,6 +917,12 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
       createdAt: Date.now(),
       payload: { scanId }
     }));
+    const glossChunkAck = (scanId: string, chunkId: string, acceptedTokens: number) => ({
+      type: "gloss.chunk.ack",
+      version: 1,
+      createdAt: Date.now(),
+      payload: { scanId, chunkId, acceptedTokens }
+    });
     Reflect.set(window, "chrome", {
       runtime: {
         getURL: () => "/missing-known-word-list.txt",
@@ -940,14 +948,68 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
             },
             postMessage(message: { type: string; payload?: { scanId?: string } }) {
               sent.push(message);
-              if (message.type === "gloss.scan") {
-                const responder = Reflect.get(window, "__glossaOnScan");
-                if (typeof responder === "function") {
-                  responder(message, (response: unknown) => {
+              const emit = (response: unknown) => {
+                if (
+                  typeof response === "object"
+                  && response !== null
+                  && "type" in response
+                  && response.type === "gloss.done"
+                  && "payload" in response
+                  && typeof response.payload === "object"
+                  && response.payload !== null
+                  && "scanId" in response.payload
+                  && typeof response.payload.scanId === "string"
+                ) {
+                  if (endedScans.has(response.payload.scanId)) {
                     for (const listener of messageListeners) {
                       listener(response);
                     }
-                  });
+                  } else {
+                    pendingDone.set(response.payload.scanId, response);
+                  }
+                  return;
+                }
+                for (const listener of messageListeners) {
+                  listener(response);
+                }
+              };
+              if (
+                message.type === "gloss.scan.chunk"
+                && message.payload
+                && "chunkId" in message.payload
+                && typeof message.payload.scanId === "string"
+                && typeof message.payload.chunkId === "string"
+                && "sentences" in message.payload
+                && Array.isArray(message.payload.sentences)
+              ) {
+                const acceptedTokens = message.payload.sentences.reduce((total: number, sentence: { tokens?: unknown[] }) => {
+                  return total + (Array.isArray(sentence.tokens) ? sentence.tokens.length : 0);
+                }, 0);
+                emit(glossChunkAck(message.payload.scanId, message.payload.chunkId, acceptedTokens));
+                const legacyScan = {
+                  type: "gloss.scan",
+                  version: 1,
+                  createdAt: Date.now(),
+                  payload: {
+                    scanId: message.payload.scanId,
+                    pageUrl: "https://example.test",
+                    sentences: message.payload.sentences
+                  }
+                };
+                sent.push(legacyScan);
+                const responder = Reflect.get(window, "__glossaOnScan");
+                if (typeof responder === "function") {
+                  responder(legacyScan, emit);
+                }
+              }
+              if (message.type === "gloss.scan.end" && message.payload?.scanId) {
+                endedScans.add(message.payload.scanId);
+                const done = pendingDone.get(message.payload.scanId);
+                if (done) {
+                  pendingDone.delete(message.payload.scanId);
+                  for (const listener of messageListeners) {
+                    listener(done);
+                  }
                 }
               }
             },
