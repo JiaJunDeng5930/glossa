@@ -13,6 +13,6 @@ describe("frontend user error messages", () => {
     expect(userMessageForError({ reason: "unauthorized", message: "HTTP 401", service: "anki" }, "anki")).toContain("AnkiConnect 拒绝了请求");
     expect(userMessageForError({ reason: "service-error", message: "model was not found: Basic", service: "anki" }, "anki")).toBe("Anki 卡片模板不存在");
     expect(userMessageForError({ reason: "service-error", message: "Anki deck was not found", service: "anki" }, "anki")).toBe("Anki 牌组不存在");
-    expect(userMessageForError({ reason: "service-error", message: "deck missing", service: "anki" }, "anki")).toBe("Anki 服务返回错误");
+    expect(userMessageForError({ reason: "service-error", message: "deck missing", service: "anki" }, "anki")).toBe("Anki 操作失败，请检查当前牌组和卡片模板");
   });
 });

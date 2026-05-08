@@ -240,6 +240,23 @@ test("content bundle marks card failures with the shared badge renderer", async 
       && node.querySelector("[data-glossa-token-label]")?.textContent === "×"
       && node.title === "Anki 服务未启动或无法访问";
   });
+  expect(await page.evaluate(() => {
+    const label = document.querySelector<HTMLElement>("[data-glossa-token-label]")!;
+    const rect = label.getBoundingClientRect();
+    const before = getComputedStyle(label, "::before");
+    const after = getComputedStyle(label, "::after");
+    return {
+      square: Math.abs(rect.width - rect.height) < 1,
+      hasDrawnCross: before.content === "\"\"" && after.content === "\"\"",
+      beforeVisible: before.backgroundColor !== "rgba(0, 0, 0, 0)",
+      afterVisible: after.backgroundColor !== "rgba(0, 0, 0, 0)"
+    };
+  })).toEqual({
+    square: true,
+    hasDrawnCross: true,
+    beforeVisible: true,
+    afterVisible: true
+  });
 
   await page.keyboard.down("Alt");
   await page.locator("[data-glossa-token]").click();

@@ -55,7 +55,7 @@ function ankiMessage(error: ErrorPayload | undefined): string {
   if (error.reason === "service-error") {
     return ankiServiceMessage(error.message);
   }
-  return "Anki 服务返回错误";
+  return "Anki 操作失败，请检查当前牌组和卡片模板";
 }
 
 function runtimeMessage(error: ErrorPayload | undefined): string {
@@ -78,5 +78,5 @@ function ankiServiceMessage(message: string): string {
   if (/empty/i.test(message)) {
     return "Anki 卡片内容为空";
   }
-  return "Anki 服务返回错误";
+  return "Anki 操作失败，请检查当前牌组和卡片模板";
 }

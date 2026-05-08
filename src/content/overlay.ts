@@ -163,6 +163,37 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       [data-glossa-token][data-glossa-feedback="card-error"] [data-glossa-token-label] {
         background: color-mix(in srgb, var(--glossa-card-error-bg-color) var(--glossa-bg-alpha), transparent);
       }
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label],
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-status="error"] [data-glossa-token-label] {
+        width: 1.5em;
+        height: 1.5em;
+        min-width: 1.5em;
+        padding: 0;
+        color: transparent;
+        overflow: hidden;
+      }
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label]::before,
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label]::after,
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-status="error"] [data-glossa-token-label]::before,
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-status="error"] [data-glossa-token-label]::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 0.82em;
+        height: 2px;
+        border-radius: 999px;
+        background: var(--glossa-text-color);
+        transform-origin: center;
+      }
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label]::before,
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-status="error"] [data-glossa-token-label]::before {
+        transform: translate(-50%, -50%) rotate(45deg);
+      }
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label]::after,
+      [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-status="error"] [data-glossa-token-label]::after {
+        transform: translate(-50%, -50%) rotate(-45deg);
+      }
       [data-glossa-token-surface] {
         display: inline;
         line-height: inherit;
