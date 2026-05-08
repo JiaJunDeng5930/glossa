@@ -101,6 +101,7 @@ export interface UserWordClickPayload {
 
 export interface WordClickedOkPayload {
   noteId?: number;
+  noteIds?: number[];
 }
 
 export type SettingsGetPayload = Record<string, never>;
@@ -185,7 +186,10 @@ export interface GlossaSettings {
 export interface AnkiCard {
   front: string;
   back: string;
-  examples: string[];
+}
+
+export interface AnkiCardOutput {
+  cards: AnkiCard[];
 }
 
 export const DEFAULT_SETTINGS: GlossaSettings = {
@@ -207,7 +211,7 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   },
   prompts: {
     gloss: "只把每个陌生英文单词或短语在当前语境中的意思翻译成简体中文。返回适合显示在原词上方的简短行内标签。",
-    ankiCard: "为点击的英文单词创建简洁的 Anki 卡片字段。覆盖常见含义、当前语境含义，并给出一个自然例句。"
+    ankiCard: "为点击的英文单词制作 Anki 卡片。正面写目标词汇在对应含义下的例句，并加粗目标词汇；背面写这个词汇在当前语境中的简体中文翻译。"
   },
   ai: {
     provider: "openai-responses",

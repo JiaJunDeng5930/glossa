@@ -12,7 +12,8 @@ import type { AiBackend } from "./ai";
 import type { AnkiClient } from "./anki";
 import type {
   BackgroundResponseMessage,
-  ContentToBackgroundMessage
+  ContentToBackgroundMessage,
+  WordClickedOkPayload
 } from "../shared/types";
 import { GLOSS_TARGET_LANG } from "../shared/types";
 
@@ -46,7 +47,7 @@ async function handleWordClicked(
   payload: Extract<ContentToBackgroundMessage, { type: "word.clicked" }>["payload"],
   deps: BackgroundMessageHandlerDeps,
   now: number
-): Promise<{ noteId?: number }> {
+): Promise<WordClickedOkPayload> {
   const settings = await deps.storage.settings.get();
   const existing = await deps.storage.lexicon.get(vocabularyKey("en", payload.token.lemma));
   const clicked = markRecordClicked(
@@ -60,13 +61,33 @@ async function handleWordClicked(
     targetLang: GLOSS_TARGET_LANG,
     promptVersion: await promptCacheVersion(settings, settings.prompts.ankiCard)
   });
-  const cachedCard = await deps.storage.cardCache.get(cardKey);
-  const card = cachedCard ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
-  const noteId = cachedCard?.noteId ?? await deps.anki.createNote({ settings, card, token: payload.token });
-  const ankiNoteIds = noteId === undefined ? clicked.ankiNoteIds : [...new Set([...clicked.ankiNoteIds, noteId])];
-  await deps.storage.cardCache.put(cardKey, { ...card, ...(noteId === undefined ? {} : { noteId }) });
+  const cachedCardOutput = await deps.storage.cardCache.get(cardKey);
+  const cardOutput = cachedCardOutput ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
+  const noteIds = cachedCardOutput?.noteIds ?? await createNotes(cardOutput.cards, payload.token, settings, deps.anki);
+  const ankiNoteIds = noteIds.length === 0 ? clicked.ankiNoteIds : [...new Set([...clicked.ankiNoteIds, ...noteIds])];
+  await deps.storage.cardCache.put(cardKey, { ...cardOutput, ...(noteIds.length === 0 ? {} : { noteIds }) });
   await deps.storage.lexicon.put({ ...clicked, ankiNoteIds });
-  return noteId === undefined ? {} : { noteId };
+  if (noteIds.length === 0) {
+    return {};
+  }
+  const [noteId] = noteIds as [number, ...number[]];
+  return { noteId, noteIds };
+}
+
+async function createNotes(
+  cards: Awaited<ReturnType<AiBackend["ankiCard"]>>["cards"],
+  token: Extract<ContentToBackgroundMessage, { type: "word.clicked" }>["payload"]["token"],
+  settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>,
+  anki: AnkiClient
+): Promise<number[]> {
+  const noteIds: number[] = [];
+  for (const card of cards) {
+    const noteId = await anki.createNote({ settings, card, token });
+    if (noteId !== undefined) {
+      noteIds.push(noteId);
+    }
+  }
+  return noteIds;
 }
 
 async function promptCacheVersion(settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>, prompt: string): Promise<string> {

@@ -1,4 +1,4 @@
-import type { AnkiCard, GlossaSettings, GlossItem, VocabularyRecord } from "../shared/types";
+import type { AnkiCardOutput, GlossaSettings, GlossItem, VocabularyRecord } from "../shared/types";
 import { DEFAULT_SETTINGS } from "../shared/types";
 
 export interface KeyValueStore<T> {
@@ -20,7 +20,7 @@ export interface ExtensionStorage {
   settings: SettingsStore;
   lexicon: LexiconStore;
   glossCache: KeyValueStore<GlossItem>;
-  cardCache: KeyValueStore<AnkiCard & { noteId?: number }>;
+  cardCache: KeyValueStore<AnkiCardOutput & { noteIds?: number[] }>;
 }
 
 type StoreName = "lexicon" | "glossCache" | "cardCache";
@@ -30,7 +30,7 @@ export function createExtensionStorage(): ExtensionStorage {
     settings: createChromeSettingsStore(),
     lexicon: createLexiconStore(),
     glossCache: createIndexedStore<GlossItem>("glossCache"),
-    cardCache: createIndexedStore<AnkiCard & { noteId?: number }>("cardCache")
+    cardCache: createIndexedStore<AnkiCardOutput & { noteIds?: number[] }>("cardCache")
   };
 }
 

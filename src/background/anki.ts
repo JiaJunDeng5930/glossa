@@ -23,7 +23,7 @@ export function createAnkiClient(fetchImpl: typeof fetch = fetch): AnkiClient {
                 modelName: input.settings.anki.modelName,
                 fields: {
                   Front: input.card.front,
-                  Back: [input.card.back, ...input.card.examples].join("<br>")
+                  Back: input.card.back
                 },
                 tags: ["glossa", input.token.lemma]
               },

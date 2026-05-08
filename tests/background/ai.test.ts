@@ -45,7 +45,7 @@ describe("AI backend adapters", () => {
 
   it("supports legacy Completions request and response shape", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
-      choices: [{ text: "{\"front\":\"submit\",\"back\":\"提交\",\"examples\":[\"Submit the form.\"]}" }]
+      choices: [{ text: "{\"cards\":[{\"front\":\"<b>Submit</b> the form.\",\"back\":\"提交\"}]}" }]
     }));
     const settings = settingsFor("openai-completions", "https://api.openai.com/v1/completions", "medium");
 
@@ -62,9 +62,10 @@ describe("AI backend adapters", () => {
       reasoning?: unknown;
     };
     expect(calls[0]![0]).toBe("https://api.openai.com/v1/completions");
+    expect(body.prompt).toContain("Return strict JSON only for the anki-card task");
     expect(body.prompt).toContain("\"task\":\"anki-card\"");
     expect(body.reasoning).toBeUndefined();
-    expect(result).toMatchObject({ front: "submit", back: "提交" });
+    expect(result.cards[0]).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
   });
 
   it("classifies HTTP auth failures as AI diagnostic errors", async () => {

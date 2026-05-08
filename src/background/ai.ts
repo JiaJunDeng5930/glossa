@@ -1,5 +1,5 @@
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
-import { GLOSS_TARGET_LANG, type AnkiCard, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
+import { GLOSS_TARGET_LANG, type AnkiCardOutput, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
 
 export interface GlossBackendInput {
   settings: GlossaSettings;
@@ -19,14 +19,14 @@ export interface AnkiCardInput {
 
 export interface AiBackend {
   gloss(input: GlossBackendInput): Promise<GlossBackendOutput>;
-  ankiCard(input: AnkiCardInput): Promise<AnkiCard>;
+  ankiCard(input: AnkiCardInput): Promise<AnkiCardOutput>;
 }
 
 export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
   return {
     async gloss(input) {
       if (isOpenAiProvider(input.settings.ai.provider)) {
-        const output = await callOpenAiForTask(fetchImpl, input.settings, {
+        const output = await callOpenAiForTask(fetchImpl, input.settings, glossSystemInstruction(), {
           task: "gloss",
           prompt: input.settings.prompts.gloss,
           targetLang: GLOSS_TARGET_LANG,
@@ -47,16 +47,16 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
     },
     async ankiCard(input) {
       if (isOpenAiProvider(input.settings.ai.provider)) {
-        const output = await callOpenAiForTask(fetchImpl, input.settings, {
+        const output = await callOpenAiForTask(fetchImpl, input.settings, ankiCardSystemInstruction(), {
           task: "anki-card",
           prompt: input.settings.prompts.ankiCard,
           targetLang: GLOSS_TARGET_LANG,
           sentence: input.sentence,
           token: input.token
         });
-        return parseJsonOutput<AnkiCard>(output);
+        return parseJsonOutput<AnkiCardOutput>(output);
       }
-      return postJson<AnkiCard>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/anki-card`, {
+      return postJson<AnkiCardOutput>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/anki-card`, {
         sentence: input.sentence,
         token: input.token,
         targetLang: GLOSS_TARGET_LANG,
@@ -69,12 +69,12 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
   };
 }
 
-async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettings, payload: unknown): Promise<string> {
+async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettings, systemInstruction: string, payload: unknown): Promise<string> {
   if (settings.ai.provider === "openai-chat-completions") {
     const response = await postJson<OpenAiChatCompletionResponse>(fetchImpl, settings.ai.endpoint, {
       model: settings.modelVersion,
       messages: [
-        { role: "developer", content: systemInstruction() },
+        { role: "developer", content: systemInstruction },
         { role: "user", content: JSON.stringify(payload) }
       ],
       ...reasoningBody(settings)
@@ -84,7 +84,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
   if (settings.ai.provider === "openai-completions") {
     const response = await postJson<OpenAiCompletionResponse>(fetchImpl, settings.ai.endpoint, {
       model: settings.modelVersion,
-      prompt: `${systemInstruction()}\n\n${JSON.stringify(payload)}`,
+      prompt: `${systemInstruction}\n\n${JSON.stringify(payload)}`,
       temperature: 0
     }, settings.ai.apiKey);
     return response.choices[0]?.text ?? "";
@@ -92,7 +92,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
   const response = await postJson<OpenAiResponse>(fetchImpl, settings.ai.endpoint, {
     model: settings.modelVersion,
     input: [
-      { role: "system", content: systemInstruction() },
+      { role: "system", content: systemInstruction },
       { role: "user", content: JSON.stringify(payload) }
     ],
     ...reasoningBody(settings)
@@ -124,8 +124,12 @@ function reasoningBody(settings: GlossaSettings): { reasoning?: { effort: Exclud
   return { reasoning: { effort: settings.ai.reasoningEffort } };
 }
 
-function systemInstruction(): string {
-  return "Return strict JSON only. For gloss return {\"items\":[{\"tokenId\":\"...\",\"targetText\":\"...\",\"display\":\"...\",\"phrase\":\"...\"}]}. For anki-card return {\"front\":\"...\",\"back\":\"...\",\"examples\":[\"...\"]}. Follow the prompt field in the user payload.";
+function glossSystemInstruction(): string {
+  return "Return strict JSON only for the gloss task: {\"items\":[{\"tokenId\":\"...\",\"targetText\":\"...\",\"display\":\"...\",\"phrase\":\"...\"}]}. Follow the prompt field in the user payload.";
+}
+
+function ankiCardSystemInstruction(): string {
+  return "Return strict JSON only for the anki-card task: {\"cards\":[{\"front\":\"...\",\"back\":\"...\"}]}. The cards array may contain multiple cards. When the user prompt does not request a card count, create one card. Follow the prompt field in the user payload.";
 }
 
 function parseJsonOutput<T>(value: string): T {

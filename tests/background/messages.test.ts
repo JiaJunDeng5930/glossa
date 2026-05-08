@@ -25,21 +25,23 @@ describe("background message handler", () => {
     const ai = {
       gloss: vi.fn(),
       ankiCard: vi.fn(async () => ({
-        front: "submit",
-        back: "提交；提交表单",
-        examples: ["Submit the form."]
+        cards: [
+          { front: "A <b>submit</b> button finishes the form.", back: "提交" },
+          { front: "Click <b>submit</b> after reviewing.", back: "提交按钮" }
+        ]
       }))
     };
-    const anki = { createNote: vi.fn(async () => 42) };
+    const anki = { createNote: vi.fn(async (_input: unknown) => anki.createNote.mock.calls.length === 1 ? 42 : 43) };
 
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
     const response = await handler(message);
 
-    expect(response).toMatchObject({ type: "word.clicked.ok", requestId: message.requestId, payload: { noteId: 42 } });
+    expect(response).toMatchObject({ type: "word.clicked.ok", requestId: message.requestId, payload: { noteId: 42, noteIds: [42, 43] } });
+    expect(anki.createNote).toHaveBeenCalledTimes(2);
     expect(await storage.lexicon.get("en:submit")).toMatchObject({
       state: "learning_active",
       clickCount: 1,
-      ankiNoteIds: [42]
+      ankiNoteIds: [42, 43]
     });
   });
 

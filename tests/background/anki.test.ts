@@ -16,7 +16,7 @@ describe("AnkiConnect adapter diagnostics", () => {
     expect(body.params.note).toMatchObject({
       deckName: "Glossa",
       modelName: "Basic",
-      fields: { Front: "submit", Back: "提交<br>Submit the form." }
+      fields: { Front: "<b>Submit</b> the form.", Back: "提交" }
     });
   });
 
@@ -53,7 +53,7 @@ describe("AnkiConnect adapter diagnostics", () => {
 function noteInput(): Parameters<ReturnType<typeof createAnkiClient>["createNote"]>[0] {
   return {
     settings: DEFAULT_SETTINGS,
-    card: { front: "submit", back: "提交", examples: ["Submit the form."] },
+    card: { front: "<b>Submit</b> the form.", back: "提交" },
     token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
   };
 }
