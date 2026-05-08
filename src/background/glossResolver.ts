@@ -438,21 +438,22 @@ async function executeFrame(
         token: miss.token
       }))
     });
-    const emitted = new Set<string>();
+    const unresolved = new Set(frame.misses);
     const writeStartedAt = nowMs();
     for (const item of response.items) {
-      const miss = frame.misses.find((candidate) => candidate.token.id === item.tokenId);
+      const miss = frame.misses.find((candidate) => unresolved.has(candidate) && candidate.token.id === item.tokenId);
       if (!miss) {
         continue;
       }
+      const readyItem = rehydrateCachedGloss(item, miss.token);
       try {
-        await deps.storage.glossCache.put(miss.dbCacheKey, item);
-        deps.remember(miss.memoryKey, item);
+        await deps.storage.glossCache.put(miss.dbCacheKey, readyItem);
+        deps.remember(miss.memoryKey, readyItem);
         if (miss.sink.isActive?.() !== false) {
           miss.trackWrite(() => persistShownRecord(deps.storage, miss.token, miss.now));
-          miss.emit({ tokenId: miss.token.id, status: "ready", item });
+          miss.emit({ tokenId: miss.token.id, status: "ready", item: readyItem });
         }
-        resolveInFlightMiss(deps.inFlight, miss, { ok: true, item });
+        resolveInFlightMiss(deps.inFlight, miss, { ok: true, item: readyItem });
       } catch (error) {
         const payload = diagnosticPayloadFrom(error, {
           reason: "runtime",
@@ -464,10 +465,10 @@ async function executeFrame(
           miss.emit({ tokenId: miss.token.id, status: "error", message: payload.message, error: payload });
         }
       }
-      emitted.add(miss.token.id);
+      unresolved.delete(miss);
     }
     for (const miss of frame.misses) {
-      if (emitted.has(miss.token.id)) {
+      if (!unresolved.has(miss)) {
         continue;
       }
       const payload: ErrorPayload = {

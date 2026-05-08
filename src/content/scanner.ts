@@ -233,7 +233,19 @@ export async function scanDocumentTextInChunks(
       const leading = raw.length - raw.trimStart().length;
       const sentenceStart = (sentenceMatch.index ?? 0) + leading;
       const sentenceId = `s${sentenceIndex++}`;
-      const sentenceTokens: ScannedToken[] = [];
+      let sentenceTokens: ScannedToken[] = [];
+
+      const appendSentencePart = (): void => {
+        if (sentenceTokens.length === 0) {
+          return;
+        }
+        chunkSentences.push({
+          id: sentenceId,
+          text: trimmed,
+          tokens: sentenceTokens
+        });
+        sentenceTokens = [];
+      };
 
       for (const wordMatch of trimmed.matchAll(WORD_RE)) {
         const surface = wordMatch[0];
@@ -279,15 +291,20 @@ export async function scanDocumentTextInChunks(
         chunkTokens.push(token);
         lemmaCounts.set(lemma, count + 1);
         stats.candidateWords += 1;
+
+        if (
+          chunkTokens.length >= maxTokensPerChunk
+          || nowMs() - chunkStartedAt >= maxChunkDelayMs
+        ) {
+          appendSentencePart();
+          const keepGoing = await flushChunk();
+          if (!keepGoing) {
+            return stats;
+          }
+        }
       }
 
-      if (sentenceTokens.length > 0) {
-        chunkSentences.push({
-          id: sentenceId,
-          text: trimmed,
-          tokens: sentenceTokens
-        });
-      }
+      appendSentencePart();
     }
 
     if (

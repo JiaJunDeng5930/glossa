@@ -14,4 +14,4 @@ Mutation handling treats render and cleanup DOM writes as owned mutations. Exter
 
 Pending wrappers can outlive the scan version that created them during ordinary page mutations. Stale token outcomes may update an existing pending wrapper when its stored surface, lemma, offsets, source fingerprint, and local text context still match the page. This lets slow gloss lookups finish after nearby DOM changes while route changes still clear all page-local rendering and ports.
 
-Scan chunking uses count and time boundaries. The producer sends a chunk after 64 candidate tokens or 16ms, and it keeps at most 4 unacknowledged chunks in flight. Chunk flushing happens between text nodes so streamed outcomes can update earlier nodes while the scanner continues over stable collected text-node references.
+Scan chunking uses count and time boundaries. The producer sends a chunk after 64 candidate tokens or 16ms, and it keeps at most 4 unacknowledged chunks in flight. Large text nodes can split one sentence into repeated sentence entries with token subsets, so streamed outcomes can update earlier tokens while the scanner continues over stable collected text-node references.

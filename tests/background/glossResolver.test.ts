@@ -4,7 +4,7 @@ import { buildGlossCacheKey } from "../../src/core/cache";
 import { createGlossResolver } from "../../src/background/glossResolver";
 import { hashText } from "../../src/shared/hash";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCard, type GlossaSettings, type GlossItem, type GlossTokenPayload, type VocabularyRecord } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type GlossaSettings, type GlossItem, type GlossTokenPayload, type VocabularyRecord } from "../../src/shared/types";
 
 describe("gloss resolver lookup-first pipeline", () => {
   it("emits hidden, ready, pending and AI ready outcomes in lookup order", async () => {
@@ -145,6 +145,48 @@ describe("gloss resolver lookup-first pipeline", () => {
       { tokenId: "t-novel", status: "ready", item: { tokenId: "t-novel", targetText: "novel", display: "新词" } },
       { tokenId: "t-obscure", status: "ready", item: { tokenId: "t-obscure", targetText: "obscure", display: "晦涩" } }
     ]));
+  });
+
+  it("resolves duplicate token ids inside one AI frame independently", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async (input: { items: Array<{ token: { id: string; surface: string } }> }) => ({
+        items: input.items.map((item) => ({
+          tokenId: item.token.id,
+          targetText: item.token.surface,
+          display: item.token.surface.toUpperCase()
+        }))
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 2,
+      aiFrameMaxMs: 1_000,
+      dbReadCoalesceMs: 0
+    });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    await resolver.resolve("https://example.test/page", [{
+      id: "s1",
+      text: "A novel obscure archive appears.",
+      tokens: [
+        { id: "t-shared", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 },
+        { id: "t-shared", sentenceId: "s1", surface: "obscure", lemma: "obscure", startOffset: 8, endOffset: 15 }
+      ]
+    }], settings, 100, { emit: (event) => events.push(event) });
+
+    expect(events).toEqual(expect.arrayContaining([
+      { tokenId: "t-shared", status: "pending" },
+      { tokenId: "t-shared", status: "ready", item: { tokenId: "t-shared", targetText: "novel", display: "NOVEL" } },
+      { tokenId: "t-shared", status: "ready", item: { tokenId: "t-shared", targetText: "obscure", display: "OBSCURE" } }
+    ]));
+    expect(events.filter((event) => event.status === "pending")).toHaveLength(2);
+    expect(events.filter((event) => event.status === "ready")).toHaveLength(2);
   });
 
   it("reuses in-flight AI lookups for the same cache key", async () => {
@@ -374,7 +416,7 @@ function createMemoryStorage(): ExtensionStorage {
         return cardCache.get(key) as never;
       },
       async getMany(keys) {
-        return readMany<AnkiCard & { noteId?: number }>(cardCache, keys);
+        return readMany<AnkiCardOutput & { noteIds?: number[] }>(cardCache, keys);
       },
       async put(key, value) {
         cardCache.set(key, value);

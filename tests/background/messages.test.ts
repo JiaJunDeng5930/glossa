@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createBackgroundMessageHandler } from "../../src/background/messages";
 import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, type AnkiCard, type GlossItem, type VocabularyRecord } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, type AnkiCardOutput, type GlossItem, type VocabularyRecord } from "../../src/shared/types";
 
 describe("background message handler", () => {
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
@@ -90,7 +90,7 @@ export function createMemoryStorage(): ExtensionStorage {
         return cardCache.get(key) as never;
       },
       async getMany(keys) {
-        return readMany<AnkiCard & { noteId?: number }>(cardCache, keys);
+        return readMany<AnkiCardOutput & { noteIds?: number[] }>(cardCache, keys);
       },
       async put(key, value) {
         cardCache.set(key, value);

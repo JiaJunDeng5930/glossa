@@ -92,11 +92,10 @@ describe("content scanner", () => {
     expect(result.tokens.map((token) => token.surface)).toEqual(["Shadow", "archive", "appears", "clearly"]);
   });
 
-  it("streams scan chunks by token count between text nodes", async () => {
+  it("streams scan chunks by token count inside large text nodes", async () => {
     document.body.innerHTML = `
       <main>
-        <p>Alpha archive emerges slowly.</p>
-        <p>Beta quarry appears clearly.</p>
+        <p>Alpha archive emerges slowly. Beta quarry appears clearly.</p>
       </main>
     `;
     const chunks: string[][] = [];
@@ -109,9 +108,11 @@ describe("content scanner", () => {
     });
 
     expect(chunks).toEqual([
-      ["Alpha", "archive", "emerges", "slowly"],
-      ["Beta", "quarry", "appears", "clearly"]
+      ["Alpha", "archive", "emerges"],
+      ["slowly", "Beta", "quarry"],
+      ["appears", "clearly"]
     ]);
+    expect(chunks.every((chunk) => chunk.length <= 3)).toBe(true);
     expect(stats.candidateWords).toBe(8);
   });
 });
