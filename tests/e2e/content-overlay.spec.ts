@@ -840,16 +840,7 @@ test("content bundle preserves existing glosses while mutation rescans wait for 
 });
 
 test("content bundle defers chunk outcomes until a large text-node scan finishes", async ({ page }) => {
-  const toLetters = (value: number): string => {
-    let current = value;
-    let output = "";
-    do {
-      output = String.fromCharCode(97 + (current % 26)) + output;
-      current = Math.floor(current / 26) - 1;
-    } while (current >= 0);
-    return output;
-  };
-  const words = Array.from({ length: 150 }, (_, index) => `word${toLetters(index)}`);
+  const words = largeWordList(150);
   const target = words[140]!;
   await page.setContent(`<main><p>${words.join(" ")}.</p></main>`);
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -887,6 +878,58 @@ test("content bundle defers chunk outcomes until a large text-node scan finishes
   });
   expect(scannedTokenCount).toBe(words.length);
 });
+
+test("content bundle replays queued ready outcomes after scan invalidation", async ({ page }) => {
+  const words = largeWordList(150);
+  const target = words[0]!;
+  await page.setContent(`<main><p>${words.join(" ")}.</p><p id="mutating">before</p></main>`);
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const token = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((item) => item.surface === "worda");
+      if (token) {
+        emit(glossToken(message.payload.scanId, token.id, "ready", {
+          tokenId: token.id,
+          targetText: token.surface,
+          display: "QUEUED"
+        }));
+      }
+      if (!Reflect.get(window, "__queuedInvalidationTriggered")) {
+        Reflect.set(window, "__queuedInvalidationTriggered", true);
+        document.querySelector("#mutating")!.textContent = "after";
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.waitForFunction((surface) => {
+    if (typeof surface !== "string") {
+      return false;
+    }
+    const wrapper = document.querySelector<HTMLElement>(`[data-glossa-surface="${surface}"]`);
+    return wrapper?.querySelector("[data-glossa-token-label]")?.textContent === "QUEUED";
+  }, target);
+  await expect(page.locator("#mutating")).toHaveText("after");
+});
+
+function largeWordList(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `word${letters(index)}`);
+}
+
+function letters(value: number): string {
+  let current = value;
+  let output = "";
+  do {
+    output = String.fromCharCode(97 + (current % 26)) + output;
+    current = Math.floor(current / 26) - 1;
+  } while (current >= 0);
+  return output;
+}
 
 function overlaps(
   left: { left: number; right: number; top: number; bottom: number },

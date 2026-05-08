@@ -159,7 +159,14 @@ async function testAi(settings: GlossaSettings): Promise<void> {
     ? `${settings.ai.endpoint.replace(/\/+$/, "")}/gloss`
     : settings.ai.endpoint;
   const body = settings.ai.provider === "glossa-backend"
-    ? { items: [], targetLang: GLOSS_TARGET_LANG, reasoningEffort: settings.ai.reasoningEffort }
+    ? {
+      items: [],
+      targetLang: GLOSS_TARGET_LANG,
+      prompt: settings.prompts.gloss,
+      reasoningEffort: settings.ai.reasoningEffort,
+      promptVersion: settings.promptVersion,
+      modelVersion: settings.modelVersion
+    }
     : settings.ai.provider === "openai-chat-completions"
       ? {
         model: settings.modelVersion,

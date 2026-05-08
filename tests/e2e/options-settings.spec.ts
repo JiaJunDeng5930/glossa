@@ -8,9 +8,15 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.addStyleTag({ path: resolve("dist/assets/options.css") });
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
+    const aiRequests: Array<{ url: string; body: unknown }> = [];
     Reflect.set(window, "__glossaStore", store);
+    Reflect.set(window, "__aiRequests", aiRequests);
     Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
       if (!url.includes("8765")) {
+        aiRequests.push({
+          url,
+          body: init?.body ? JSON.parse(init.body as string) : undefined
+        });
         return new Response(JSON.stringify({ result: null }), {
           status: 200,
           headers: { "content-type": "application/json" }
@@ -100,6 +106,26 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   });
   expect(buttonPositions).toEqual({ aiBelowReasoning: true, ankiBelowDeck: true });
 
+  await page.locator("select[name=provider]").selectOption("glossa-backend");
+  await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
+  await page.locator("#test-ai").click();
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
+  const glossaBackendPayload = await page.evaluate(() => {
+    const requests = Reflect.get(window, "__aiRequests") as Array<{ url: string; body: Record<string, unknown> }>;
+    return requests.find((request) => request.url.endsWith("/gloss"))?.body;
+  });
+  expect(glossaBackendPayload).toMatchObject({
+    items: [],
+    targetLang: "zh-CN",
+    prompt: "Use compact contextual labels.",
+    reasoningEffort: "high",
+    promptVersion: "gloss-v1",
+    modelVersion: "gpt-4.1-mini"
+  });
+
+  await page.locator("select[name=provider]").selectOption("openai-chat-completions");
+  await page.locator("select[name=reasoningEffort]").selectOption("high");
+  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#test-ai .test-label")).not.toBeVisible();

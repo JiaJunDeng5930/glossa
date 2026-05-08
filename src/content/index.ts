@@ -330,8 +330,9 @@ async function boot(): Promise<void> {
 
   const applyGlossOutcome = (session: GlossSession, outcome: GlossTokenPayload, reason: string, queued: boolean): void => {
     const current = currentGlossSession === session && session.version === scanVersion;
-    const render = current
-      ? overlay.applyTokenOutcome(session.tokenMap.get(outcome.tokenId), outcome, session.version)
+    const token = session.tokenMap.get(outcome.tokenId);
+    const render = current || (queued && token)
+      ? overlay.applyTokenOutcome(token, outcome, token?.scanVersion ?? session.version)
       : overlay.applyStalePendingOutcome(outcome);
     updatePendingTokenState(session, outcome, render);
     trace({
