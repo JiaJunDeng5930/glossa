@@ -45,6 +45,7 @@ interface Miss {
   sentence: string;
   memoryKey: string;
   dbCacheKey: string;
+  inFlightKey: string;
   inFlight: InFlightGloss;
   settings: GlossaSettings;
   now: number;
@@ -341,7 +342,8 @@ async function resolveToken(input: {
     }
 
     input.emit({ tokenId: input.token.id, status: "pending" });
-    const active = input.inFlight.get(cacheKey);
+    const runtimeKey = aiInFlightKey(input.settings, cacheKey);
+    const active = input.inFlight.get(runtimeKey);
     if (active) {
       input.track(emitReusedMiss({
         token: input.token,
@@ -355,12 +357,13 @@ async function resolveToken(input: {
     }
 
     const pending = createInFlightGloss();
-    input.inFlight.set(cacheKey, pending);
+    input.inFlight.set(runtimeKey, pending);
     const miss: Miss = {
       token: input.token,
       sentence: input.sentence.text,
       memoryKey,
       dbCacheKey: cacheKey,
+      inFlightKey: runtimeKey,
       inFlight: pending,
       settings: input.settings,
       now: input.now,
@@ -619,8 +622,8 @@ function createInFlightGloss(): InFlightGloss {
 }
 
 function resolveInFlightMiss(inFlight: Map<string, InFlightGloss>, miss: Miss, result: InFlightResult): void {
-  if (inFlight.get(miss.dbCacheKey) === miss.inFlight) {
-    inFlight.delete(miss.dbCacheKey);
+  if (inFlight.get(miss.inFlightKey) === miss.inFlight) {
+    inFlight.delete(miss.inFlightKey);
   }
   miss.inFlight.resolve(result);
 }
@@ -706,6 +709,10 @@ function rehydrateCachedGloss(item: GlossItem, token: TokenCandidate): GlossItem
 
 function transientMemoryKey(pageUrl: string, cacheKey: string): string {
   return `${pageUrl}::${cacheKey}`;
+}
+
+function aiInFlightKey(settings: GlossaSettings, cacheKey: string): string {
+  return `${aiFrameKey(settings)}\n${cacheKey}`;
 }
 
 function aiFrameKey(settings: GlossaSettings): string {

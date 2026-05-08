@@ -212,6 +212,73 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
+  it("splits in-flight AI reuse by API key for the same cache entry", async () => {
+    const storage = createMemoryStorage();
+    const oldKeySettings: GlossaSettings = {
+      ...testSettings(),
+      ai: {
+        provider: "openai-responses",
+        endpoint: "https://api.openai.com/v1/responses",
+        reasoningEffort: "medium",
+        apiKey: "old-key"
+      }
+    };
+    const newKeySettings: GlossaSettings = {
+      ...oldKeySettings,
+      ai: {
+        ...oldKeySettings.ai,
+        apiKey: "new-key"
+      }
+    };
+    const frameResolvers = new Map<string, (value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void>();
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn((input: { settings: GlossaSettings }) => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+        frameResolvers.set(input.settings.ai.apiKey ?? "", resolve);
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 2,
+      aiFrameMaxMs: 1,
+      dbReadCoalesceMs: 0
+    });
+    const sentence = "A novel archive appears.";
+    const oldKeyEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const newKeyEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const first = resolver.resolve("https://example.test/old", [{
+      id: "s-old",
+      text: sentence,
+      tokens: [{ id: "t-old", sentenceId: "s-old", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], oldKeySettings, 100, { emit: (event) => oldKeyEvents.push(event) });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+
+    const second = resolver.resolve("https://example.test/new", [{
+      id: "s-new",
+      text: sentence,
+      tokens: [{ id: "t-new", sentenceId: "s-new", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], newKeySettings, 100, { emit: (event) => newKeyEvents.push(event) });
+    await vi.waitFor(() => expect(newKeyEvents).toEqual([{ tokenId: "t-new", status: "pending" }]));
+
+    frameResolvers.get("old-key")?.({ items: [{ tokenId: "t-old", targetText: "novel", display: "旧钥" }] });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(2));
+    frameResolvers.get("new-key")?.({ items: [{ tokenId: "t-new", targetText: "novel", display: "新钥" }] });
+    await Promise.all([first, second]);
+
+    expect(ai.glossFrame.mock.calls.map(([input]) => input.settings.ai.apiKey)).toEqual(expect.arrayContaining(["old-key", "new-key"]));
+    expect(oldKeyEvents).toEqual([
+      { tokenId: "t-old", status: "pending" },
+      { tokenId: "t-old", status: "ready", item: { tokenId: "t-old", targetText: "novel", display: "旧钥" } }
+    ]);
+    expect(newKeyEvents).toEqual([
+      { tokenId: "t-new", status: "pending" },
+      { tokenId: "t-new", status: "ready", item: { tokenId: "t-new", targetText: "novel", display: "新钥" } }
+    ]);
+  });
+
   it("resolves duplicate token ids inside one AI frame independently", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();
