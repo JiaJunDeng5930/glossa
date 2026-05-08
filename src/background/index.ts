@@ -97,7 +97,7 @@ chrome.runtime.onConnect.addListener((port) => {
         }
         session = await sessionPromise;
         const acceptedTokens = message.payload.sentences.reduce((total, sentence) => total + sentence.tokens.length, 0);
-        session.acceptChunk(message.payload.chunkId, message.payload.chunkIndex, message.payload.sentences);
+        await session.acceptChunk(message.payload.chunkId, message.payload.chunkIndex, message.payload.sentences);
         safePost(port, createGlossPortMessage("gloss.chunk.ack", {
           scanId: message.payload.scanId,
           chunkId: message.payload.chunkId,

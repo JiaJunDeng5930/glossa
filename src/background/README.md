@@ -1,6 +1,6 @@
 # Background Gloss Pipeline
 
-`GlossResolver` owns the transient display pipeline for gloss requests. Content sends scan chunks over `gloss.session`; the resolver accepts each chunk, runs token lookup through a limited parallel gate, and emits token outcomes as soon as each lookup resolves.
+`GlossResolver` owns the transient display pipeline for gloss requests. Content sends scan chunks over `gloss.session`; the resolver accepts each chunk, runs token lookup through a limited parallel gate, and emits token outcomes as soon as each lookup resolves. The background sends `gloss.chunk.ack` after that chunk has completed the lookup phase, so content-side backpressure limits queued resolver work.
 
 1. Build the stable gloss cache key from target language, sentence text, token span, prompt/provider/reasoning version, and model.
 2. Check the page-scoped in-memory gloss cache first. A hit returns a display item for the current token id without reading lexicon state. This keeps labels stable when the page mutates and the content script immediately rescans during the same service-worker lifetime.
@@ -12,7 +12,7 @@ The in-memory cache is a bounded replay layer for the current page URL and backg
 
 DB reads pass through a short-window coalescer. Individual token lookups ask for lexicon and gloss cache keys, and the coalescer batches same-store reads into one `getMany` transaction per 8ms window. Shown-state and cache writes run through the write side after visible outcomes have already been emitted.
 
-AI misses use an in-flight map keyed by the same durable gloss cache key. A duplicate miss attaches to the running lookup, emits its own `pending`, then receives the shared `ready` or `error` result with the current token id. The first lookup owns the AI frame entry and cache write.
+AI misses use an in-flight map keyed by the durable gloss cache key plus the live AI settings that select the outlet. A duplicate miss with the same settings attaches to the running lookup, emits its own `pending`, then receives the shared `ready` or `error` result with the current token id. The first lookup owns the AI frame entry and cache write.
 
 The AI outlet frames owner misses by count or time: 32 misses or 50ms closes a frame. Frames are real AI requests and execute through a global serial outlet with concurrency 1. A frame request sends multiple `{ sentence, token }` items and returns per-token `GlossItem` results. Returned token ids consume one unresolved miss at a time, so duplicate DOM token ids in the same frame still resolve independently. A closed sink stops after pending DB reads and before AI enqueue.
 

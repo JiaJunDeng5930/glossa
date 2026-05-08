@@ -21,7 +21,7 @@ export interface GlossResolver {
 }
 
 export interface GlossResolverSession {
-  acceptChunk(chunkId: string, chunkIndex: number, sentences: SentenceCandidate[]): void;
+  acceptChunk(chunkId: string, chunkIndex: number, sentences: SentenceCandidate[]): Promise<void>;
   finish(): Promise<void>;
 }
 
@@ -253,6 +253,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
           });
         });
         track(task);
+        return task;
       },
       async finish() {
         while (tasks.size > 0) {
@@ -281,7 +282,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     createSession,
     async resolve(pageUrl, sentences, settings, now, sink) {
       const session = createSession(pageUrl, settings, now, sink);
-      session.acceptChunk("legacy", 0, sentences);
+      await session.acceptChunk("legacy", 0, sentences);
       await session.finish();
     }
   };

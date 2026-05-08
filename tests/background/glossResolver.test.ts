@@ -354,6 +354,50 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).not.toHaveBeenCalled();
   });
 
+  it("resolves chunk acceptance after lookup work leaves the concurrency gate", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    let releaseLexiconRead: ((value: Map<string, VocabularyRecord>) => void) | undefined;
+    storage.lexicon.getMany = vi.fn(() => new Promise<Map<string, VocabularyRecord>>((resolve) => {
+      releaseLexiconRead = resolve;
+    }));
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async () => ({
+        items: [{ tokenId: "t-novel", targetText: "novel", display: "新词" }]
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      dbReadCoalesceMs: 0,
+      aiFrameMaxMs: 1
+    });
+    const session = resolver.createSession("https://example.test/page", settings, 100, { emit: () => undefined });
+    let accepted = false;
+
+    const acceptedPromise = session.acceptChunk("chunk-1", 0, [{
+      id: "s1",
+      text: "A novel archive appears.",
+      tokens: [{ id: "t-novel", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }]).then(() => {
+      accepted = true;
+    });
+    await vi.waitFor(() => expect(storage.lexicon.getMany).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+
+    expect(accepted).toBe(false);
+
+    releaseLexiconRead?.(new Map());
+    await acceptedPromise;
+    await session.finish();
+
+    expect(accepted).toBe(true);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
+  });
+
   it("reuses in-flight AI lookups for the same cache key", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();
