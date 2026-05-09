@@ -109,6 +109,43 @@ describe("requirement automation tool", () => {
     expect(stderr).toContain("src/main.ts:12 missing-requirement-anchor");
   }, 20_000);
 
+  // @verifies requirements.comment_binding.target_kinds
+  // @verifies requirements.change_anchoring.local_anchor
+  it("accepts an anchored staged re-export contract change", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(join(cwd, "src/foo.ts"), "export const foo = 1;\n");
+    writeFileSync(join(cwd, "src/main.ts"), "");
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo exports have verified behavior.",
+        "// @behavior demo.reexport The demo exports foo from its source module.",
+        "export { foo } from \"./foo\";",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(cwd, "tests/main.test.ts"),
+      [
+        "import { expect, it } from \"vitest\";",
+        "",
+        "// @verifies demo.reexport",
+        "it(\"re-exports foo\", () => {",
+        "  expect(true).toBe(true);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+
+    runTool(cwd, ["check", "--staged"]);
+  }, 20_000);
+
   // @verifies requirements.change_anchoring.changed_categories
   it("rejects unanchored staged state literals before property skipping", () => {
     const cwd = createFixtureRepo();

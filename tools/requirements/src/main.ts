@@ -303,7 +303,9 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
     const nodes = collectBindableNodes(source);
     const firstCodeStart = findFirstCodeStart(source);
     for (const comment of fileComments) {
-      if (comment.end <= firstCodeStart && onlyWhitespaceAndComments(file.text.slice(0, comment.start))) {
+      const beforeComment = file.text.slice(0, comment.start);
+      const beforeFirstCode = file.text.slice(comment.end, firstCodeStart);
+      if (comment.end <= firstCodeStart && onlyWhitespaceAndComments(beforeComment) && (!hasRequirementTag(beforeComment) || hasImportStatement(beforeFirstCode))) {
         comment.target = { kind: "file", start: 0, end: file.text.length, line: 1, endLine: offsetLine(file.text, file.text.length), isFile: true };
         continue;
       }
@@ -340,11 +342,12 @@ function collectBindableNodes(source: ts.SourceFile): BoundTarget[] {
 
 // @constraint requirements.comment_binding.target_kinds Requirement targets include declarations, branches, side effects, returns, throws, and test calls.
 function isBindableNode(node: ts.Node): boolean {
-  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return false;
+  if (ts.isImportDeclaration(node)) return false;
   if (
     ts.isFunctionDeclaration(node) ||
     ts.isClassDeclaration(node) ||
     ts.isInterfaceDeclaration(node) ||
+    ts.isExportDeclaration(node) ||
     ts.isPropertySignature(node) ||
     ts.isMethodSignature(node) ||
     ts.isTypeAliasDeclaration(node) ||
@@ -374,7 +377,7 @@ function isBindableNode(node: ts.Node): boolean {
   return false;
 }
 
-// @behavior requirements.comment_binding.file_level File-level comments bind before the first non-import syntax unit.
+// @behavior requirements.comment_binding.file_level The first file-level requirement comment can bind before the first non-import syntax unit.
 function findFirstCodeStart(source: ts.SourceFile): number {
   let first = source.text.length;
   for (const statement of source.statements) {
@@ -382,6 +385,14 @@ function findFirstCodeStart(source: ts.SourceFile): number {
     first = Math.min(first, statement.getStart(source));
   }
   return first;
+}
+
+function hasRequirementTag(text: string): boolean {
+  return /@(behavior|constraint|intent|verifies)\s+/.test(text);
+}
+
+function hasImportStatement(text: string): boolean {
+  return /^\s*import\b/m.test(text);
 }
 
 // @constraint requirements.comment_binding.adjacency Only whitespace and ordinary comments may separate a requirement comment from its target node.
