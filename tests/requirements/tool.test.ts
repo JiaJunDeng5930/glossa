@@ -10,6 +10,7 @@ const TSX = resolve("node_modules/tsx/dist/cli.mjs");
 describe("requirement automation tool", () => {
   // @verifies requirements.cli.command The test verifies that the command parser accepts the public help command.
   // @verifies requirements.cli.help The test verifies that help output lists the public requirement commands.
+  // @verifies requirements.cli.option The test verifies that public help describes staged and base comparison options.
   it("prints public help", () => {
     const output = runTool(process.cwd(), ["help"]);
 
@@ -35,6 +36,7 @@ describe("requirement automation tool", () => {
   // @verifies requirements.agents.parent The test verifies that dotted parent relationships feed index rows.
   // @verifies requirements.agents.check The test verifies that the check command compares AGENTS.md with generated output.
   // @verifies requirements.agents.extract The test verifies that generated index markers can be read by the checker.
+  // @verifies requirements.diff.check The test verifies that shared diff checking accepts anchored staged changes.
   // @verifies requirements.diff.anchor The test verifies that staged checking accepts local anchors for changed lines.
   // @verifies requirements.output.scan The test verifies that scan output includes discovered requirement records.
   // @verifies requirements.git The test verifies that the tool can invoke Git-backed commands.
@@ -105,6 +107,9 @@ describe("requirement automation tool", () => {
   }, 20_000);
 
   // @verifies requirements.diff.parse The test verifies that staged checking records deletion-only hunks as changed lines.
+  // @verifies requirements.diff.old_blob The test verifies that staged checking loads deleted file content for syntax context.
+  // @verifies requirements.types.hunk_line.old_path The test verifies that deleted-file hunks retain their old source path.
+  // @verifies requirements.types.hunk_line.deleted The test verifies that deleted hunks are marked for anchor diagnostics.
   it("rejects an unanchored deletion-only side effect change", () => {
     const cwd = createFixtureRepo();
     writeFileSync(
@@ -137,7 +142,27 @@ describe("requirement automation tool", () => {
       stderr = String((error as { stderr?: Buffer }).stderr);
     }
 
-    expect(stderr).toContain("src/main.ts:1 missing-requirement-anchor");
+    expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
+  }, 20_000);
+
+  // @verifies requirements.diff.base The test verifies that base comparison mode rejects unanchored branch diffs.
+  it("rejects an unanchored base diff side effect change", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(join(cwd, "src/main.ts"), "export function saveValue(): void {\n}\n");
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(join(cwd, "src/main.ts"), "export function saveValue(): void {\n  localStorage.setItem(\"demo\", \"value\");\n}\n");
+
+    let stderr = "";
+    try {
+      runTool(cwd, ["check", "--base", "HEAD"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
   }, 20_000);
 });
 

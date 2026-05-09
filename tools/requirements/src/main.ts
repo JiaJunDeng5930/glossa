@@ -53,11 +53,15 @@ interface Registry {
   diagnostics: Diagnostic[];
 }
 
-// @intent requirements.types.hunk_line The hunk-line interface records an added staged diff line with its new source line.
+// @intent requirements.types.hunk_line The hunk-line interface records changed staged or base diff lines with source locations.
 interface HunkLine {
   path: string;
+  // @constraint requirements.types.hunk_line.old_path The oldPath member preserves deleted-file context for old blob lookup.
+  oldPath: string;
   newLine: number;
   text: string;
+  // @constraint requirements.types.hunk_line.deleted The deleted member marks removal hunks so deletion-only changes enter anchor checks.
+  deleted: boolean;
 }
 
 const TAGS = ["@behavior", "@constraint", "@intent", "@verifies"] as const;
@@ -77,6 +81,7 @@ function main(): void {
   }
 
   const staged = args.includes("--staged");
+  const base = parseOptionValue(args, "--base");
   const mode: SnapshotMode = staged ? "staged" : "worktree";
   const files = loadSnapshot(mode);
   const registry = buildRegistry(files);
@@ -96,7 +101,9 @@ function main(): void {
 
   const diagnostics = [...registry.diagnostics];
   diagnostics.push(...checkAgentsIndex(registry, mode));
-  if (mode === "staged") {
+  if (base) {
+    diagnostics.push(...checkBaseDiffAnchors(files, registry, base));
+  } else if (mode === "staged") {
     diagnostics.push(...checkStagedDiffAnchors(files, registry));
   }
   printDiagnostics(diagnostics);
@@ -110,9 +117,16 @@ function parseCommand(args: string[]): Command {
   return "help";
 }
 
+// @behavior requirements.cli.option The option parser reads flag values used by staged and base comparison modes.
+function parseOptionValue(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  if (index === -1) return undefined;
+  return args[index + 1];
+}
+
 // @behavior requirements.cli.help The help output lists the public commands used by npm scripts and hooks.
 function printHelp(): void {
-  console.log("Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged]");
+  console.log("Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged] [--base <git-ref>]");
 }
 
 // @behavior requirements.snapshot The loader returns TypeScript source text from the requested repository snapshot.
@@ -513,12 +527,21 @@ function extractIndexBlock(text: string): string | undefined {
 
 // @behavior requirements.diff The staged diff checker requires local requirement anchors for changed contracts, states, effects, failures, safety rules, structures, and tests.
 function checkStagedDiffAnchors(files: SourceFile[], registry: Registry): Diagnostic[] {
+  return checkDiffAnchors(files, registry, parseGitDiff(["diff", "--cached", "--unified=0", "--", "*.ts", "*.tsx", "*.mts", "*.cts"]), "HEAD");
+}
+
+// @behavior requirements.diff.base The base diff checker applies forced-anchor diagnostics to pull-request changes in CI.
+function checkBaseDiffAnchors(files: SourceFile[], registry: Registry, base: string): Diagnostic[] {
+  return checkDiffAnchors(files, registry, parseGitDiff(["diff", "--unified=0", base, "--", "*.ts", "*.tsx", "*.mts", "*.cts"]), base);
+}
+
+// @behavior requirements.diff.check The diff checker requires local requirement anchors for changed contracts, states, effects, failures, safety rules, structures, and tests.
+function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLine[], oldRef: string): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const filesByPath = new Map(files.map((file) => [file.path, file]));
   const commentsByFile = groupComments(registry.comments);
-  const lines = parseStagedDiff();
   for (const line of lines) {
-    const file = filesByPath.get(line.path);
+    const file = filesByPath.get(line.path) ?? loadOldSourceFile(oldRef, line.oldPath);
     if (!file) continue;
     if (/@(behavior|constraint|intent|verifies)\s+/.test(line.text)) continue;
     const categories = classifyChangedLine(line.text, line.path, file, line.newLine);
@@ -537,33 +560,57 @@ function checkStagedDiffAnchors(files: SourceFile[], registry: Registry): Diagno
   return diagnostics;
 }
 
-// @behavior requirements.diff.parse The diff parser extracts added and deleted staged lines with adjacent new-file line numbers.
-function parseStagedDiff(): HunkLine[] {
-  const diff = git(["diff", "--cached", "--unified=0", "--", "*.ts", "*.tsx", "*.mts", "*.cts"]);
+// @behavior requirements.diff.old_blob The old-blob loader provides syntax context for staged or base diffs that delete a TypeScript file.
+function loadOldSourceFile(ref: string, path: string): SourceFile | undefined {
+  try {
+    return { path, text: git(["show", `${ref}:${path}`]) };
+  } catch {
+    return undefined;
+  }
+}
+
+// @behavior requirements.diff.parse The diff parser extracts added and deleted staged lines with adjacent source line numbers.
+function parseGitDiff(args: string[]): HunkLine[] {
+  const diff = git(args);
   const lines: HunkLine[] = [];
   let path = "";
+  let oldPath = "";
   let newLine = 0;
+  let oldLine = 0;
   for (const raw of diff.split(/\r?\n/)) {
+    const oldFileMatch = raw.match(/^--- a\/(.+)$/);
+    if (oldFileMatch) {
+      oldPath = oldFileMatch[1]!;
+      if (!path) path = oldPath;
+      continue;
+    }
     const fileMatch = raw.match(/^\+\+\+ b\/(.+)$/);
     if (fileMatch) {
       path = fileMatch[1]!;
       continue;
     }
-    const hunkMatch = raw.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (raw === "+++ /dev/null") {
+      path = oldPath;
+      continue;
+    }
+    const hunkMatch = raw.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
     if (hunkMatch) {
-      newLine = Number(hunkMatch[1]!);
+      oldLine = Number(hunkMatch[1]!);
+      newLine = Number(hunkMatch[2]!);
       continue;
     }
     if (!path || raw.startsWith("+++") || raw.startsWith("---")) continue;
     if (raw.startsWith("+")) {
-      lines.push({ path, newLine, text: raw.slice(1) });
+      lines.push({ path, oldPath, newLine, text: raw.slice(1), deleted: false });
       newLine += 1;
       continue;
     }
     if (raw.startsWith("-")) {
-      lines.push({ path, newLine: Math.max(1, newLine), text: raw.slice(1) });
+      lines.push({ path, oldPath, newLine: Math.max(1, oldLine), text: raw.slice(1), deleted: true });
+      oldLine += 1;
       continue;
     }
+    oldLine += 1;
     newLine += 1;
   }
   return lines;

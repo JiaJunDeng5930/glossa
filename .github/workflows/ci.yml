@@ -9,11 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run req:check
+      - run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npm run req:check -- --base "origin/${{ github.base_ref }}"
+          else
+            npm run req:check
+          fi
       - run: npm run verify
