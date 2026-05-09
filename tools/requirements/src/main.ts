@@ -280,8 +280,10 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
     const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
     const nodes = collectBindableNodes(source);
     const firstCodeStart = findFirstCodeStart(source);
+    const firstStatement = source.statements[0];
+    const firstStatementIsImport = !!firstStatement && (ts.isImportDeclaration(firstStatement) || ts.isImportEqualsDeclaration(firstStatement));
     for (const comment of fileComments) {
-      if (comment.end <= firstCodeStart && onlyWhitespaceAndComments(file.text.slice(0, comment.start))) {
+      if (firstStatementIsImport && comment.end <= firstCodeStart && onlyWhitespaceAndComments(file.text.slice(0, comment.start))) {
         comment.target = { kind: "file", start: 0, end: file.text.length, line: 1, endLine: offsetLine(file.text, file.text.length), isFile: true };
         continue;
       }
@@ -323,6 +325,8 @@ function isBindableNode(node: ts.Node): boolean {
     ts.isFunctionDeclaration(node) ||
     ts.isClassDeclaration(node) ||
     ts.isInterfaceDeclaration(node) ||
+    ts.isPropertySignature(node) ||
+    ts.isMethodSignature(node) ||
     ts.isTypeAliasDeclaration(node) ||
     ts.isEnumDeclaration(node) ||
     ts.isVariableStatement(node) ||
@@ -517,11 +521,11 @@ function checkStagedDiffAnchors(files: SourceFile[], registry: Registry): Diagno
     const file = filesByPath.get(line.path);
     if (!file) continue;
     if (/@(behavior|constraint|intent|verifies)\s+/.test(line.text)) continue;
-    const categories = classifyChangedLine(line.text, line.path);
+    const categories = classifyChangedLine(line.text, line.path, file, line.newLine);
     if (categories.length === 0) continue;
     const comments = commentsByFile.get(line.path) ?? [];
     for (const category of categories) {
-      if (hasAnchorForLine(comments, line.newLine, category)) continue;
+      if (hasAnchorForLine(comments, line.newLine, category, file)) continue;
       diagnostics.push({
         file: line.path,
         line: line.newLine,
@@ -561,20 +565,44 @@ function parseStagedDiff(): HunkLine[] {
   return lines;
 }
 
-// @behavior requirements.diff.classify The classifier maps TypeScript diff lines to the forced-anchor categories from the skill.
-function classifyChangedLine(text: string, path: string): string[] {
+// @behavior requirements.diff.classify The classifier maps TypeScript diff lines and syntax context to the forced-anchor categories from the skill.
+function classifyChangedLine(text: string, path: string, file: SourceFile, line: number): string[] {
   const trimmed = text.trim();
   if (trimmed.length === 0 || trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("import ")) return [];
-  if (/^[A-Za-z_$][\w$?]*:\s/.test(trimmed)) return [];
+  if (trimmed.startsWith("\"") || trimmed.startsWith("'") || trimmed.startsWith("`")) return [];
+  if (isTestPath(path)) {
+    return /\b(expect|assert|mock|fixture|snapshot|toEqual|toBe|toThrow)\b/.test(trimmed) ? ["test-expectation"] : [];
+  }
+  const typeMember = isTypeMemberLine(file, line);
+  if (/^[A-Za-z_$][\w$?]*:\s/.test(trimmed) && !typeMember) return [];
   const categories = new Set<string>();
-  if (/^(export|public)\b/.test(trimmed)) categories.add("contract");
+  if (/^(export|public)\b/.test(trimmed) || typeMember) categories.add("contract");
   if (/\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b|\bswitch\b|\bcase\b|transition|setState|mark[A-Z]|complete|fail|cancel|retry/.test(trimmed)) categories.add("state-policy");
   if (/fetch\(|chrome\.|indexedDB|localStorage|sessionStorage|\.put\(|\.add\(|\.delete\(|\.set\(|sendMessage|connect\(|postMessage|console\.|trace|emit|dispatchEvent|createObjectStore/.test(trimmed)) categories.add("side-effect");
   if (/\btry\b|\bcatch\b|\bfinally\b|\bthrow\b|Error\b|timeout|retry|fallback|AbortController|Promise\.race|setTimeout/.test(trimmed)) categories.add("failure-policy");
   if (/sanitize|secret|apiKey|token|credential|password|permission|origin|URL|url|editable|notranslate|translate=|escape|redact|privacy/.test(trimmed)) categories.add("access-safety");
   if (/\binterface\b|\babstract\s+class\b|\bclass\s+\w*(Adapter|Registry|Factory|Provider|Resolver|Middleware|Plugin|Bridge|Wrapper)\b/.test(trimmed)) categories.add("structure-intent");
-  if (isTestPath(path) && /\b(expect|assert|mock|fixture|snapshot|toEqual|toBe|toThrow)\b/.test(trimmed)) categories.add("test-expectation");
   return [...categories];
+}
+
+// @behavior requirements.diff.type_member The syntax classifier keeps interface and type-literal members visible to contract and state-policy checks.
+function isTypeMemberLine(file: SourceFile, line: number): boolean {
+  const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
+  let matched = false;
+  const visit = (node: ts.Node) => {
+    if (matched) return;
+    if (ts.isPropertySignature(node) || ts.isMethodSignature(node)) {
+      const startLine = offsetLine(file.text, node.getStart(source));
+      const endLine = offsetLine(file.text, node.getEnd());
+      if (startLine <= line && line <= endLine) {
+        matched = true;
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return matched;
 }
 
 // @behavior requirements.diff.group The grouping helper indexes parsed comments by source path for anchor lookup.
@@ -588,10 +616,12 @@ function groupComments(comments: RequirementComment[]): Map<string, RequirementC
   return result;
 }
 
-// @constraint requirements.diff.anchor The anchor lookup accepts a non-file target whose span covers the changed line and whose tag matches the forced category.
-function hasAnchorForLine(comments: RequirementComment[], line: number, category: string): boolean {
+// @constraint requirements.diff.anchor The anchor lookup accepts a non-file target whose local span covers the changed line and whose tag matches the forced category.
+function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile): boolean {
+  const typeMember = isTypeMemberLine(file, line);
   return comments.some((comment) => {
     if (!comment.target || comment.target.isFile) return false;
+    if (typeMember && (category === "contract" || category === "state-policy") && comment.target.line !== line) return false;
     const startLine = comment.line;
     const endLine = comment.target.endLine;
     if (line < startLine || line > endLine) return false;

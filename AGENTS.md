@@ -103,12 +103,13 @@ Requirement truth lives in one-sentence source comments. Use only `@behavior`, `
 |requirements.cli.command|requirements.cli.command.{}
 |requirements.cli.help|requirements.cli.help.{}
 |requirements.diagnostic|requirements.diagnostic.{}
-|requirements.diff|requirements.diff.{anchor,classify,group,parse,rule}
+|requirements.diff|requirements.diff.{anchor,classify,group,parse,rule,type_member}
 |requirements.diff.anchor|requirements.diff.anchor.{}
 |requirements.diff.classify|requirements.diff.classify.{}
 |requirements.diff.group|requirements.diff.group.{}
 |requirements.diff.parse|requirements.diff.parse.{}
 |requirements.diff.rule|requirements.diff.rule.{}
+|requirements.diff.type_member|requirements.diff.type_member.{}
 |requirements.git|requirements.git.{}
 |requirements.location|requirements.location.{}
 |requirements.output|requirements.output.{diagnostics,scan}
