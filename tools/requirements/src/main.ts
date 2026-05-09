@@ -791,6 +791,8 @@ function targetLocallyCoversLine(target: BoundTarget, line: number, category: st
 function requiresExactAnchorLine(kind: string, category: string): boolean {
   // @constraint requirements.change_anchoring.local_anchor.inner_scope.structure_test_span Structure-intent and test-expectation anchors keep span matching for their bound syntax unit.
   if (category === "structure-intent" || category === "test-expectation") return false;
+  // @constraint requirements.change_anchoring.local_anchor.inner_scope.type_alias_span Type-alias anchors cover multiline contract and state-policy type shapes.
+  if (kind === "TypeAliasDeclaration" && (category === "contract" || category === "state-policy")) return false;
   // @constraint requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.declaration_list Exact-line matching applies to broad declaration target kinds.
   return ["FunctionDeclaration", "MethodDeclaration", "ClassDeclaration", "InterfaceDeclaration", "TypeAliasDeclaration"].includes(kind);
 }

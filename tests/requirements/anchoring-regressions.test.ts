@@ -47,6 +47,51 @@ describe("requirement anchor regressions", () => {
     runGit(cwd, ["add", "src/main.ts"]);
     expect(checkStagedStderr(cwd)).toContain("src/main.ts:3 missing-requirement-anchor");
   }, 20_000);
+
+  // @verifies requirements.change_anchoring.local_anchor.inner_scope.type_alias_span
+  it("accepts a multiline type alias state change anchored by the alias", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo command has verified behavior.",
+        "// @constraint demo.status The demo status alias exposes readiness states.",
+        "export type DemoStatus =",
+        "  | \"ready\";",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(cwd, "tests/main.test.ts"),
+      [
+        "import { expect, it } from \"vitest\";",
+        "",
+        "// @verifies demo.status",
+        "it(\"checks status\", () => {",
+        "  expect(true).toBe(true);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo command has verified behavior.",
+        "// @constraint demo.status The demo status alias exposes readiness states.",
+        "export type DemoStatus =",
+        "  | \"ready\"",
+        "  | \"pending\";",
+        "",
+      ].join("\n"),
+    );
+    runGit(cwd, ["add", "src/main.ts"]);
+
+    runTool(cwd, ["check", "--staged"]);
+  }, 20_000);
 });
 
 function writeSeed(cwd: string): void {

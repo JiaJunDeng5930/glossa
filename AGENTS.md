@@ -163,11 +163,12 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.change_anchoring.file_local_lookup|requirements.change_anchoring.file_local_lookup.{bucket}
 |requirements.change_anchoring.file_local_lookup.bucket|requirements.change_anchoring.file_local_lookup.bucket.{}
 |requirements.change_anchoring.local_anchor|requirements.change_anchoring.local_anchor.{inner_scope,type_member_target}
-|requirements.change_anchoring.local_anchor.inner_scope|requirements.change_anchoring.local_anchor.inner_scope.{broad_declaration_line,exact_target_kinds,structure_test_span,type_member_span}
+|requirements.change_anchoring.local_anchor.inner_scope|requirements.change_anchoring.local_anchor.inner_scope.{broad_declaration_line,exact_target_kinds,structure_test_span,type_alias_span,type_member_span}
 |requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line|requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line.{}
 |requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds|requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.{declaration_list}
 |requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.declaration_list|requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.declaration_list.{}
 |requirements.change_anchoring.local_anchor.inner_scope.structure_test_span|requirements.change_anchoring.local_anchor.inner_scope.structure_test_span.{}
+|requirements.change_anchoring.local_anchor.inner_scope.type_alias_span|requirements.change_anchoring.local_anchor.inner_scope.type_alias_span.{}
 |requirements.change_anchoring.local_anchor.inner_scope.type_member_span|requirements.change_anchoring.local_anchor.inner_scope.type_member_span.{}
 |requirements.change_anchoring.local_anchor.type_member_target|requirements.change_anchoring.local_anchor.type_member_target.{}
 |requirements.change_anchoring.previous_deletion_anchor|requirements.change_anchoring.previous_deletion_anchor.{}
