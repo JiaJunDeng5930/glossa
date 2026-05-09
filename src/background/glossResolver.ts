@@ -1,3 +1,4 @@
+// @behavior glossa.background.gloss_resolver The gloss resolver emits lookup-first token outcomes from page memory, lexicon state, gloss cache, and framed AI work.
 import pLimit from "p-limit";
 
 import { buildGlossCacheKey } from "../core/cache";

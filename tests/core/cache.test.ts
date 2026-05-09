@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildCardCacheKey, buildGlossCacheKey } from "../../src/core/cache";
 
+// @verifies glossa.core.cache The test verifies that cache keys include language, token, prompt, model, and card content identity.
 describe("cache keys", () => {
   it("builds stable gloss keys from target language, sentence, token span, prompt and model versions", async () => {
     const input = {

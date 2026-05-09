@@ -1,3 +1,4 @@
+// @behavior glossa.shared.messages The message module creates and validates versioned runtime envelopes for request-response and gloss-port traffic.
 import type {
   BackgroundResponseMessage,
   ContentToBackgroundMessage,

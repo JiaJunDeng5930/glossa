@@ -1,3 +1,5 @@
+// @behavior glossa.background The background layer resolves extension messages, AI requests, Anki calls, cache lookups, and vocabulary persistence.
+// @behavior glossa.background.runtime The service worker wires message handlers and gloss ports to storage-backed background services.
 import { createAnkiClient } from "./anki";
 import { createAiBackend } from "./ai";
 import { createGlossResolver } from "./glossResolver";

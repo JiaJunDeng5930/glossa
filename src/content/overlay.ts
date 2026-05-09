@@ -1,3 +1,4 @@
+// @behavior glossa.content.overlay The overlay renderer keeps source words on their baseline while applying ready, pending, hidden, and error gloss outcomes.
 import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import type { ScannedToken } from "./scanner";

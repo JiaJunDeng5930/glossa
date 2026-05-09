@@ -1,3 +1,4 @@
+// @constraint glossa.shared.diagnostics The diagnostics module emits structured trace events with sanitized tab and URL context.
 import { isErrorPayload } from "./errors";
 
 export type TraceComponent = "service-worker" | "content-script" | "options";

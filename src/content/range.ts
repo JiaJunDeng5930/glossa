@@ -1,3 +1,4 @@
+// @constraint glossa.content.range The range mapper accepts only connected tokens whose stored text and rendered rectangles still match the page.
 import { createSourceFingerprint, type ScannedToken } from "./scanner";
 
 export function rangeForToken(token: ScannedToken, doc: Document = token.textNode.ownerDocument): Range {

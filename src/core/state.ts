@@ -1,3 +1,5 @@
+// @behavior glossa.core The core layer normalizes vocabulary identity, known-word filters, cache keys, and vocabulary state transitions.
+// @behavior glossa.core.state The state module transitions vocabulary records through candidate, shown, learning, ignored, and expired states.
 import type { VocabularyRecord } from "../shared/types";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;

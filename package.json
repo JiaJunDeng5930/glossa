@@ -11,6 +11,10 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e",
+    "req:scan": "TMPDIR=/tmp tsx tools/requirements/src/main.ts scan",
+    "req:fmt-agents": "TMPDIR=/tmp tsx tools/requirements/src/main.ts fmt-agents",
+    "req:check:staged": "TMPDIR=/tmp tsx tools/requirements/src/main.ts check --staged",
+    "req:check": "TMPDIR=/tmp tsx tools/requirements/src/main.ts check",
     "prepare": "node scripts/install-hooks.mjs"
   },
   "devDependencies": {
@@ -19,6 +23,7 @@
     "@types/node": "^22.15.3",
     "esbuild": "^0.25.3",
     "jsdom": "^26.1.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"
   },

@@ -1,3 +1,4 @@
+// @behavior glossa.core.cache The cache module builds stable gloss and card keys from model, prompt, language, text, and token identity.
 import { hashText } from "../shared/hash";
 
 export interface GlossCacheKeyInput {

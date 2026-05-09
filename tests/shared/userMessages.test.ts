@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { userMessageForError } from "../../src/shared/userMessages";
 
+// @verifies glossa.shared.user_messages The test verifies that diagnostic payloads map to stable Chinese user-facing copy.
 describe("frontend user error messages", () => {
   it("maps AI diagnostics to UI copy", () => {
     expect(userMessageForError({ reason: "network", message: "fetch failed", service: "ai" }, "ai")).toBe("AI 服务访问失败");

@@ -1,3 +1,4 @@
+// @behavior glossa.content.selection The selection controller captures shortcut-held word clicks and sends DOM-grounded token candidates to the background.
 import { normalizeLemma } from "../core/state";
 import { isShortcutRelease, matchesShortcut } from "../shared/shortcut";
 import type { TokenCandidate } from "../shared/types";

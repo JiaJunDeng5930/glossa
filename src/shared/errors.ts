@@ -1,3 +1,4 @@
+// @behavior glossa.shared.errors The error module converts provider, request, and runtime failures into diagnostic payloads.
 import type { ErrorPayload, ErrorReason, ErrorService } from "./types";
 
 export class GlossaDiagnosticError extends Error {

@@ -1,3 +1,4 @@
+// @behavior glossa.background.messages The background message handler updates vocabulary records, creates Anki cards, and returns diagnostic response envelopes.
 import { buildCardCacheKey } from "../core/cache";
 import { hashText } from "../shared/hash";
 import { diagnosticPayloadFrom } from "../shared/errors";

@@ -1,3 +1,4 @@
+// @behavior glossa.popup The popup activates page translation and opens the options page while surfacing user-readable errors.
 import { isErrorPayload } from "../shared/errors";
 import { userMessageForError } from "../shared/userMessages";
 

@@ -1,3 +1,5 @@
+// @intent glossa.storage The storage layer provides the extension persistence boundary for settings, vocabulary records, and gloss caches.
+// @intent glossa.storage.db The database module wraps chrome storage and IndexedDB stores behind typed asynchronous accessors.
 import type { AnkiCardOutput, GlossaSettings, GlossItem, VocabularyRecord } from "../shared/types";
 import { DEFAULT_SETTINGS } from "../shared/types";
 

@@ -47,3 +47,92 @@ The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no sha
 The pre-commit hook runs typecheck, unit tests, and build. CI runs `npm run verify` with Chromium installed.
 
 For Chrome extension debugability work, run `.skills/chrome-extension-debugability/scripts/audit_chrome_extension_debugability.py .` as a source triage pass and run it on `dist/` after `npm run build` when checking the unpacked extension. The root audit reports `background.js` as unreadable because the service worker is a build artifact; inspect `src/background/index.ts` and `dist/background.js` together.
+
+## Requirement Comments
+
+Requirement truth lives in one-sentence source comments. Use only `@behavior`, `@constraint`, `@intent`, and `@verifies`; dotted IDs form an arbitrary-depth tree; details belong in narrower descendant IDs near the code units that implement them. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with `npm run req:fmt-agents` after requirement tag changes.
+
+<!-- BEGIN AGENTS_MD_REQUIREMENT_INDEX -->
+[Requirement Index]|root:.
+|IMPORTANT: Requirement truth lives in source comments; search source comments for an ID before changing code.
+|source:source_comments_only
+|comment_body:single_sentence
+|tags:{@behavior,@constraint,@intent,@verifies}
+|glossa|glossa.{background,content,core,options,popup,shared,storage}
+|glossa.background|glossa.background.{ai,anki,gloss_resolver,messages,runtime}
+|glossa.background.ai|glossa.background.ai.{}
+|glossa.background.anki|glossa.background.anki.{}
+|glossa.background.gloss_resolver|glossa.background.gloss_resolver.{}
+|glossa.background.messages|glossa.background.messages.{}
+|glossa.background.runtime|glossa.background.runtime.{}
+|glossa.content|glossa.content.{overlay,range,runtime,scanner,selection}
+|glossa.content.overlay|glossa.content.overlay.{}
+|glossa.content.range|glossa.content.range.{}
+|glossa.content.runtime|glossa.content.runtime.{}
+|glossa.content.scanner|glossa.content.scanner.{}
+|glossa.content.selection|glossa.content.selection.{}
+|glossa.core|glossa.core.{cache,lexicon,state}
+|glossa.core.cache|glossa.core.cache.{}
+|glossa.core.lexicon|glossa.core.lexicon.{}
+|glossa.core.state|glossa.core.state.{}
+|glossa.options|glossa.options.{}
+|glossa.popup|glossa.popup.{}
+|glossa.shared|glossa.shared.{diagnostics,errors,hash,messages,shortcut,types,user_messages}
+|glossa.shared.diagnostics|glossa.shared.diagnostics.{}
+|glossa.shared.errors|glossa.shared.errors.{}
+|glossa.shared.hash|glossa.shared.hash.{}
+|glossa.shared.messages|glossa.shared.messages.{}
+|glossa.shared.shortcut|glossa.shared.shortcut.{}
+|glossa.shared.types|glossa.shared.types.{}
+|glossa.shared.user_messages|glossa.shared.user_messages.{}
+|glossa.storage|glossa.storage.{db}
+|glossa.storage.db|glossa.storage.db.{}
+|requirements|requirements.{agents,binding,cli,diagnostic,diff,git,location,output,parse,path,registry,snapshot,types,validate}
+|requirements.agents|requirements.agents.{check,default,extract,index,parent}
+|requirements.agents.check|requirements.agents.check.{}
+|requirements.agents.default|requirements.agents.default.{}
+|requirements.agents.extract|requirements.agents.extract.{}
+|requirements.agents.index|requirements.agents.index.{}
+|requirements.agents.parent|requirements.agents.parent.{}
+|requirements.binding|requirements.binding.{first_code,kinds,nodes,trivia}
+|requirements.binding.first_code|requirements.binding.first_code.{}
+|requirements.binding.kinds|requirements.binding.kinds.{}
+|requirements.binding.nodes|requirements.binding.nodes.{}
+|requirements.binding.trivia|requirements.binding.trivia.{}
+|requirements.cli|requirements.cli.{command,help}
+|requirements.cli.command|requirements.cli.command.{}
+|requirements.cli.help|requirements.cli.help.{}
+|requirements.diagnostic|requirements.diagnostic.{}
+|requirements.diff|requirements.diff.{anchor,classify,group,parse,rule}
+|requirements.diff.anchor|requirements.diff.anchor.{}
+|requirements.diff.classify|requirements.diff.classify.{}
+|requirements.diff.group|requirements.diff.group.{}
+|requirements.diff.parse|requirements.diff.parse.{}
+|requirements.diff.rule|requirements.diff.rule.{}
+|requirements.git|requirements.git.{}
+|requirements.location|requirements.location.{}
+|requirements.output|requirements.output.{diagnostics,scan}
+|requirements.output.diagnostics|requirements.output.diagnostics.{}
+|requirements.output.scan|requirements.output.scan.{}
+|requirements.parse|requirements.parse.{comments,normalize,sentence}
+|requirements.parse.comments|requirements.parse.comments.{}
+|requirements.parse.normalize|requirements.parse.normalize.{}
+|requirements.parse.sentence|requirements.parse.sentence.{}
+|requirements.path|requirements.path.{}
+|requirements.registry|requirements.registry.{}
+|requirements.snapshot|requirements.snapshot.{sources,staged,worktree}
+|requirements.snapshot.sources|requirements.snapshot.sources.{}
+|requirements.snapshot.staged|requirements.snapshot.staged.{}
+|requirements.snapshot.worktree|requirements.snapshot.worktree.{}
+|requirements.types|requirements.types.{comment,diagnostic,hunk_line,registry,source_file,target}
+|requirements.types.comment|requirements.types.comment.{}
+|requirements.types.diagnostic|requirements.types.diagnostic.{}
+|requirements.types.hunk_line|requirements.types.hunk_line.{}
+|requirements.types.registry|requirements.types.registry.{}
+|requirements.types.source_file|requirements.types.source_file.{}
+|requirements.types.target|requirements.types.target.{}
+|requirements.validate|requirements.validate.{ancestors,leaf,tests}
+|requirements.validate.ancestors|requirements.validate.ancestors.{}
+|requirements.validate.leaf|requirements.validate.leaf.{}
+|requirements.validate.tests|requirements.validate.tests.{}
+<!-- END AGENTS_MD_REQUIREMENT_INDEX -->

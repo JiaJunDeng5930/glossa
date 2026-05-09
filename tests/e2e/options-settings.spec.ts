@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+// @verifies glossa.options The test verifies that the options page saves shortcuts, prompts, providers, Anki settings, and appearance.
 test("options page captures shortcuts, previews style changes and saves prompts", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
   await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "").replace("<script type=\"module\" src=\"../options.js\"></script>", ""));

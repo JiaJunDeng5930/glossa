@@ -1,3 +1,5 @@
+// @behavior glossa.content The content layer scans page text, renders inline glosses, and keeps page-local interaction state.
+// @behavior glossa.content.runtime The content runtime activates translation, streams DOM tokens through gloss ports, and reconciles mutation-driven rescans.
 import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";

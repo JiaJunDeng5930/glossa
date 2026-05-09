@@ -1,3 +1,4 @@
+// @behavior glossa.options The options page edits settings, verifies provider connections, previews appearance, and persists configuration.
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { formatShortcutFromEvent } from "../shared/shortcut";

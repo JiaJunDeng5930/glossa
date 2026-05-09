@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { KNOWN_WORD_LISTS, createKnownWordSet } from "../../src/core/lexicon";
 
+// @verifies glossa.core.lexicon The test verifies that known-word list presets load normalized filter entries.
 describe("known-word lists", () => {
   it("exposes curriculum, exam and frequency filters", () => {
     expect(KNOWN_WORD_LISTS.map((list) => list.id)).toEqual([
