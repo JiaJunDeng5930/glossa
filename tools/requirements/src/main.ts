@@ -542,12 +542,12 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
   const filesByPath = new Map(files.map((file) => [file.path, file]));
   const commentsByFile = groupComments(registry.comments);
   for (const line of lines) {
-    const file = filesByPath.get(line.path) ?? loadOldSourceFile(oldRef, line.oldPath);
+    const file = line.deleted ? loadOldSourceFile(oldRef, line.oldPath) ?? filesByPath.get(line.path) : filesByPath.get(line.path) ?? loadOldSourceFile(oldRef, line.oldPath);
     if (!file) continue;
     if (/@(behavior|constraint|intent|verifies)\s+/.test(line.text)) continue;
     const categories = classifyChangedLine(line.text, line.path, file, line.newLine);
     if (categories.length === 0) continue;
-    const comments = commentsByFile.get(line.path) ?? [];
+    const comments = line.deleted ? bindRequirementCommentsForFile(file) : commentsByFile.get(line.path) ?? [];
     for (const category of categories) {
       if (hasAnchorForLine(comments, line.newLine, category, file, line.text)) continue;
       diagnostics.push({
@@ -561,13 +561,21 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
   return diagnostics;
 }
 
-// @behavior requirements.diff.old_blob The old-blob loader provides syntax context for staged or base diffs that delete a TypeScript file.
+// @behavior requirements.diff.old_blob The old-blob loader provides syntax context for staged or base diffs that delete TypeScript lines.
 function loadOldSourceFile(ref: string, path: string): SourceFile | undefined {
   try {
     return { path, text: git(["show", `${ref}:${path}`]) };
   } catch {
     return undefined;
   }
+}
+
+// @behavior requirements.diff.old_comments The old-comment binder keeps requirement anchors available when deleted lines need old snapshot context.
+function bindRequirementCommentsForFile(file: SourceFile): RequirementComment[] {
+  const diagnostics: Diagnostic[] = [];
+  const comments = parseRequirements(file, diagnostics);
+  bindRequirements([file], comments, diagnostics);
+  return comments;
 }
 
 // @behavior requirements.diff.parse The diff parser extracts added and deleted staged lines with adjacent source line numbers.

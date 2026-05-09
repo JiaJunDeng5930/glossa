@@ -15,7 +15,7 @@ describe("requirement automation tool", () => {
     const output = runTool(process.cwd(), ["help"]);
 
     expect(output).toContain("Usage: tsx tools/requirements/src/main.ts");
-  });
+  }, 20_000);
 
   // @verifies requirements.snapshot.worktree The test verifies that the worktree command can scan editable source files.
   // @verifies requirements.snapshot.staged The test verifies that the staged command can read the Git index.
@@ -111,6 +111,7 @@ describe("requirement automation tool", () => {
 
   // @verifies requirements.diff.parse The test verifies that staged checking records deletion-only hunks as changed lines.
   // @verifies requirements.diff.old_blob The test verifies that staged checking loads deleted file content for syntax context.
+  // @verifies requirements.diff.old_comments The test verifies that staged checking binds comments from the deleted-line source snapshot.
   // @verifies requirements.types.hunk_line.old_path The test verifies that deleted-file hunks retain their old source path.
   // @verifies requirements.types.hunk_line.deleted The test verifies that deleted hunks are marked for anchor diagnostics.
   it("rejects an unanchored deletion-only side effect change", () => {
@@ -136,6 +137,28 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
+    runGit(cwd, ["add", "src/main.ts"]);
+
+    let stderr = "";
+    try {
+      runTool(cwd, ["check", "--staged"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
+  }, 20_000);
+
+  // @verifies requirements.diff.old_blob The test verifies that deleted type members are classified against the old source snapshot.
+  // @verifies requirements.diff.type_member_export The test verifies that deleted exported type members are treated as public contract changes.
+  it("rejects an unanchored staged deleted exported type member", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(join(cwd, "src/main.ts"), "export interface DemoContract {\n  value: string;\n}\n");
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(join(cwd, "src/main.ts"), "export interface DemoContract {\n}\n");
     runGit(cwd, ["add", "src/main.ts"]);
 
     let stderr = "";

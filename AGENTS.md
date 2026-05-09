@@ -104,13 +104,14 @@ Requirement truth lives in one-sentence source comments. Use only `@behavior`, `
 |requirements.cli.help|requirements.cli.help.{}
 |requirements.cli.option|requirements.cli.option.{}
 |requirements.diagnostic|requirements.diagnostic.{}
-|requirements.diff|requirements.diff.{anchor,base,check,classify,group,old_blob,parse,rule,type_member,type_member_export,type_member_export_modifier}
+|requirements.diff|requirements.diff.{anchor,base,check,classify,group,old_blob,old_comments,parse,rule,type_member,type_member_export,type_member_export_modifier}
 |requirements.diff.anchor|requirements.diff.anchor.{}
 |requirements.diff.base|requirements.diff.base.{}
 |requirements.diff.check|requirements.diff.check.{}
 |requirements.diff.classify|requirements.diff.classify.{}
 |requirements.diff.group|requirements.diff.group.{}
 |requirements.diff.old_blob|requirements.diff.old_blob.{}
+|requirements.diff.old_comments|requirements.diff.old_comments.{}
 |requirements.diff.parse|requirements.diff.parse.{}
 |requirements.diff.rule|requirements.diff.rule.{}
 |requirements.diff.type_member|requirements.diff.type_member.{}
