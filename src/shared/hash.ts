@@ -1,4 +1,4 @@
-// @behavior glossa.shared.hash The hash helper returns deterministic SHA-256 text digests across browser and Node runtimes.
+// @constraint glossa.cache.hash Text digest generation returns the same SHA-256 value in browser and Node runtimes.
 export async function hashText(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
   const subtle = globalThis.crypto?.subtle;

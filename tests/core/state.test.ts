@@ -7,7 +7,7 @@ import {
   transitionExpiredLearning
 } from "../../src/core/state";
 
-// @verifies glossa.core.state The test verifies vocabulary record creation, shown transitions, clicked learning state, and expiry.
+// @verifies glossa.vocabulary.state The test verifies vocabulary record creation, shown transitions, clicked learning state, and expiry.
 describe("vocabulary state machine", () => {
   it("moves shown candidates into the known state", () => {
     const now = Date.parse("2026-05-03T00:00:00.000Z");

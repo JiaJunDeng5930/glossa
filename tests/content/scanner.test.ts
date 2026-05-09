@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { scanDocumentText, scanDocumentTextInChunks } from "../../src/content/scanner";
 
-// @verifies glossa.content.scanner The test verifies that scanning extracts English candidates with sentence context and skips inert text.
+// @verifies glossa.translation.scanning The test verifies that scanning extracts English candidates with sentence context and skips inert text.
 describe("content scanner", () => {
   it("extracts English word candidates with sentence context and skips inert text", () => {
     document.body.innerHTML = `

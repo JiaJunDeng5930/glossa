@@ -1,4 +1,4 @@
-// @behavior glossa.shared.user_messages The user-message mapper turns diagnostic payloads into stable Chinese UI copy.
+// @behavior glossa.runtime.user_messages Diagnostic payloads shown to users become stable Chinese UI messages.
 import type { ErrorPayload, ErrorService } from "./types";
 
 export function userMessageForError(error: ErrorPayload | undefined, fallbackService: ErrorService): string {

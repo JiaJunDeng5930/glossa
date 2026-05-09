@@ -1,6 +1,6 @@
-// @behavior glossa The extension translates unfamiliar English words inline and persists vocabulary decisions.
-// @behavior glossa.shared The shared layer defines contracts used across content scripts, service workers, options, and popup pages.
-// @intent glossa.shared.types The type module defines the runtime data shapes shared by every extension context.
+// @behavior glossa Activated pages show inline Chinese glosses for unfamiliar English words and remember vocabulary decisions.
+// @constraint glossa.runtime Every extension context uses the same message, diagnostic, shortcut, error, and user-message rules.
+// @intent glossa.runtime.contracts The shared payload boundary exists to keep runtime messages and persisted records consistent across extension contexts.
 export type VocabularyState = "known" | "learning_active" | "ignored" | "candidate";
 
 export interface VocabularyRecord {

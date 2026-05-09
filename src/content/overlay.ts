@@ -1,4 +1,4 @@
-// @behavior glossa.content.overlay The overlay renderer keeps source words on their baseline while applying ready, pending, hidden, and error gloss outcomes.
+// @behavior glossa.translation.rendering Ready, pending, hidden, and error gloss outcomes keep the source word on its original text baseline.
 import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import type { ScannedToken } from "./scanner";

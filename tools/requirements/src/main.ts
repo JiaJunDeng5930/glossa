@@ -1,21 +1,21 @@
-// @behavior requirements The tool validates source-comment requirements and updates the AGENTS.md retrieval index.
+// @behavior requirements Requirement commands reject invalid source-comment requirements and keep the AGENTS.md index synchronized.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import ts from "typescript";
 
 type RequirementTag = "@behavior" | "@constraint" | "@intent" | "@verifies";
-// @intent requirements.types The internal type declarations define source snapshots, comments, bindings, diagnostics, registries, and staged diff lines.
+// @intent requirements.records The scan record boundary exists so validation, diagnostics, and diff checks share one in-memory repository view.
 type SnapshotMode = "worktree" | "staged";
 type Command = "scan" | "fmt-agents" | "check" | "help";
 
-// @intent requirements.types.source_file The source-file interface carries one TypeScript path and its snapshot text.
+// @intent requirements.records.source_file Source snapshots pair each TypeScript path with the exact text selected for validation.
 interface SourceFile {
   path: string;
   text: string;
 }
 
-// @intent requirements.types.comment The requirement-comment interface records parsed tag data and its bound syntax target.
+// @intent requirements.records.comment Parsed comments retain tag, ID, sentence, source location, and bound code unit for validation.
 interface RequirementComment {
   tag: RequirementTag;
   id: string;
@@ -27,9 +27,9 @@ interface RequirementComment {
   target?: BoundTarget;
 }
 
-// @intent requirements.types.target The bound-target interface records the syntax span that owns a requirement comment.
+// @intent requirements.records.target Bound targets identify the concrete syntax span justified by one requirement comment.
 interface BoundTarget {
-  // @constraint requirements.types.target.kind The kind member stores the TypeScript syntax kind used in scan output and anchor checks.
+  // @constraint requirements.records.target.kind Target kind values stay aligned with TypeScript syntax names used in scan output and anchor checks.
   kind: string;
   start: number;
   end: number;
@@ -38,7 +38,7 @@ interface BoundTarget {
   isFile: boolean;
 }
 
-// @intent requirements.types.diagnostic The diagnostic interface defines compiler-style requirement validation output.
+// @intent requirements.records.diagnostic Requirement failures share one compiler-style diagnostic shape.
 interface Diagnostic {
   file: string;
   line: number;
@@ -46,7 +46,7 @@ interface Diagnostic {
   message: string;
 }
 
-// @intent requirements.types.registry The registry interface groups declarations, verifications, and diagnostics for one scan.
+// @intent requirements.records.registry One scan registry groups declarations, verifications, and diagnostics for cross-file validation.
 interface Registry {
   comments: RequirementComment[];
   declarations: Map<string, RequirementComment>;
@@ -54,14 +54,14 @@ interface Registry {
   diagnostics: Diagnostic[];
 }
 
-// @intent requirements.types.hunk_line The hunk-line interface records changed staged or base diff lines with source locations.
+// @intent requirements.records.hunk_line Changed diff lines retain path, old path, location, text, and deletion state for anchor enforcement.
 interface HunkLine {
   path: string;
-  // @constraint requirements.types.hunk_line.old_path The oldPath member preserves deleted-file context for old blob lookup.
+  // @constraint requirements.records.hunk_line.old_path Deleted-file checks retain the old path for source snapshot lookup.
   oldPath: string;
   newLine: number;
   text: string;
-  // @constraint requirements.types.hunk_line.deleted The deleted member marks removal hunks so deletion-only changes enter anchor checks.
+  // @constraint requirements.records.hunk_line.deleted Removed lines stay distinguishable so deletion-only changes enter anchor checks.
   deleted: boolean;
 }
 
@@ -72,7 +72,7 @@ const INDEX_START = "<!-- BEGIN AGENTS_MD_REQUIREMENT_INDEX -->";
 const INDEX_END = "<!-- END AGENTS_MD_REQUIREMENT_INDEX -->";
 const ID_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
 
-// @behavior requirements.cli The entrypoint dispatches the requested requirement command and exits with compiler-style diagnostics.
+// @behavior requirements.commands Running a requirement command produces deterministic diagnostics and exit status.
 function main(): void {
   const args = process.argv.slice(2);
   const command = parseCommand(args);
@@ -111,32 +111,32 @@ function main(): void {
   process.exitCode = diagnostics.length > 0 ? 1 : 0;
 }
 
-// @behavior requirements.cli.command The parser maps npm script arguments to one stable tool operation.
+// @behavior requirements.commands.command Unknown requirement commands fall back to help output.
 function parseCommand(args: string[]): Command {
   const command = args.find((arg) => !arg.startsWith("--")) ?? "help";
   if (command === "scan" || command === "fmt-agents" || command === "check") return command;
   return "help";
 }
 
-// @behavior requirements.cli.option The option parser reads flag values used by staged and base comparison modes.
+// @behavior requirements.commands.option Staged and base comparison flags read the following argument as their ref value.
 function parseOptionValue(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   if (index === -1) return undefined;
   return args[index + 1];
 }
 
-// @behavior requirements.cli.help The help output lists the public commands used by npm scripts and hooks.
+// @behavior requirements.commands.help Help output lists the public commands and comparison options used by npm scripts and hooks.
 function printHelp(): void {
   console.log("Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged] [--base <git-ref>]");
 }
 
-// @behavior requirements.snapshot The loader returns TypeScript source text from the requested repository snapshot.
+// @behavior requirements.snapshots Validation reads worktree files or Git index blobs according to the selected snapshot.
 function loadSnapshot(mode: SnapshotMode): SourceFile[] {
   if (mode === "staged") return loadStagedSnapshot();
   return listWorktreeFiles().map((path) => ({ path, text: readFileSync(path, "utf8") }));
 }
 
-// @behavior requirements.snapshot.worktree The worktree scanner includes editable TypeScript sources and excludes generated directories.
+// @behavior requirements.snapshots.worktree Worktree validation includes editable TypeScript sources under the repository root.
 function listWorktreeFiles(root = "."): string[] {
   const result: string[] = [];
   const entries = readdirSync(root);
@@ -154,7 +154,7 @@ function listWorktreeFiles(root = "."): string[] {
   return result.sort();
 }
 
-// @behavior requirements.snapshot.staged The staged scanner reads Git index blobs so partially staged files are validated from their committed snapshot.
+// @behavior requirements.snapshots.staged Staged validation reads Git index blobs so partially staged files use their committed snapshot.
 function loadStagedSnapshot(): SourceFile[] {
   const paths = git(["ls-files", "-z"]).split("\0").filter(Boolean).filter(isSourcePath);
   const files: SourceFile[] = [];
@@ -169,7 +169,7 @@ function loadStagedSnapshot(): SourceFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-// @constraint requirements.snapshot.sources The source filter keeps generated output and vendored dependencies outside the requirement registry.
+// @constraint requirements.snapshots.sources Generated output, vendored dependencies, declaration files, and skill files stay outside requirement validation.
 function isSourcePath(path: string): boolean {
   const normalized = normalizePath(path);
   const parts = normalized.split("/");
@@ -179,7 +179,8 @@ function isSourcePath(path: string): boolean {
   return [...SOURCE_EXTENSIONS].some((extension) => normalized.endsWith(extension));
 }
 
-// @behavior requirements.registry The registry builder parses comments, binds them to syntax nodes, and validates cross-file properties.
+// @behavior requirements.protocol Requirement comments form a validated tree of declarations, code bindings, and verification links.
+// @behavior requirements.protocol.registry One command invocation treats declarations and verification links as a single repository requirement tree.
 function buildRegistry(files: SourceFile[]): Registry {
   const diagnostics: Diagnostic[] = [];
   const comments: RequirementComment[] = [];
@@ -207,7 +208,7 @@ function buildRegistry(files: SourceFile[]): Registry {
   return { comments, declarations, verifications, diagnostics };
 }
 
-// @behavior requirements.parse The parser extracts exactly one requirement tag, dotted ID, and sentence from each matching comment.
+// @constraint requirements.protocol.comments A source comment becomes a requirement only with one tag, one dotted ID, and one sentence.
 function parseRequirements(file: SourceFile, diagnostics: Diagnostic[]): RequirementComment[] {
   const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
   const ranges = collectCommentRanges(file.text, source);
@@ -239,7 +240,7 @@ function parseRequirements(file: SourceFile, diagnostics: Diagnostic[]): Require
   return comments;
 }
 
-// @behavior requirements.parse.comments The comment collector uses TypeScript trivia ranges so line and block comments share one parser path.
+// @behavior requirements.protocol.comments.discovery Line comments and block comments are discoverable through TypeScript trivia ranges.
 function collectCommentRanges(text: string, source: ts.SourceFile): ts.CommentRange[] {
   const ranges: ts.CommentRange[] = [];
   const seen = new Set<string>();
@@ -261,7 +262,7 @@ function collectCommentRanges(text: string, source: ts.SourceFile): ts.CommentRa
   return ranges.sort((a, b) => a.pos - b.pos);
 }
 
-// @behavior requirements.parse.normalize The normalizer removes TypeScript comment markers before tag parsing.
+// @behavior requirements.protocol.comments.normalization Comment markers are removed before requirement text is validated.
 function normalizeCommentText(raw: string): string {
   if (raw.startsWith("//")) return raw.replace(/^\/\/\s?/, "").trim();
   return raw
@@ -273,14 +274,14 @@ function normalizeCommentText(raw: string): string {
     .trim();
 }
 
-// @constraint requirements.parse.sentence The sentence validator accepts one terminal sentence mark and rejects multiple sentence boundaries.
+// @constraint requirements.protocol.comments.sentence Requirement sentences use one terminal sentence mark and one sentence boundary.
 function isOneSentence(sentence: string): boolean {
   if (!/[.!?]$/.test(sentence)) return false;
   const withoutFinal = sentence.slice(0, -1);
   return !/[.!?]\s+\S/.test(withoutFinal);
 }
 
-// @behavior requirements.binding The binder attaches each requirement comment to one file, declaration, statement, expression, or test node.
+// @constraint requirements.protocol.binding Every requirement comment attaches to exactly one file, declaration, statement, expression, or test node.
 function bindRequirements(files: SourceFile[], comments: RequirementComment[], diagnostics: Diagnostic[]): void {
   const byFile = new Map<string, RequirementComment[]>();
   for (const comment of comments) {
@@ -312,7 +313,7 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
   }
 }
 
-// @behavior requirements.binding.nodes The node collector records declarations and executable statements that can own a requirement.
+// @constraint requirements.protocol.binding.nodes Declarations and behavior-owning statements are eligible requirement targets.
 function collectBindableNodes(source: ts.SourceFile): BoundTarget[] {
   const nodes: BoundTarget[] = [];
   const add = (node: ts.Node, kind: string) => {
@@ -333,7 +334,7 @@ function collectBindableNodes(source: ts.SourceFile): BoundTarget[] {
   return nodes.sort((a, b) => a.start - b.start || a.end - b.end);
 }
 
-// @constraint requirements.binding.kinds The bindable-kind set includes TypeScript declarations, branches, side effects, returns, throws, and test calls.
+// @constraint requirements.protocol.binding.kinds Requirement targets include declarations, branches, side effects, returns, throws, and test calls.
 function isBindableNode(node: ts.Node): boolean {
   if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return false;
   if (
@@ -369,7 +370,7 @@ function isBindableNode(node: ts.Node): boolean {
   return false;
 }
 
-// @behavior requirements.binding.first_code The first-code detector finds the first non-import syntax unit for file-level requirement binding.
+// @behavior requirements.protocol.binding.first_code File-level comments bind before the first non-import syntax unit.
 function findFirstCodeStart(source: ts.SourceFile): number {
   let first = source.text.length;
   for (const statement of source.statements) {
@@ -379,7 +380,7 @@ function findFirstCodeStart(source: ts.SourceFile): number {
   return first;
 }
 
-// @constraint requirements.binding.trivia The trivia checker accepts whitespace and ordinary comments between a requirement comment and its target node.
+// @constraint requirements.protocol.binding.trivia Only whitespace and ordinary comments may separate a requirement comment from its target node.
 function onlyWhitespaceAndComments(text: string): boolean {
   const stripped = text
     .replace(/\/\/[^\n\r]*/g, "")
@@ -388,7 +389,7 @@ function onlyWhitespaceAndComments(text: string): boolean {
   return stripped.length === 0;
 }
 
-// @behavior requirements.validate The validator enforces ID ancestry, verification references, test locations, and leaf verification coverage.
+// @behavior requirements.protocol.validation Requirement checks enforce ID ancestry, verification references, test locations, and leaf verification coverage.
 function validateDeclarations(
   comments: RequirementComment[],
   declarations: Map<string, RequirementComment>,
@@ -421,7 +422,7 @@ function validateDeclarations(
   }
 }
 
-// @behavior requirements.validate.ancestors The ancestor helper expands dotted IDs into required parent declarations.
+// @constraint requirements.protocol.validation.ancestors Every dotted ID has declared parent IDs up to its root.
 function ancestors(id: string): string[] {
   const parts = id.split(".");
   const result: string[] = [];
@@ -431,7 +432,7 @@ function ancestors(id: string): string[] {
   return result;
 }
 
-// @behavior requirements.validate.leaf The leaf detector treats declarations with no narrower declared child as concrete verification targets.
+// @constraint requirements.protocol.validation.leaf Leaf behavior and constraint IDs require verification coverage.
 function isLeaf(id: string, declarations: Map<string, RequirementComment>): boolean {
   const prefix = `${id}.`;
   for (const other of declarations.keys()) {
@@ -440,12 +441,12 @@ function isLeaf(id: string, declarations: Map<string, RequirementComment>): bool
   return true;
 }
 
-// @constraint requirements.validate.tests The test-path policy keeps verification comments inside unit, integration, or e2e test files.
+// @constraint requirements.protocol.validation.tests Verification comments stay inside unit, integration, or e2e test files.
 function isTestPath(path: string): boolean {
   return path.startsWith("tests/") || /\.test\.[cm]?tsx?$/.test(path) || /\.spec\.[cm]?tsx?$/.test(path);
 }
 
-// @behavior requirements.agents The AGENTS.md generator replaces only the generated requirement index block.
+// @behavior requirements.index Requirement declaration changes produce a matching generated AGENTS.md index block.
 function buildAgentsMd(registry: Registry): string {
   const current = existsSync("AGENTS.md") ? readFileSync("AGENTS.md", "utf8") : defaultAgentsMd();
   const block = buildIndexBlock(registry);
@@ -454,16 +455,16 @@ function buildAgentsMd(registry: Registry): string {
     const end = current.indexOf(INDEX_END) + INDEX_END.length;
     return `${current.slice(0, start)}${block}${current.slice(end)}`;
   }
-  const insertion = `\n## Requirement Comments\n\nRequirement truth lives in one-sentence source comments. Use only \`@behavior\`, \`@constraint\`, \`@intent\`, and \`@verifies\`; dotted IDs form an arbitrary-depth tree; details belong in narrower descendant IDs near the code units that implement them. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with \`npm run req:fmt-agents\` after requirement tag changes.\n\n${block}\n`;
+  const insertion = `\n## Requirement Comments\n\nRequirement truth lives in one-sentence source comments. Use only \`@behavior\`, \`@constraint\`, \`@intent\`, and \`@verifies\`; dotted IDs form an arbitrary-depth tree; details belong in narrower descendant IDs near the code units that implement them. Requirement comments describe system obligations: observable behavior, invariants, state rules, failure handling, access and safety boundaries, external effects, and test expectations. Architecture notes, layer duties, module summaries, helper roles, parser roles, loader roles, generator roles, wrapper roles, and code-navigation notes belong in ordinary engineering docs or ordinary comments. \`@intent\` is reserved for an active abstraction boundary whose current business purpose is required by the system. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with \`npm run req:fmt-agents\` after requirement tag changes.\n\n${block}\n`;
   return current.endsWith("\n") ? `${current}${insertion}` : `${current}\n${insertion}`;
 }
 
-// @behavior requirements.agents.default The default AGENTS.md body bootstraps requirement instructions when a repository has no agent guide.
+// @behavior requirements.index.default Repositories without an agent guide receive baseline requirement instructions before index generation.
 function defaultAgentsMd(): string {
   return "# Engineering Notes\n";
 }
 
-// @behavior requirements.agents.index The index builder emits deterministic rows for declared behavior, constraint, and intent IDs.
+// @constraint requirements.index.index Generated index rows are deterministic for declared behavior, constraint, and intent IDs.
 function buildIndexBlock(registry: Registry): string {
   const ids = [...registry.declarations.keys()].sort();
   const children = new Map<string, string[]>();
@@ -492,14 +493,14 @@ function buildIndexBlock(registry: Registry): string {
   ].join("\n");
 }
 
-// @behavior requirements.agents.parent The parent helper returns the immediate dotted ancestor for an ID.
+// @constraint requirements.index.parent Immediate parent IDs come from removing the last dotted segment.
 function parentId(id: string): string | undefined {
   const index = id.lastIndexOf(".");
   if (index === -1) return undefined;
   return id.slice(0, index);
 }
 
-// @behavior requirements.agents.check The index checker compares AGENTS.md against the generated index for the selected snapshot.
+// @behavior requirements.index.check Requirement checks fail when AGENTS.md differs from the index generated for the selected snapshot.
 function checkAgentsIndex(registry: Registry, mode: SnapshotMode): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   let text = "";
@@ -518,7 +519,7 @@ function checkAgentsIndex(registry: Registry, mode: SnapshotMode): Diagnostic[] 
   return diagnostics;
 }
 
-// @behavior requirements.agents.extract The index extractor returns the generated block bounded by stable markers.
+// @constraint requirements.index.extract Generated index content stays bounded by stable AGENTS.md markers.
 function extractIndexBlock(text: string): string | undefined {
   const start = text.indexOf(INDEX_START);
   const end = text.indexOf(INDEX_END);
@@ -526,17 +527,17 @@ function extractIndexBlock(text: string): string | undefined {
   return text.slice(start, end + INDEX_END.length);
 }
 
-// @behavior requirements.diff The staged diff checker requires local requirement anchors for changed contracts, states, effects, failures, safety rules, structures, and tests.
+// @behavior requirements.enforcement Changed contracts, states, effects, failures, safety rules, structures, and tests require local requirement anchors.
 function checkStagedDiffAnchors(files: SourceFile[], registry: Registry): Diagnostic[] {
   return checkDiffAnchors(files, registry, parseGitDiff(["diff", "--cached", "--unified=0", "--", "*.ts", "*.tsx", "*.mts", "*.cts"]), "HEAD");
 }
 
-// @behavior requirements.diff.base The base diff checker applies forced-anchor diagnostics to pull-request changes in CI.
+// @behavior requirements.enforcement.base Pull-request changes receive forced-anchor diagnostics against the configured base ref.
 function checkBaseDiffAnchors(files: SourceFile[], registry: Registry, base: string): Diagnostic[] {
   return checkDiffAnchors(files, registry, parseGitDiff(["diff", "--unified=0", base, "--", "*.ts", "*.tsx", "*.mts", "*.cts"]), base);
 }
 
-// @behavior requirements.diff.check The diff checker requires local requirement anchors for changed contracts, states, effects, failures, safety rules, structures, and tests.
+// @behavior requirements.enforcement.check Diff lines in forced-anchor categories fail without a matching local requirement tag.
 function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLine[], oldRef: string): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const filesByPath = new Map(files.map((file) => [file.path, file]));
@@ -561,7 +562,7 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
   return diagnostics;
 }
 
-// @behavior requirements.diff.old_blob The old-blob loader provides syntax context for staged or base diffs that delete TypeScript lines.
+// @behavior requirements.enforcement.old_blob Deleted TypeScript lines keep old-snapshot syntax context during staged and base checks.
 function loadOldSourceFile(ref: string, path: string): SourceFile | undefined {
   try {
     return { path, text: git(["show", `${ref}:${path}`]) };
@@ -570,7 +571,7 @@ function loadOldSourceFile(ref: string, path: string): SourceFile | undefined {
   }
 }
 
-// @behavior requirements.diff.old_comments The old-comment binder keeps requirement anchors available when deleted lines need old snapshot context.
+// @behavior requirements.enforcement.old_comments Deleted lines can still use anchors that existed in the old source snapshot.
 function bindRequirementCommentsForFile(file: SourceFile): RequirementComment[] {
   const diagnostics: Diagnostic[] = [];
   const comments = parseRequirements(file, diagnostics);
@@ -578,7 +579,7 @@ function bindRequirementCommentsForFile(file: SourceFile): RequirementComment[] 
   return comments;
 }
 
-// @behavior requirements.diff.parse The diff parser extracts added and deleted staged lines with adjacent source line numbers.
+// @behavior requirements.enforcement.parse Added and deleted diff lines retain adjacent source line numbers for diagnostics.
 function parseGitDiff(args: string[]): HunkLine[] {
   const diff = git(args);
   const lines: HunkLine[] = [];
@@ -625,7 +626,7 @@ function parseGitDiff(args: string[]): HunkLine[] {
   return lines;
 }
 
-// @behavior requirements.diff.classify The classifier maps TypeScript diff lines and syntax context to the forced-anchor categories from the skill.
+// @behavior requirements.enforcement.classify TypeScript diff lines receive forced-anchor categories from their text and syntax context.
 function classifyChangedLine(text: string, path: string, file: SourceFile, line: number): string[] {
   const trimmed = text.trim();
   if (trimmed.length === 0 || trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("import ")) return [];
@@ -647,7 +648,7 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
   return [...categories];
 }
 
-// @behavior requirements.diff.type_member The syntax classifier keeps exported and state-shaped type members visible to contract and state-policy checks.
+// @behavior requirements.enforcement.type_member Exported and state-shaped type members remain visible to contract and state-policy checks.
 function isTrackedTypeMemberLine(file: SourceFile, line: number, text: string): boolean {
   const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
   let matched = false;
@@ -667,7 +668,7 @@ function isTrackedTypeMemberLine(file: SourceFile, line: number, text: string): 
   return matched;
 }
 
-// @behavior requirements.diff.type_member_export The export detector treats members of exported interfaces and exported type literals as public contracts.
+// @behavior requirements.enforcement.type_member_export Members of exported interfaces and exported type literals count as public contracts.
 function isExportedTypeMember(node: ts.Node): boolean {
   let current: ts.Node | undefined = node.parent;
   while (current) {
@@ -677,12 +678,12 @@ function isExportedTypeMember(node: ts.Node): boolean {
   return false;
 }
 
-// @behavior requirements.diff.type_member_export_modifier The modifier detector reads TypeScript export keywords from declarations that own type members.
+// @constraint requirements.enforcement.type_member_export_modifier Type-member owners use TypeScript export modifiers to indicate public contract membership.
 function hasExportModifier(node: ts.Node): boolean {
   return !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 }
 
-// @behavior requirements.diff.group The grouping helper indexes parsed comments by source path for anchor lookup.
+// @behavior requirements.enforcement.group Parsed comments are grouped by source path before local anchor lookup.
 function groupComments(comments: RequirementComment[]): Map<string, RequirementComment[]> {
   const result = new Map<string, RequirementComment[]>();
   for (const comment of comments) {
@@ -693,7 +694,7 @@ function groupComments(comments: RequirementComment[]): Map<string, RequirementC
   return result;
 }
 
-// @constraint requirements.diff.anchor The anchor lookup accepts a non-file target whose local span covers the changed line and whose tag matches the forced category.
+// @constraint requirements.enforcement.anchor A valid local anchor has a non-file target whose span covers the changed line and whose tag matches the forced category.
 function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile, text: string): boolean {
   const typeMember = isTrackedTypeMemberLine(file, line, text);
   return comments.some((comment) => {
@@ -708,17 +709,17 @@ function hasAnchorForLine(comments: RequirementComment[], line: number, category
   });
 }
 
-// @behavior requirements.diff.rule The rule-name mapper keeps forced-anchor diagnostics stable and searchable.
+// @constraint requirements.enforcement.rule Forced-anchor diagnostics use stable searchable rule names.
 function missingAnchorRule(category: string): string {
   if (category === "structure-intent") return "missing-structure-intent";
   if (category === "test-expectation") return "missing-verification-anchor";
   return "missing-requirement-anchor";
 }
 
-// @behavior requirements.output The output helpers emit scan data and diagnostics for local debugging and automation logs.
+// @behavior requirements.diagnostics Requirement commands print scan data and compiler-style diagnostics for local debugging and automation logs.
 const OUTPUT_ENCODING = "utf8";
 
-// @behavior requirements.output.scan The scan printer lists discovered declarations and verification links for local debugging.
+// @behavior requirements.diagnostics.scan_output Scan output lists discovered declarations, verification links, and binding targets.
 function printScan(registry: Registry): void {
   for (const comment of registry.comments) {
     const target = comment.target ? `${comment.target.kind}@${comment.target.line}` : "unbound";
@@ -726,24 +727,24 @@ function printScan(registry: Registry): void {
   }
 }
 
-// @behavior requirements.output.diagnostics The diagnostic printer emits compiler-style messages and stays silent when validation passes.
+// @behavior requirements.diagnostics.compiler_output Diagnostic output uses compiler-style messages and stays silent when validation passes.
 function printDiagnostics(diagnostics: Diagnostic[]): void {
   for (const diagnostic of diagnostics) {
     console.error(`${diagnostic.file}:${diagnostic.line} ${diagnostic.rule} ${diagnostic.message}`);
   }
 }
 
-// @behavior requirements.git The Git wrapper returns stdout for repository snapshot and diff commands.
+// @behavior requirements.snapshots.git Git-backed snapshot and diff reads return stdout text to requirement checks.
 function git(args: string[]): string {
   return execFileSync("git", args, { encoding: OUTPUT_ENCODING });
 }
 
-// @behavior requirements.path The path normalizer gives diagnostics stable forward-slash paths across platforms.
+// @constraint requirements.diagnostics.path Diagnostics use stable forward-slash paths across platforms.
 function normalizePath(path: string): string {
   return relative(".", path).split(sep).join("/");
 }
 
-// @behavior requirements.location The line mapper converts character offsets into one-based source lines.
+// @constraint requirements.diagnostics.line_number Source locations use one-based line numbers derived from character offsets.
 function offsetLine(text: string, offset: number): number {
   let line = 1;
   for (let index = 0; index < offset; index += 1) {
@@ -752,7 +753,7 @@ function offsetLine(text: string, offset: number): number {
   return line;
 }
 
-// @behavior requirements.diagnostic The diagnostic helper maps a requirement comment to a source location.
+// @behavior requirements.diagnostics.comment_location Requirement comment failures report their source file and line.
 function diag(comment: RequirementComment, rule: string, message: string): Diagnostic {
   return { file: comment.file, line: comment.line, rule, message };
 }

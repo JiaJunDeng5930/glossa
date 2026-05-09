@@ -1,4 +1,4 @@
-// @behavior glossa.shared.messages The message module creates and validates versioned runtime envelopes for request-response and gloss-port traffic.
+// @constraint glossa.runtime.messages Runtime request-response traffic and gloss-port traffic use versioned envelopes before payloads are accepted.
 import type {
   BackgroundResponseMessage,
   ContentToBackgroundMessage,

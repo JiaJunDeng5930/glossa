@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createSelectionController } from "../../src/content/selection";
 
-// @verifies glossa.content.selection The test verifies that shortcut-held selection mode captures word clicks as token candidates.
+// @verifies glossa.translation.selection The test verifies that shortcut-held selection mode captures word clicks as token candidates.
 describe("selection controller", () => {
   it("enters selection mode while the shortcut is held and captures word clicks", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;

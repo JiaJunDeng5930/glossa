@@ -1,4 +1,4 @@
-// @behavior glossa.background.messages The background message handler updates vocabulary records, creates Anki cards, and returns diagnostic response envelopes.
+// @behavior glossa.runtime.requests Word-click and settings requests update vocabulary records, create Anki cards, and return diagnostic response envelopes.
 import { buildCardCacheKey } from "../core/cache";
 import { hashText } from "../shared/hash";
 import { diagnosticPayloadFrom } from "../shared/errors";

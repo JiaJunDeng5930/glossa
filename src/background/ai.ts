@@ -1,4 +1,4 @@
-// @behavior glossa.background.ai The AI adapter sends gloss and card requests to the configured provider and maps failures into diagnostics.
+// @behavior glossa.ai Gloss and card requests go to the configured AI provider and provider failures become diagnostics.
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { GLOSS_TARGET_LANG, type AnkiCardOutput, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
 

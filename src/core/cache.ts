@@ -1,4 +1,5 @@
-// @behavior glossa.core.cache The cache module builds stable gloss and card keys from model, prompt, language, text, and token identity.
+// @constraint glossa.cache Gloss and card cache keys stay stable for repeated translation and card requests.
+// @constraint glossa.cache.keys Gloss and card cache keys include model, prompt, language, text, and token identity.
 import { hashText } from "../shared/hash";
 
 export interface GlossCacheKeyInput {

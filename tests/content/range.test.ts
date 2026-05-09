@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { validateTokenForRender } from "../../src/content/range";
 import { createSourceFingerprint, type ScannedToken } from "../../src/content/scanner";
 
-// @verifies glossa.content.range The test verifies that range validation accepts current connected tokens and rejects stale DOM geometry.
+// @verifies glossa.translation.geometry The test verifies that range validation accepts current connected tokens and rejects stale DOM geometry.
 describe("content range validation", () => {
   it("accepts a connected token whose source text and rects are current", () => {
     document.body.innerHTML = "<main><p>Submit archive entries carefully.</p></main>";

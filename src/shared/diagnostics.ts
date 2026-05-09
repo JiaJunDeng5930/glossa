@@ -1,4 +1,4 @@
-// @constraint glossa.shared.diagnostics The diagnostics module emits structured trace events with sanitized tab and URL context.
+// @constraint glossa.runtime.diagnostics Trace events include structured context while sanitized URLs exclude query strings and fragments.
 import { isErrorPayload } from "./errors";
 
 export type TraceComponent = "service-worker" | "content-script" | "options";

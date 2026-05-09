@@ -1,4 +1,4 @@
-// @behavior glossa.shared.shortcut The shortcut module formats keyboard events and matches stored shortcut definitions.
+// @behavior glossa.runtime.shortcuts Keyboard events match stored shortcut definitions through normalized key combinations.
 const MODIFIER_LABELS = {
   Control: "Ctrl",
   Alt: "Alt",

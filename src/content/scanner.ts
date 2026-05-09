@@ -1,4 +1,4 @@
-// @behavior glossa.content.scanner The scanner extracts DOM-grounded English token candidates from visible editable-safe text nodes.
+// @behavior glossa.translation.scanning Visible editable-safe text nodes produce DOM-grounded English token candidates.
 import { isKnownLemma } from "../core/lexicon";
 import { normalizeLemma } from "../core/state";
 import type { SentenceCandidate, TokenCandidate } from "../shared/types";

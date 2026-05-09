@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createAiBackend } from "../../src/background/ai";
 import { DEFAULT_SETTINGS, type GlossaSettings } from "../../src/shared/types";
 
-// @verifies glossa.background.ai The test verifies that AI provider requests and response parsing produce gloss and card outputs.
-// @verifies glossa.shared.errors The test verifies that provider failures become diagnostic payloads for UI callers.
+// @verifies glossa.ai The test verifies that AI provider requests and response parsing produce gloss and card outputs.
+// @verifies glossa.runtime.errors The test verifies that provider failures become diagnostic payloads for UI callers.
 describe("AI backend adapters", () => {
   it("sends reasoning effort to the Responses API and parses output_text", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "{\"items\":[]}" }));

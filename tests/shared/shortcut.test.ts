@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { formatShortcutFromEvent, matchesShortcut } from "../../src/shared/shortcut";
 
-// @verifies glossa.shared.shortcut The test verifies shortcut formatting and matching for modifier-only and mixed keyboard events.
+// @verifies glossa.runtime.shortcuts The test verifies shortcut formatting and matching for modifier-only and mixed keyboard events.
 describe("shortcut formatting and matching", () => {
   it("captures a pure modifier shortcut", () => {
     const event = new KeyboardEvent("keydown", { key: "Alt", altKey: true });

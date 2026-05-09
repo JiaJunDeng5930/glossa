@@ -1,5 +1,5 @@
-// @intent glossa.storage The storage layer provides the extension persistence boundary for settings, vocabulary records, and gloss caches.
-// @intent glossa.storage.db The database module wraps chrome storage and IndexedDB stores behind typed asynchronous accessors.
+// @intent glossa.persistence The persistence boundary exists so settings, vocabulary records, and gloss cache entries stay inside extension-owned storage.
+// @intent glossa.persistence.db The database access boundary exists to keep settings, lexicon, and cache storage behind one typed asynchronous contract.
 import type { AnkiCardOutput, GlossaSettings, GlossItem, VocabularyRecord } from "../shared/types";
 import { DEFAULT_SETTINGS } from "../shared/types";
 

@@ -5,7 +5,7 @@ import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, type AnkiCardOutput, type GlossItem, type VocabularyRecord } from "../../src/shared/types";
 
-// @verifies glossa.background.messages The test verifies that background messages update vocabulary records and return response envelopes.
+// @verifies glossa.runtime.requests The test verifies that background messages update vocabulary records and return response envelopes.
 describe("background message handler", () => {
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
     const storage = createMemoryStorage();
