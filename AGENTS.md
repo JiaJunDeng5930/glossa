@@ -138,9 +138,10 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.analysis_consistency.source_text|requirements.analysis_consistency.source_text.{}
 |requirements.analysis_consistency.target_kind_names|requirements.analysis_consistency.target_kind_names.{}
 |requirements.analysis_consistency.target_spans|requirements.analysis_consistency.target_spans.{}
-|requirements.change_anchoring|requirements.change_anchoring.{base_diff,changed_categories,current_deletion_anchor,deleted_context,diff_lines,export_modifier,exported_type_members,file_local_lookup,local_anchor,previous_deletion_anchor,required_tags,rule_names,type_member_changes}
+|requirements.change_anchoring|requirements.change_anchoring.{base_diff,changed_categories,comment_line_skip,current_deletion_anchor,deleted_context,diff_lines,export_modifier,exported_type_members,file_local_lookup,local_anchor,previous_deletion_anchor,required_tags,rule_names,type_member_changes}
 |requirements.change_anchoring.base_diff|requirements.change_anchoring.base_diff.{}
 |requirements.change_anchoring.changed_categories|requirements.change_anchoring.changed_categories.{}
+|requirements.change_anchoring.comment_line_skip|requirements.change_anchoring.comment_line_skip.{}
 |requirements.change_anchoring.current_deletion_anchor|requirements.change_anchoring.current_deletion_anchor.{}
 |requirements.change_anchoring.deleted_context|requirements.change_anchoring.deleted_context.{}
 |requirements.change_anchoring.diff_lines|requirements.change_anchoring.diff_lines.{}
@@ -148,7 +149,13 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.change_anchoring.export_modifier.export_keyword|requirements.change_anchoring.export_modifier.export_keyword.{}
 |requirements.change_anchoring.exported_type_members|requirements.change_anchoring.exported_type_members.{}
 |requirements.change_anchoring.file_local_lookup|requirements.change_anchoring.file_local_lookup.{}
-|requirements.change_anchoring.local_anchor|requirements.change_anchoring.local_anchor.{}
+|requirements.change_anchoring.local_anchor|requirements.change_anchoring.local_anchor.{inner_scope}
+|requirements.change_anchoring.local_anchor.inner_scope|requirements.change_anchoring.local_anchor.inner_scope.{broad_declaration_line,exact_target_kinds,structure_test_span,type_member_span}
+|requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line|requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line.{}
+|requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds|requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.{declaration_list}
+|requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.declaration_list|requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.declaration_list.{}
+|requirements.change_anchoring.local_anchor.inner_scope.structure_test_span|requirements.change_anchoring.local_anchor.inner_scope.structure_test_span.{}
+|requirements.change_anchoring.local_anchor.inner_scope.type_member_span|requirements.change_anchoring.local_anchor.inner_scope.type_member_span.{}
 |requirements.change_anchoring.previous_deletion_anchor|requirements.change_anchoring.previous_deletion_anchor.{}
 |requirements.change_anchoring.required_tags|requirements.change_anchoring.required_tags.{}
 |requirements.change_anchoring.rule_names|requirements.change_anchoring.rule_names.{}

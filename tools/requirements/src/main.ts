@@ -560,7 +560,8 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
   for (const line of lines) {
     const file = line.deleted ? loadOldSourceFile(oldRef, line.oldPath) ?? filesByPath.get(line.path) : filesByPath.get(line.path) ?? loadOldSourceFile(oldRef, line.oldPath);
     if (!file) continue;
-    if (/@(behavior|constraint|intent|verifies)\s+/.test(line.text)) continue;
+    // @constraint requirements.change_anchoring.comment_line_skip Only standalone requirement comment lines skip forced-anchor classification.
+    if (/^\s*(?:\/\/|\/\*)\s*@(behavior|constraint|intent|verifies)\s+/.test(line.text)) continue;
     const categories = classifyChangedLine(line.text, line.path, file, line.newLine);
     if (categories.length === 0) continue;
     const anchorSources = line.deleted ? deletedLineAnchorSources(file, line.newLine, filesByPath.get(line.path), commentsByFile.get(line.path), line.currentLine) : [{ file, comments: commentsByFile.get(line.path) ?? [], line: line.newLine }];
@@ -729,19 +730,38 @@ function groupComments(comments: RequirementComment[]): Map<string, RequirementC
   return result;
 }
 
-// @constraint requirements.change_anchoring.local_anchor A valid local anchor has a non-file target whose span covers the changed line and whose tag matches the forced category.
+// @constraint requirements.change_anchoring.local_anchor A valid local anchor has a non-file target that locally covers the changed line and whose tag matches the forced category.
 function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile, text: string): boolean {
   const typeMember = isTrackedTypeMemberLine(file, line, text);
   return comments.some((comment) => {
     if (!comment.target || comment.target.isFile) return false;
     if (typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature", "PropertyDeclaration", "MethodDeclaration"].includes(comment.target.kind)) return false;
-    const startLine = comment.line;
-    const endLine = comment.target.endLine;
-    if (line < startLine || line > endLine) return false;
+    if (!targetLocallyCoversLine(comment.target, line, category, typeMember)) return false;
     if (category === "structure-intent") return comment.tag === "@intent";
     if (category === "test-expectation") return comment.tag === "@verifies";
     return comment.tag === "@behavior" || comment.tag === "@constraint";
   });
+}
+
+// @constraint requirements.change_anchoring.local_anchor.inner_scope Broad declaration comments only anchor their declaration line for inner behavior categories.
+function targetLocallyCoversLine(target: BoundTarget, line: number, category: string, typeMember: boolean): boolean {
+  // @constraint requirements.change_anchoring.local_anchor.inner_scope.type_member_span Type-member anchors can cover the member span for contract and state-policy changes.
+  if (typeMember && (category === "contract" || category === "state-policy")) {
+    return target.line <= line && line <= target.endLine;
+  }
+  // @constraint requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line Broad declaration anchors match only their starting line for forced inner behavior categories.
+  if (requiresExactAnchorLine(target.kind, category)) {
+    return line === target.line;
+  }
+  return target.line <= line && line <= target.endLine;
+}
+
+// @constraint requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds Function, method, class, interface, and type alias anchors use exact-line matching for inner categories.
+function requiresExactAnchorLine(kind: string, category: string): boolean {
+  // @constraint requirements.change_anchoring.local_anchor.inner_scope.structure_test_span Structure-intent and test-expectation anchors keep span matching for their bound syntax unit.
+  if (category === "structure-intent" || category === "test-expectation") return false;
+  // @constraint requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.declaration_list Exact-line matching applies to broad declaration target kinds.
+  return ["FunctionDeclaration", "MethodDeclaration", "ClassDeclaration", "InterfaceDeclaration", "TypeAliasDeclaration"].includes(kind);
 }
 
 // @constraint requirements.change_anchoring.rule_names Forced-anchor diagnostics use stable searchable rule names.

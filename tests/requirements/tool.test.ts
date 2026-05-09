@@ -69,6 +69,7 @@ describe("requirement automation tool", () => {
   // @verifies requirements.change_anchoring.exported_type_members
   // @verifies requirements.change_anchoring.export_modifier
   // @verifies requirements.change_anchoring.export_modifier.export_keyword
+  // @verifies requirements.change_anchoring.local_anchor.inner_scope.type_member_span
   // @verifies requirements.change_anchoring.file_local_lookup
   // @verifies requirements.change_anchoring.rule_names
   // @verifies requirements.diagnostic_output.compiler_style
@@ -394,6 +395,82 @@ describe("requirement automation tool", () => {
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
+  }, 20_000);
+
+  // @verifies requirements.change_anchoring.local_anchor.inner_scope
+  // @verifies requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line
+  // @verifies requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds
+  // @verifies requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.declaration_list
+  // @verifies requirements.change_anchoring.local_anchor.inner_scope.structure_test_span
+  // @verifies requirements.change_anchoring.comment_line_skip
+  it("rejects inner side effects covered only by broad or inline anchors", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo command has verified behavior.",
+        "export function demo(): void {",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(cwd, "tests/main.test.ts"),
+      [
+        "import { expect, it } from \"vitest\";",
+        "",
+        "// @verifies demo",
+        "it(\"keeps the demo contract\", () => {",
+        "  expect(true).toBe(true);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo command has verified behavior.",
+        "export function demo(): void {",
+        "  localStorage.setItem(\"demo\", \"value\");",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runGit(cwd, ["add", "src/main.ts"]);
+
+    let stderr = "";
+    try {
+      runTool(cwd, ["check", "--staged"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:3 missing-requirement-anchor");
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo command has verified behavior.",
+        "export function demo(): void {",
+        "  localStorage.setItem(\"demo\", \"value\"); // @behavior demo.save The save branch writes browser storage.",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runGit(cwd, ["add", "src/main.ts"]);
+
+    stderr = "";
+    try {
+      runTool(cwd, ["check", "--staged"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:3 missing-requirement-anchor");
   }, 20_000);
 });
 
