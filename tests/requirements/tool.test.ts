@@ -109,6 +109,50 @@ describe("requirement automation tool", () => {
     expect(stderr).toContain("src/main.ts:12 missing-requirement-anchor");
   }, 20_000);
 
+  // @verifies requirements.diff.classify The test verifies that state-shaped object members and literals require local anchors.
+  it("rejects unanchored staged state literals before property skipping", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "export const config = {",
+        "  status: \"ready\",",
+        "};",
+        "export const states = [",
+        "  \"pending\",",
+        "];",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "export const config = {",
+        "  status: \"error\",",
+        "};",
+        "export const states = [",
+        "  \"hidden\",",
+        "];",
+        "",
+      ].join("\n"),
+    );
+    runGit(cwd, ["add", "src/main.ts"]);
+
+    let stderr = "";
+    try {
+      runTool(cwd, ["check", "--staged"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
+    expect(stderr).toContain("src/main.ts:5 missing-requirement-anchor");
+  }, 20_000);
+
   // @verifies requirements.diff.parse The test verifies that staged checking records deletion-only hunks as changed lines.
   // @verifies requirements.diff.old_blob The test verifies that staged checking loads deleted file content for syntax context.
   // @verifies requirements.diff.old_comments The test verifies that staged checking binds comments from the deleted-line source snapshot.

@@ -629,12 +629,13 @@ function parseGitDiff(args: string[]): HunkLine[] {
 function classifyChangedLine(text: string, path: string, file: SourceFile, line: number): string[] {
   const trimmed = text.trim();
   if (trimmed.length === 0 || trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("import ")) return [];
-  if (trimmed.startsWith("\"") || trimmed.startsWith("'") || trimmed.startsWith("`")) return [];
+  const standaloneLiteral = trimmed.startsWith("\"") || trimmed.startsWith("'") || trimmed.startsWith("`");
   if (isTestPath(path)) {
+    if (standaloneLiteral) return [];
     return /\b(expect|assert|mock|fixture|snapshot|toEqual|toBe|toThrow)\b/.test(trimmed) ? ["test-expectation"] : [];
   }
   const typeMember = isTrackedTypeMemberLine(file, line, trimmed);
-  if (/^[A-Za-z_$][\w$?]*:\s/.test(trimmed) && !typeMember) return [];
+  const plainProperty = /^[A-Za-z_$][\w$?]*:\s/.test(trimmed) && !typeMember;
   const categories = new Set<string>();
   if (/^(export|public)\b/.test(trimmed) || typeMember) categories.add("contract");
   if (/\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b|\bswitch\b|\bcase\b|transition|setState|mark[A-Z]|complete|fail|cancel|retry/.test(trimmed)) categories.add("state-policy");
@@ -642,6 +643,7 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
   if (/\btry\b|\bcatch\b|\bfinally\b|\bthrow\b|Error\b|timeout|retry|fallback|AbortController|Promise\.race|setTimeout/.test(trimmed)) categories.add("failure-policy");
   if (/sanitize|secret|apiKey|token|credential|password|permission|origin|URL|url|editable|notranslate|translate=|escape|redact|privacy/.test(trimmed)) categories.add("access-safety");
   if (/\binterface\b|\babstract\s+class\b|\bclass\s+\w*(Adapter|Registry|Factory|Provider|Resolver|Middleware|Plugin|Bridge|Wrapper)\b/.test(trimmed)) categories.add("structure-intent");
+  if ((standaloneLiteral || plainProperty) && categories.size === 0) return [];
   return [...categories];
 }
 
