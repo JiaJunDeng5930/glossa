@@ -60,6 +60,8 @@ interface HunkLine {
   // @constraint requirements.records.hunk_line.old_path Deleted-file checks retain the old path for source snapshot lookup.
   oldPath: string;
   newLine: number;
+  // @constraint requirements.records.hunk_line.current_line Deleted-line checks retain adjacent current-source locations for current anchor lookup.
+  currentLine: number;
   text: string;
   // @constraint requirements.records.hunk_line.deleted Removed lines stay distinguishable so deletion-only changes enter anchor checks.
   deleted: boolean;
@@ -546,9 +548,9 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
     if (/@(behavior|constraint|intent|verifies)\s+/.test(line.text)) continue;
     const categories = classifyChangedLine(line.text, line.path, file, line.newLine);
     if (categories.length === 0) continue;
-    const comments = line.deleted ? bindRequirementCommentsForFile(file) : commentsByFile.get(line.path) ?? [];
+    const anchorSources = line.deleted ? deletedLineAnchorSources(file, line.newLine, filesByPath.get(line.path), commentsByFile.get(line.path), line.currentLine) : [{ file, comments: commentsByFile.get(line.path) ?? [], line: line.newLine }];
     for (const category of categories) {
-      if (hasAnchorForLine(comments, line.newLine, category, file, line.text)) continue;
+      if (anchorSources.some((source) => hasAnchorForLine(source.comments, source.line, category, source.file, line.text))) continue;
       diagnostics.push({
         file: line.path,
         line: line.newLine,
@@ -558,6 +560,19 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
     }
   }
   return diagnostics;
+}
+
+// @behavior requirements.enforcement.current_comments Deleted-line checks accept current-source anchors that document the surviving owner.
+function deletedLineAnchorSources(
+  oldFile: SourceFile,
+  oldLine: number,
+  currentFile: SourceFile | undefined,
+  currentComments: RequirementComment[] | undefined,
+  currentLine: number,
+): Array<{ file: SourceFile; comments: RequirementComment[]; line: number }> {
+  const sources = [{ file: oldFile, comments: bindRequirementCommentsForFile(oldFile), line: oldLine }];
+  if (currentFile && currentComments) sources.push({ file: currentFile, comments: currentComments, line: currentLine });
+  return sources;
 }
 
 // @behavior requirements.enforcement.old_blob Deleted TypeScript lines keep old-snapshot syntax context during staged and base checks.
@@ -609,12 +624,12 @@ function parseGitDiff(args: string[]): HunkLine[] {
     }
     if (!path || raw.startsWith("+++") || raw.startsWith("---")) continue;
     if (raw.startsWith("+")) {
-      lines.push({ path, oldPath, newLine, text: raw.slice(1), deleted: false });
+      lines.push({ path, oldPath, newLine, currentLine: newLine, text: raw.slice(1), deleted: false });
       newLine += 1;
       continue;
     }
     if (raw.startsWith("-")) {
-      lines.push({ path, oldPath, newLine: Math.max(1, oldLine), text: raw.slice(1), deleted: true });
+      lines.push({ path, oldPath, newLine: Math.max(1, oldLine), currentLine: Math.max(1, newLine), text: raw.slice(1), deleted: true });
       oldLine += 1;
       continue;
     }

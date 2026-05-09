@@ -158,13 +158,15 @@ describe("requirement automation tool", () => {
   // @verifies requirements.enforcement.old_comments The test verifies that staged checking binds comments from the deleted-line source snapshot.
   // @verifies requirements.records.hunk_line.old_path The test verifies that deleted-file hunks retain their old source path.
   // @verifies requirements.records.hunk_line.deleted The test verifies that deleted hunks are marked for anchor diagnostics.
+  // @verifies requirements.records.hunk_line.current_line The test verifies that deleted hunks retain current-source coordinates for anchor lookup.
   it("rejects an unanchored deletion-only side effect change", () => {
     const cwd = createFixtureRepo();
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
+        "const STORAGE_KEY = \"demo\";",
         "export function saveValue(): void {",
-        "  localStorage.setItem(\"demo\", \"value\");",
+        "  localStorage.setItem(STORAGE_KEY, \"value\");",
         "}",
         "",
       ].join("\n"),
@@ -190,7 +192,54 @@ describe("requirement automation tool", () => {
       stderr = String((error as { stderr?: Buffer }).stderr);
     }
 
-    expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
+    expect(stderr).toContain("src/main.ts:3 missing-requirement-anchor");
+  }, 20_000);
+
+  // @verifies requirements.enforcement.current_comments The test verifies that deletion checks accept a current requirement anchor on the surviving owner.
+  it("accepts a current anchor for a deletion-only side effect change", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "export function saveValue(): void {",
+        "  localStorage.setItem(\"demo\", \"value\");",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo storage command has verified behavior.",
+        "const STORAGE_KEY = \"demo\";",
+        "",
+        "// @behavior demo.save The save value command leaves browser storage unchanged.",
+        "export function saveValue(): void {",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(cwd, "tests/main.test.ts"),
+      [
+        "import { expect, it } from \"vitest\";",
+        "",
+        "// @verifies demo.save The test verifies that the save command leaves storage untouched.",
+        "it(\"leaves storage untouched\", () => {",
+        "  expect(true).toBe(true);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+
+    runTool(cwd, ["check", "--staged"]);
+    runTool(cwd, ["check", "--base", "HEAD"]);
   }, 20_000);
 
   // @verifies requirements.enforcement.old_blob The test verifies that deleted type members are classified against the old source snapshot.

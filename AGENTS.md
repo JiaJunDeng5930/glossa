@@ -98,11 +98,12 @@ Requirement truth lives in one-sentence source comments. Use only `@behavior`, `
 |requirements.diagnostics.line_number|requirements.diagnostics.line_number.{}
 |requirements.diagnostics.path|requirements.diagnostics.path.{}
 |requirements.diagnostics.scan_output|requirements.diagnostics.scan_output.{}
-|requirements.enforcement|requirements.enforcement.{anchor,base,check,classify,group,old_blob,old_comments,parse,rule,type_member,type_member_export,type_member_export_modifier}
+|requirements.enforcement|requirements.enforcement.{anchor,base,check,classify,current_comments,group,old_blob,old_comments,parse,rule,type_member,type_member_export,type_member_export_modifier}
 |requirements.enforcement.anchor|requirements.enforcement.anchor.{}
 |requirements.enforcement.base|requirements.enforcement.base.{}
 |requirements.enforcement.check|requirements.enforcement.check.{}
 |requirements.enforcement.classify|requirements.enforcement.classify.{}
+|requirements.enforcement.current_comments|requirements.enforcement.current_comments.{}
 |requirements.enforcement.group|requirements.enforcement.group.{}
 |requirements.enforcement.old_blob|requirements.enforcement.old_blob.{}
 |requirements.enforcement.old_comments|requirements.enforcement.old_comments.{}
@@ -135,7 +136,8 @@ Requirement truth lives in one-sentence source comments. Use only `@behavior`, `
 |requirements.records|requirements.records.{comment,diagnostic,hunk_line,registry,source_file,target}
 |requirements.records.comment|requirements.records.comment.{}
 |requirements.records.diagnostic|requirements.records.diagnostic.{}
-|requirements.records.hunk_line|requirements.records.hunk_line.{deleted,old_path}
+|requirements.records.hunk_line|requirements.records.hunk_line.{current_line,deleted,old_path}
+|requirements.records.hunk_line.current_line|requirements.records.hunk_line.current_line.{}
 |requirements.records.hunk_line.deleted|requirements.records.hunk_line.deleted.{}
 |requirements.records.hunk_line.old_path|requirements.records.hunk_line.old_path.{}
 |requirements.records.registry|requirements.records.registry.{}
