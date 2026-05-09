@@ -146,6 +146,43 @@ describe("requirement automation tool", () => {
     runTool(cwd, ["check", "--staged"]);
   }, 20_000);
 
+  // @verifies requirements.comment_binding.first_declaration
+  // @verifies requirements.change_anchoring.local_anchor
+  it("accepts an anchored first declaration in a new staged file", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(join(cwd, "src/main.ts"), "");
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @behavior demo The demo command has verified behavior.",
+        "export function runDemo(): string {",
+        "  return \"demo\";",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(cwd, "tests/main.test.ts"),
+      [
+        "import { expect, it } from \"vitest\";",
+        "",
+        "// @verifies demo",
+        "it(\"runs demo\", () => {",
+        "  expect(true).toBe(true);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+
+    runTool(cwd, ["check", "--staged"]);
+  }, 20_000);
+
   // @verifies requirements.change_anchoring.changed_categories
   it("rejects unanchored staged state literals before property skipping", () => {
     const cwd = createFixtureRepo();

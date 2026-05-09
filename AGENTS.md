@@ -124,9 +124,10 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.cli.compare_ref_option|requirements.cli.compare_ref_option.{}
 |requirements.cli.dispatch|requirements.cli.dispatch.{}
 |requirements.cli.help|requirements.cli.help.{}
-|requirements.comment_binding|requirements.comment_binding.{adjacency,file_level,target_kinds,target_nodes}
+|requirements.comment_binding|requirements.comment_binding.{adjacency,file_level,first_declaration,target_kinds,target_nodes}
 |requirements.comment_binding.adjacency|requirements.comment_binding.adjacency.{}
 |requirements.comment_binding.file_level|requirements.comment_binding.file_level.{}
+|requirements.comment_binding.first_declaration|requirements.comment_binding.first_declaration.{}
 |requirements.comment_binding.target_kinds|requirements.comment_binding.target_kinds.{}
 |requirements.comment_binding.target_nodes|requirements.comment_binding.target_nodes.{}
 |requirements.comment_syntax|requirements.comment_syntax.{declaration_sentence,discovery,normalization}

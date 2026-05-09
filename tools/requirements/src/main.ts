@@ -305,7 +305,8 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
     for (const comment of fileComments) {
       const beforeComment = file.text.slice(0, comment.start);
       const beforeFirstCode = file.text.slice(comment.end, firstCodeStart);
-      if (comment.end <= firstCodeStart && onlyWhitespaceAndComments(beforeComment) && (!hasRequirementTag(beforeComment) || hasImportStatement(beforeFirstCode))) {
+      // @behavior requirements.comment_binding.first_declaration A first requirement comment directly above the first declaration binds that declaration.
+      if (comment.end <= firstCodeStart && onlyWhitespaceAndComments(beforeComment) && hasImportStatement(beforeFirstCode)) {
         comment.target = { kind: "file", start: 0, end: file.text.length, line: 1, endLine: offsetLine(file.text, file.text.length), isFile: true };
         continue;
       }
@@ -385,10 +386,6 @@ function findFirstCodeStart(source: ts.SourceFile): number {
     first = Math.min(first, statement.getStart(source));
   }
   return first;
-}
-
-function hasRequirementTag(text: string): boolean {
-  return /@(behavior|constraint|intent|verifies)\s+/.test(text);
 }
 
 function hasImportStatement(text: string): boolean {
