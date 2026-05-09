@@ -1,0 +1,4 @@
+interface:
+  display_name: "TypeScript Comment Requirement Automation"
+  short_description: "Build TypeScript gates for comment requirements"
+  default_prompt: "Use $typescript-comment-requirement-automation to design TypeScript automation for one-sentence source-comment requirements."

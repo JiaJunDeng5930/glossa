@@ -1,0 +1,4 @@
+interface:
+  display_name: "Comment Requirement Automation"
+  short_description: "Build gates for source-comment requirements"
+  default_prompt: "Use $comment-requirement-automation to design repository automation for one-sentence source-comment requirements."
