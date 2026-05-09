@@ -68,6 +68,7 @@ describe("requirement automation tool", () => {
   // @verifies requirements.change_anchoring.type_member_changes
   // @verifies requirements.change_anchoring.exported_type_members
   // @verifies requirements.change_anchoring.export_modifier
+  // @verifies requirements.change_anchoring.export_modifier.export_keyword
   // @verifies requirements.change_anchoring.file_local_lookup
   // @verifies requirements.change_anchoring.rule_names
   // @verifies requirements.diagnostic_output.compiler_style
@@ -107,6 +108,43 @@ describe("requirement automation tool", () => {
     }
 
     expect(stderr).toContain("src/main.ts:12 missing-requirement-anchor");
+  }, 20_000);
+
+  // @verifies requirements.change_anchoring.type_member_changes
+  it("rejects an unanchored implicit-public class member change", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "export class DemoApi {",
+        "  value = \"old\";",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "export class DemoApi {",
+        "  value = \"new\";",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runGit(cwd, ["add", "src/main.ts"]);
+
+    let stderr = "";
+    try {
+      runTool(cwd, ["check", "--staged"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
   }, 20_000);
 
   // @verifies requirements.comment_binding.target_kinds

@@ -674,17 +674,17 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
   return [...categories];
 }
 
-// @behavior requirements.change_anchoring.type_member_changes Exported and state-shaped type members remain visible to contract and state-policy checks.
+// @behavior requirements.change_anchoring.type_member_changes Exported type members, implicit-public class members, and state-shaped members remain visible to contract and state-policy checks.
 function isTrackedTypeMemberLine(file: SourceFile, line: number, text: string): boolean {
   const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
   let matched = false;
   const visit = (node: ts.Node) => {
     if (matched) return;
-    if (ts.isPropertySignature(node) || ts.isMethodSignature(node)) {
+    if (ts.isPropertySignature(node) || ts.isMethodSignature(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node)) {
       const startLine = offsetLine(file.text, node.getStart(source));
       const endLine = offsetLine(file.text, node.getEnd());
       if (startLine <= line && line <= endLine) {
-        matched = isExportedTypeMember(node) || /\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b/.test(text);
+        matched = isExportedTypeMember(node) || isImplicitPublicClassMember(node) || /\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b/.test(text);
         return;
       }
     }
@@ -704,7 +704,14 @@ function isExportedTypeMember(node: ts.Node): boolean {
   return false;
 }
 
-// @constraint requirements.change_anchoring.export_modifier Type-member owners use TypeScript export modifiers to indicate public contract membership.
+// @constraint requirements.change_anchoring.export_modifier Type-member owners use TypeScript export, private, and protected modifiers to indicate public contract membership.
+function isImplicitPublicClassMember(node: ts.Node): boolean {
+  if (!ts.isPropertyDeclaration(node) && !ts.isMethodDeclaration(node)) return false;
+  if (!ts.isClassDeclaration(node.parent) || !hasExportModifier(node.parent)) return false;
+  return !ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword || modifier.kind === ts.SyntaxKind.ProtectedKeyword);
+}
+
+// @constraint requirements.change_anchoring.export_modifier.export_keyword TypeScript export modifiers mark type owners as public contract containers.
 function hasExportModifier(node: ts.HasModifiers): boolean {
   return !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 }
@@ -725,7 +732,7 @@ function hasAnchorForLine(comments: RequirementComment[], line: number, category
   const typeMember = isTrackedTypeMemberLine(file, line, text);
   return comments.some((comment) => {
     if (!comment.target || comment.target.isFile) return false;
-    if (typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature"].includes(comment.target.kind)) return false;
+    if (typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature", "PropertyDeclaration", "MethodDeclaration"].includes(comment.target.kind)) return false;
     const startLine = comment.line;
     const endLine = comment.target.endLine;
     if (line < startLine || line > endLine) return false;

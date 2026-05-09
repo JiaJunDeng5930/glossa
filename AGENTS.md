@@ -112,7 +112,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.change_anchoring.current_deletion_anchor|requirements.change_anchoring.current_deletion_anchor.{}
 |requirements.change_anchoring.deleted_context|requirements.change_anchoring.deleted_context.{}
 |requirements.change_anchoring.diff_lines|requirements.change_anchoring.diff_lines.{}
-|requirements.change_anchoring.export_modifier|requirements.change_anchoring.export_modifier.{}
+|requirements.change_anchoring.export_modifier|requirements.change_anchoring.export_modifier.{export_keyword}
+|requirements.change_anchoring.export_modifier.export_keyword|requirements.change_anchoring.export_modifier.export_keyword.{}
 |requirements.change_anchoring.exported_type_members|requirements.change_anchoring.exported_type_members.{}
 |requirements.change_anchoring.file_local_lookup|requirements.change_anchoring.file_local_lookup.{}
 |requirements.change_anchoring.local_anchor|requirements.change_anchoring.local_anchor.{}
