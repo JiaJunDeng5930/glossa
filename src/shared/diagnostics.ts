@@ -1,4 +1,4 @@
-// @constraint glossa.runtime.diagnostics Trace events include structured context while sanitized URLs exclude query strings and fragments.
+// @constraint glossa.failure_reporting.trace_privacy Trace events include structured context while sanitized URLs exclude query strings and fragments.
 import { isErrorPayload } from "./errors";
 
 export type TraceComponent = "service-worker" | "content-script" | "options";

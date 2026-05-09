@@ -3,8 +3,8 @@ import { resolve } from "node:path";
 
 type RuntimeSettings = Record<string, unknown>;
 
-// @verifies glossa.translation.activation The test verifies that page translation remains manual until activation triggers gloss requests.
-// @verifies glossa.translation.rendering The test verifies that content rendering places gloss labels and card badges on page tokens.
+// @verifies glossa.page_translation.activation
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle waits for manual activation before requesting glosses", async ({ page }) => {
   await page.setContent("<main><p>Manual archive appears here.</p></main>");
   await installChromeRuntime(page, {

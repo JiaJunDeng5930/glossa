@@ -1,5 +1,5 @@
-// @constraint glossa.cache Gloss and card cache keys stay stable for repeated translation and card requests.
-// @constraint glossa.cache.keys Gloss and card cache keys include model, prompt, language, text, and token identity.
+// @constraint glossa.cache_identity Repeated translation and card requests use stable cache identity for equivalent inputs.
+// @constraint glossa.cache_identity.request_parts Cache identity includes model, prompt, language, text, token, and card content inputs.
 import { hashText } from "../shared/hash";
 
 export interface GlossCacheKeyInput {

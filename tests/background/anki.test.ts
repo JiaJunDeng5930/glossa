@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createAnkiClient } from "../../src/background/anki";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
-// @verifies glossa.anki The test verifies that AnkiConnect note creation uses configured settings and maps endpoint diagnostics.
+// @verifies glossa.card_creation
 describe("AnkiConnect adapter diagnostics", () => {
   it("uses the configured Anki model when creating notes", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ result: 42, error: null }));

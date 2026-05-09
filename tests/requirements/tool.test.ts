@@ -8,42 +8,42 @@ const TOOL = resolve("tools/requirements/src/main.ts");
 const TSX = resolve("node_modules/tsx/dist/cli.mjs");
 
 describe("requirement automation tool", () => {
-  // @verifies requirements.commands.command The test verifies that the command parser accepts the public help command.
-  // @verifies requirements.commands.help The test verifies that help output lists the public requirement commands.
-  // @verifies requirements.commands.option The test verifies that public help describes staged and base comparison options.
+  // @verifies requirements.cli.dispatch
+  // @verifies requirements.cli.help
+  // @verifies requirements.cli.compare_ref_option
   it("prints public help", () => {
     const output = runTool(process.cwd(), ["help"]);
 
     expect(output).toContain("Usage: tsx tools/requirements/src/main.ts");
   }, 20_000);
 
-  // @verifies requirements.snapshots.worktree The test verifies that the worktree command can scan editable source files.
-  // @verifies requirements.snapshots.staged The test verifies that the staged command can read the Git index.
-  // @verifies requirements.snapshots.sources The test verifies that source filtering keeps the tool focused on editable TypeScript files.
-  // @verifies requirements.protocol.registry The test verifies that registry construction is exercised by the scan command.
-  // @verifies requirements.protocol.comments.discovery The test verifies that TypeScript comment ranges are consumed by the scan command.
-  // @verifies requirements.protocol.comments.normalization The test verifies that line comments are normalized into requirement records.
-  // @verifies requirements.protocol.comments.sentence The test verifies that single-sentence comments pass the scanner.
-  // @verifies requirements.protocol.binding.nodes The test verifies that syntax nodes are bound during scan output.
-  // @verifies requirements.protocol.binding.kinds The test verifies that declarations can own requirement comments.
-  // @verifies requirements.records.target.kind The test verifies that bound target kinds appear in scan output.
-  // @verifies requirements.protocol.binding.first_code The test verifies that file-level requirements can bind before code.
-  // @verifies requirements.protocol.binding.trivia The test verifies that comment trivia can appear before a target node.
-  // @verifies requirements.protocol.validation.ancestors The test verifies that declared requirement ancestors are accepted.
-  // @verifies requirements.protocol.validation.leaf The test verifies that leaf requirements can be linked by verification comments.
-  // @verifies requirements.protocol.validation.tests The test verifies that verification comments can live in Vitest files.
-  // @verifies requirements.index.default The test verifies that index generation has a fallback AGENTS body.
-  // @verifies requirements.index.index The test verifies that index generation emits requirement rows.
-  // @verifies requirements.index.parent The test verifies that dotted parent relationships feed index rows.
-  // @verifies requirements.index.check The test verifies that the check command compares AGENTS.md with generated output.
-  // @verifies requirements.index.extract The test verifies that generated index markers can be read by the checker.
-  // @verifies requirements.enforcement.check The test verifies that shared diff checking accepts anchored staged changes.
-  // @verifies requirements.enforcement.anchor The test verifies that staged checking accepts local anchors for changed lines.
-  // @verifies requirements.diagnostics.scan_output The test verifies that scan output includes discovered requirement records.
-  // @verifies requirements.snapshots.git The test verifies that the tool can invoke Git-backed commands.
-  // @verifies requirements.diagnostics.path The test verifies that path normalization appears in scan output.
-  // @verifies requirements.diagnostics.line_number The test verifies that source locations appear in scan output.
-  // @verifies requirements.diagnostics.comment_location The test verifies that diagnostics carry source file and line context.
+  // @verifies requirements.source_snapshot.worktree
+  // @verifies requirements.source_snapshot.staged
+  // @verifies requirements.source_snapshot.source_scope
+  // @verifies requirements.comment_tree.repository_scope
+  // @verifies requirements.comment_syntax.discovery
+  // @verifies requirements.comment_syntax.normalization
+  // @verifies requirements.comment_syntax.declaration_sentence
+  // @verifies requirements.comment_binding.target_nodes
+  // @verifies requirements.comment_binding.target_kinds
+  // @verifies requirements.analysis_consistency.target_kind_names
+  // @verifies requirements.comment_binding.file_level
+  // @verifies requirements.comment_binding.adjacency
+  // @verifies requirements.comment_tree.validation.declared_ancestors
+  // @verifies requirements.comment_tree.validation.leaf_coverage
+  // @verifies requirements.comment_tree.validation.test_references
+  // @verifies requirements.agent_index.default_body
+  // @verifies requirements.agent_index.deterministic_rows
+  // @verifies requirements.agent_index.parent_rows
+  // @verifies requirements.agent_index.freshness
+  // @verifies requirements.agent_index.marker_bounds
+  // @verifies requirements.change_anchoring.required_tags
+  // @verifies requirements.change_anchoring.local_anchor
+  // @verifies requirements.diagnostic_output.scan_listing
+  // @verifies requirements.source_snapshot.git_reads
+  // @verifies requirements.diagnostic_output.portable_paths
+  // @verifies requirements.diagnostic_output.line_numbers
+  // @verifies requirements.diagnostic_output.comment_locations
   it("formats AGENTS.md and checks a valid staged requirement snapshot", () => {
     const cwd = createFixtureRepo();
     writeValidRequirementFiles(cwd);
@@ -63,14 +63,14 @@ describe("requirement automation tool", () => {
     expect(agents).toContain("|demo.feature|demo.feature.{}");
   }, 20_000);
 
-  // @verifies requirements.enforcement.parse The test verifies that staged checking can parse Git diff hunks.
-  // @verifies requirements.enforcement.classify The test verifies that staged checking classifies forced-anchor categories.
-  // @verifies requirements.enforcement.type_member The test verifies that type member changes remain visible to contract and state-policy checks.
-  // @verifies requirements.enforcement.type_member_export The test verifies that exported type members are treated as public contract changes.
-  // @verifies requirements.enforcement.type_member_export_modifier The test verifies that export modifiers mark type-member owners as public contracts.
-  // @verifies requirements.enforcement.group The test verifies that staged checking groups anchors by file path.
-  // @verifies requirements.enforcement.rule The test verifies that staged checking emits stable missing-anchor rules.
-  // @verifies requirements.diagnostics.compiler_output The test verifies that diagnostic output stays compiler-style.
+  // @verifies requirements.change_anchoring.diff_lines
+  // @verifies requirements.change_anchoring.changed_categories
+  // @verifies requirements.change_anchoring.type_member_changes
+  // @verifies requirements.change_anchoring.exported_type_members
+  // @verifies requirements.change_anchoring.export_modifier
+  // @verifies requirements.change_anchoring.file_local_lookup
+  // @verifies requirements.change_anchoring.rule_names
+  // @verifies requirements.diagnostic_output.compiler_style
   it("rejects an unanchored staged type-member state change", () => {
     const cwd = createFixtureRepo();
     writeValidRequirementFiles(cwd);
@@ -81,16 +81,16 @@ describe("requirement automation tool", () => {
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
-        "// @behavior demo The module exposes a demo feature with a verified contract.",
-        "// @behavior demo.feature The function returns the configured demo value.",
+        "// @behavior demo The demo command has verified behavior.",
+        "// @behavior demo.feature The demo command returns the configured value.",
         "export function demoValue(): string {",
         "  return \"demo\";",
         "}",
         "",
-        "// @intent demo.contract The interface defines the public demo state contract.",
-        "// @constraint demo.contract.shape The interface exposes a demo state contract with verified members.",
+        "// @intent demo.contract The demo state contract exposes verified fields.",
+        "// @constraint demo.contract.shape The demo state contract exposes its verified member shape.",
         "export interface DemoState {",
-        "  // @constraint demo.contract.value The value member exposes the configured demo value.",
+        "  // @constraint demo.contract.value The demo value member exposes the configured value.",
         "  value: string;",
         "  status: \"ready\" | \"pending\";",
         "}",
@@ -109,7 +109,7 @@ describe("requirement automation tool", () => {
     expect(stderr).toContain("src/main.ts:12 missing-requirement-anchor");
   }, 20_000);
 
-  // @verifies requirements.enforcement.classify The test verifies that state-shaped object members and literals require local anchors.
+  // @verifies requirements.change_anchoring.changed_categories
   it("rejects unanchored staged state literals before property skipping", () => {
     const cwd = createFixtureRepo();
     writeFileSync(
@@ -153,12 +153,12 @@ describe("requirement automation tool", () => {
     expect(stderr).toContain("src/main.ts:5 missing-requirement-anchor");
   }, 20_000);
 
-  // @verifies requirements.enforcement.parse The test verifies that staged checking records deletion-only hunks as changed lines.
-  // @verifies requirements.enforcement.old_blob The test verifies that staged checking loads deleted file content for syntax context.
-  // @verifies requirements.enforcement.old_comments The test verifies that staged checking binds comments from the deleted-line source snapshot.
-  // @verifies requirements.records.hunk_line.old_path The test verifies that deleted-file hunks retain their old source path.
-  // @verifies requirements.records.hunk_line.deleted The test verifies that deleted hunks are marked for anchor diagnostics.
-  // @verifies requirements.records.hunk_line.current_line The test verifies that deleted hunks retain current-source coordinates for anchor lookup.
+  // @verifies requirements.change_anchoring.diff_lines
+  // @verifies requirements.change_anchoring.deleted_context
+  // @verifies requirements.change_anchoring.previous_deletion_anchor
+  // @verifies requirements.analysis_consistency.diff_lines.old_path
+  // @verifies requirements.analysis_consistency.diff_lines.deleted
+  // @verifies requirements.analysis_consistency.diff_lines.current_line
   it("rejects an unanchored deletion-only side effect change", () => {
     const cwd = createFixtureRepo();
     writeFileSync(
@@ -195,7 +195,7 @@ describe("requirement automation tool", () => {
     expect(stderr).toContain("src/main.ts:3 missing-requirement-anchor");
   }, 20_000);
 
-  // @verifies requirements.enforcement.current_comments The test verifies that deletion checks accept a current requirement anchor on the surviving owner.
+  // @verifies requirements.change_anchoring.current_deletion_anchor
   it("accepts a current anchor for a deletion-only side effect change", () => {
     const cwd = createFixtureRepo();
     writeFileSync(
@@ -214,10 +214,10 @@ describe("requirement automation tool", () => {
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
-        "// @behavior demo The demo storage command has verified behavior.",
+        "// @behavior demo The demo command has verified behavior.",
         "const STORAGE_KEY = \"demo\";",
         "",
-        "// @behavior demo.save The save value command leaves browser storage unchanged.",
+        "// @behavior demo.save The save command leaves browser storage unchanged.",
         "export function saveValue(): void {",
         "}",
         "",
@@ -228,7 +228,7 @@ describe("requirement automation tool", () => {
       [
         "import { expect, it } from \"vitest\";",
         "",
-        "// @verifies demo.save The test verifies that the save command leaves storage untouched.",
+        "// @verifies demo.save",
         "it(\"leaves storage untouched\", () => {",
         "  expect(true).toBe(true);",
         "});",
@@ -242,8 +242,8 @@ describe("requirement automation tool", () => {
     runTool(cwd, ["check", "--base", "HEAD"]);
   }, 20_000);
 
-  // @verifies requirements.enforcement.old_blob The test verifies that deleted type members are classified against the old source snapshot.
-  // @verifies requirements.enforcement.type_member_export The test verifies that deleted exported type members are treated as public contract changes.
+  // @verifies requirements.change_anchoring.deleted_context
+  // @verifies requirements.change_anchoring.exported_type_members
   it("rejects an unanchored staged deleted exported type member", () => {
     const cwd = createFixtureRepo();
     writeFileSync(join(cwd, "src/main.ts"), "export interface DemoContract {\n  value: string;\n}\n");
@@ -264,7 +264,7 @@ describe("requirement automation tool", () => {
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
   }, 20_000);
 
-  // @verifies requirements.enforcement.base The test verifies that base comparison mode rejects unanchored branch diffs.
+  // @verifies requirements.change_anchoring.base_diff
   it("rejects an unanchored base diff side effect change", () => {
     const cwd = createFixtureRepo();
     writeFileSync(join(cwd, "src/main.ts"), "export function saveValue(): void {\n}\n");
@@ -297,20 +297,20 @@ function writeValidRequirementFiles(cwd: string): void {
   writeFileSync(
     join(cwd, "src/main.ts"),
     [
-      "// @behavior demo The module exposes a demo feature with a verified contract.",
+      "// @behavior demo The demo command has verified behavior.",
       "import type { DemoType } from \"./types\";",
       "",
-      "// @behavior demo.feature The function returns the configured demo value.",
+      "// @behavior demo.feature The demo command returns the configured value.",
       "export function demoValue(): string {",
       "  return \"demo\";",
       "}",
       "",
-      "// @intent demo.contract The interface defines the public demo state contract.",
-      "// @constraint demo.contract.shape The interface exposes a demo state contract with verified members.",
+      "// @intent demo.contract The demo state contract exposes verified fields.",
+      "// @constraint demo.contract.shape The demo state contract exposes its verified member shape.",
       "export interface DemoState {",
-      "  // @constraint demo.contract.value The value member exposes the configured demo value.",
+      "  // @constraint demo.contract.value The demo value member exposes the configured value.",
       "  value: string;",
-      "  // @constraint demo.contract.status The status member exposes readiness states across multiple lines.",
+      "  // @constraint demo.contract.status The demo status member exposes readiness states across multiple lines.",
       "  status: {",
       "    kind: \"ready\" | \"pending\";",
       "  };",
@@ -325,10 +325,10 @@ function writeValidRequirementFiles(cwd: string): void {
       "import { demoValue } from \"../src/main\";",
       "",
       "describe(\"demo feature\", () => {",
-      "  // @verifies demo.feature The test verifies that the demo feature returns its configured value.",
-      "  // @verifies demo.contract.shape The test verifies that the public demo state contract has a verified value member.",
-      "  // @verifies demo.contract.value The test verifies that the public demo state keeps its configured value shape.",
-      "  // @verifies demo.contract.status The test verifies that the public demo state exposes readiness status shape.",
+      "  // @verifies demo.feature",
+      "  // @verifies demo.contract.shape",
+      "  // @verifies demo.contract.value",
+      "  // @verifies demo.contract.status",
       "  it(\"returns the configured value\", () => {",
       "    expect(demoValue()).toBe(\"demo\");",
       "  });",
@@ -348,5 +348,5 @@ function runTool(cwd: string, args: string[]): string {
 }
 
 function runGit(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
+  return execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8" });
 }

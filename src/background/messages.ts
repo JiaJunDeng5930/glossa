@@ -1,4 +1,4 @@
-// @behavior glossa.runtime.requests Word-click and settings requests update vocabulary records, create Anki cards, and return diagnostic response envelopes.
+// @behavior glossa.extension_contracts.request_effects Word-click and settings requests update vocabulary records, create cards, and return diagnostic response envelopes.
 import { buildCardCacheKey } from "../core/cache";
 import { hashText } from "../shared/hash";
 import { diagnosticPayloadFrom } from "../shared/errors";

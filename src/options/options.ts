@@ -1,4 +1,4 @@
-// @behavior glossa.options The options page saves translation, provider, Anki, prompt, shortcut, and appearance settings after user edits.
+// @behavior glossa.settings_save User edits on the options page persist translation, provider, Anki, prompt, shortcut, and appearance settings.
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { formatShortcutFromEvent } from "../shared/shortcut";

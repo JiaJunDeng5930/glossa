@@ -1,4 +1,4 @@
-// @constraint glossa.runtime.messages Runtime request-response traffic and gloss-port traffic use versioned envelopes before payloads are accepted.
+// @constraint glossa.extension_contracts.message_envelopes Runtime requests, responses, and gloss-port traffic use versioned envelopes before payloads are accepted.
 import type {
   BackgroundResponseMessage,
   ContentToBackgroundMessage,

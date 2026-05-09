@@ -1,7 +1,7 @@
 import { chromium, expect, test, type BrowserContext, type CDPSession, type Page, type Worker } from "@playwright/test";
 import { resolve } from "node:path";
 
-// @verifies glossa.runtime.service_worker The test verifies that the service worker continues handling settings messages after restart.
+// @verifies glossa.extension_contracts.restart_continuity
 test("extension service worker handles settings messages after restart", async () => {
   const extensionPath = resolve("dist");
   const context = await chromium.launchPersistentContext("", {

@@ -1,4 +1,4 @@
-// @behavior glossa.translation.rendering Ready, pending, hidden, and error gloss outcomes keep the source word on its original text baseline.
+// @behavior glossa.page_translation.inline_rendering Ready, pending, hidden, and error gloss outcomes keep the source word on its original text baseline.
 import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import type { ScannedToken } from "./scanner";

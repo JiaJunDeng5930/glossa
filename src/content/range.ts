@@ -1,4 +1,4 @@
-// @constraint glossa.translation.geometry Connected tokens are eligible only when stored text and rendered rectangles still match the page.
+// @constraint glossa.page_translation.token_geometry Connected tokens are eligible only when stored text and rendered rectangles still match the page.
 import { createSourceFingerprint, type ScannedToken } from "./scanner";
 
 export function rangeForToken(token: ScannedToken, doc: Document = token.textNode.ownerDocument): Range {

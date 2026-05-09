@@ -1,4 +1,4 @@
-// @behavior glossa.translation.lookup Gloss scans emit lookup-first token outcomes from page memory, lexicon state, gloss cache, and framed AI work.
+// @behavior glossa.page_translation.lookup_order Gloss scans emit lookup-first token outcomes from page memory, lexicon state, gloss cache, and framed AI work.
 import pLimit from "p-limit";
 
 import { buildGlossCacheKey } from "../core/cache";

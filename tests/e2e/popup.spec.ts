@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-// @verifies glossa.popup The test verifies that the popup translate button sends the activation message to the current tab.
+// @verifies glossa.translation_start_popup
 test("popup translate button activates the current tab", async ({ page }) => {
   const html = await readFile(resolve("dist/popup/popup.html"), "utf8");
   await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/popup.css\">", "").replace("<script type=\"module\" src=\"../popup.js\"></script>", ""));

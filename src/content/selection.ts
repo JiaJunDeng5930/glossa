@@ -1,4 +1,4 @@
-// @behavior glossa.translation.selection Holding the configured shortcut while clicking a word sends a DOM-grounded token candidate to the background.
+// @behavior glossa.page_translation.shortcut_selection Holding the configured shortcut while clicking a word sends a DOM-grounded token candidate to the background.
 import { normalizeLemma } from "../core/state";
 import { isShortcutRelease, matchesShortcut } from "../shared/shortcut";
 import type { TokenCandidate } from "../shared/types";

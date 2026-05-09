@@ -1,5 +1,5 @@
-// @behavior glossa.translation Activated pages receive inline glosses for eligible text while word-click interaction stays page-local.
-// @behavior glossa.translation.activation Page activation streams DOM tokens through gloss ports and reconciles mutation-driven rescans.
+// @behavior glossa.page_translation Activated pages receive inline glosses for eligible text while word-click interaction stays page-local.
+// @behavior glossa.page_translation.activation Page activation streams DOM tokens through gloss ports and reconciles mutation-driven rescans.
 import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";

@@ -1,4 +1,4 @@
-// @behavior glossa.anki Card creation writes notes through AnkiConnect and reports endpoint or model failures as diagnostics.
+// @behavior glossa.card_creation Clicked words can create Anki notes through configured AnkiConnect settings and report endpoint or model failures as diagnostics.
 import { createDiagnosticError, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import type { AnkiCard, GlossaSettings, TokenCandidate } from "../shared/types";
 

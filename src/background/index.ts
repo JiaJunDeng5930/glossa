@@ -1,4 +1,4 @@
-// @behavior glossa.runtime.service_worker The service worker answers runtime messages and gloss-port scans with storage-backed results after restart.
+// @behavior glossa.extension_contracts.restart_continuity The service worker continues answering runtime messages and gloss-port scans with storage-backed results after restart.
 import { createAnkiClient } from "./anki";
 import { createAiBackend } from "./ai";
 import { createGlossResolver } from "./glossResolver";

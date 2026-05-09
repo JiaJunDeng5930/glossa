@@ -1,4 +1,4 @@
-// @constraint glossa.cache.hash Text digest generation returns the same SHA-256 value in browser and Node runtimes.
+// @constraint glossa.cache_identity.text_hash Text digest generation returns the same SHA-256 value in browser and Node runtimes.
 export async function hashText(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
   const subtle = globalThis.crypto?.subtle;

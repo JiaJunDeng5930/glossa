@@ -1,4 +1,4 @@
-// @behavior glossa.ai Gloss and card requests go to the configured AI provider and provider failures become diagnostics.
+// @behavior glossa.ai_requests Gloss and card generation requests use the configured AI provider and expose provider failures as diagnostics.
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { GLOSS_TARGET_LANG, type AnkiCardOutput, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
 

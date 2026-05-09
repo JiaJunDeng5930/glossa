@@ -1,4 +1,4 @@
-// @behavior glossa.popup The popup activates translation for the current tab, opens settings, and shows user-readable failures.
+// @behavior glossa.translation_start_popup The popup can activate translation for the current tab, open settings, and show user-readable failures.
 import { isErrorPayload } from "../shared/errors";
 import { userMessageForError } from "../shared/userMessages";
 

@@ -1,6 +1,6 @@
 // @behavior glossa Activated pages show inline Chinese glosses for unfamiliar English words and remember vocabulary decisions.
-// @constraint glossa.runtime Every extension context uses the same message, diagnostic, shortcut, error, and user-message rules.
-// @intent glossa.runtime.contracts The shared payload boundary exists to keep runtime messages and persisted records consistent across extension contexts.
+// @constraint glossa.extension_contracts Extension contexts share stable contracts for messages, diagnostics, shortcuts, errors, and user messages.
+// @intent glossa.extension_contracts.payload_consistency Shared payload types keep runtime messages and persisted records consistent across extension contexts.
 export type VocabularyState = "known" | "learning_active" | "ignored" | "candidate";
 
 export interface VocabularyRecord {

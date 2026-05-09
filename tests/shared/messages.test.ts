@@ -11,7 +11,7 @@ import {
   validateGlossPortOutbound
 } from "../../src/shared/messages";
 
-// @verifies glossa.runtime.messages The test verifies that runtime messages are created, validated, and rejected through stable envelopes.
+// @verifies glossa.extension_contracts.message_envelopes
 describe("extension message envelopes", () => {
   it("creates and validates content-to-background messages with request ids", () => {
     const message = createContentMessage("settings.get", {});
@@ -141,7 +141,7 @@ describe("extension message envelopes", () => {
   });
 });
 
-// @verifies glossa.runtime.diagnostics The test verifies that diagnostic trace sanitization preserves safe context and removes query data.
+// @verifies glossa.failure_reporting.trace_privacy
 describe("diagnostic trace sanitization", () => {
   it("removes query strings and fragments from trace URLs", () => {
     const event = sanitizeTraceEvent({

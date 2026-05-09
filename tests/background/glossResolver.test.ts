@@ -6,8 +6,8 @@ import { hashText } from "../../src/shared/hash";
 import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type GlossaSettings, type GlossItem, type GlossTokenPayload, type VocabularyRecord } from "../../src/shared/types";
 
-// @verifies glossa.translation.lookup The test verifies lookup-first gloss outcomes, pending AI work, and stale pending reconciliation.
-// @verifies glossa.cache.hash The test verifies that durable cache keys can use stable text hashes during resolver lookup.
+// @verifies glossa.page_translation.lookup_order
+// @verifies glossa.cache_identity.text_hash
 describe("gloss resolver lookup-first pipeline", () => {
   it("emits hidden, ready, pending and AI ready outcomes in lookup order", async () => {
     const storage = createMemoryStorage();
