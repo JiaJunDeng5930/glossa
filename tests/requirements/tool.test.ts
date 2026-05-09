@@ -10,6 +10,7 @@ const TSX = resolve("node_modules/tsx/dist/cli.mjs");
 describe("requirement automation tool", () => {
   // @verifies requirements.cli.dispatch
   // @verifies requirements.cli.help
+  // @verifies requirements.cli.help.usage
   // @verifies requirements.cli.compare_ref_option
   it("prints public help", () => {
     const output = runTool(process.cwd(), ["help"]);
@@ -44,6 +45,21 @@ describe("requirement automation tool", () => {
   // @verifies requirements.diagnostic_output.portable_paths
   // @verifies requirements.diagnostic_output.line_numbers
   // @verifies requirements.diagnostic_output.comment_locations
+  // @verifies requirements.cli.snapshot_mode
+  // @verifies requirements.cli.snapshot_load
+  // @verifies requirements.cli.index_check
+  // @verifies requirements.cli.staged_check
+  // @verifies requirements.source_snapshot.staged_dispatch
+  // @verifies requirements.comment_tree.unique_ids
+  // @verifies requirements.comment_syntax.discovery.dedupe
+  // @verifies requirements.comment_binding.file_buckets
+  // @verifies requirements.comment_binding.target_nodes.target_facts
+  // @verifies requirements.comment_binding.target_nodes.walk
+  // @verifies requirements.comment_tree.validation.verified_id_set
+  // @verifies requirements.agent_index.default_insertion
+  // @verifies requirements.agent_index.deterministic_rows.child_buckets
+  // @verifies requirements.agent_index.freshness.snapshot_read
+  // @verifies requirements.diagnostic_output.scan_listing.rows
   it("formats AGENTS.md and checks a valid staged requirement snapshot", () => {
     const cwd = createFixtureRepo();
     writeValidRequirementFiles(cwd);
@@ -71,8 +87,16 @@ describe("requirement automation tool", () => {
   // @verifies requirements.change_anchoring.export_modifier.export_keyword
   // @verifies requirements.change_anchoring.local_anchor.inner_scope.type_member_span
   // @verifies requirements.change_anchoring.file_local_lookup
+  // @verifies requirements.change_anchoring.file_local_lookup.bucket
   // @verifies requirements.change_anchoring.rule_names
   // @verifies requirements.diagnostic_output.compiler_style
+  // @verifies requirements.diagnostic_output.compiler_style.stderr
+  // @verifies requirements.change_anchoring.changed_categories.contract
+  // @verifies requirements.change_anchoring.changed_categories.state
+  // @verifies requirements.change_anchoring.type_member_changes.span_match
+  // @verifies requirements.change_anchoring.export_modifier.implicit_public
+  // @verifies requirements.change_anchoring.export_modifier.export_keyword.scan
+  // @verifies requirements.change_anchoring.local_anchor.type_member_target
   it("rejects an unanchored staged type-member state change", () => {
     const cwd = createFixtureRepo();
     writeValidRequirementFiles(cwd);
@@ -223,6 +247,9 @@ describe("requirement automation tool", () => {
   }, 20_000);
 
   // @verifies requirements.change_anchoring.changed_categories
+  // @verifies requirements.change_anchoring.changed_categories.structure
+  // @verifies requirements.change_anchoring.changed_categories.failure
+  // @verifies requirements.change_anchoring.changed_categories.safety
   it("rejects unanchored staged state literals before property skipping", () => {
     const cwd = createFixtureRepo();
     writeFileSync(
@@ -234,6 +261,8 @@ describe("requirement automation tool", () => {
         "export const states = [",
         "  \"pending\",",
         "];",
+        "export function loadSecret(): void {",
+        "}",
         "",
       ].join("\n"),
     );
@@ -250,6 +279,9 @@ describe("requirement automation tool", () => {
         "export const states = [",
         "  \"hidden\",",
         "];",
+        "export function loadSecret(): void {",
+        "  throw new Error(\"apiKey missing\");",
+        "}",
         "",
       ].join("\n"),
     );
@@ -264,11 +296,14 @@ describe("requirement automation tool", () => {
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
     expect(stderr).toContain("src/main.ts:5 missing-requirement-anchor");
+    expect(stderr).toContain("src/main.ts:8 missing-requirement-anchor");
   }, 20_000);
 
   // @verifies requirements.change_anchoring.diff_lines
   // @verifies requirements.change_anchoring.deleted_context
+  // @verifies requirements.change_anchoring.deleted_context.missing_old_blob
   // @verifies requirements.change_anchoring.previous_deletion_anchor
+  // @verifies requirements.change_anchoring.changed_categories.effect
   // @verifies requirements.analysis_consistency.diff_lines.old_path
   // @verifies requirements.analysis_consistency.diff_lines.deleted
   // @verifies requirements.analysis_consistency.diff_lines.current_line
@@ -378,6 +413,7 @@ describe("requirement automation tool", () => {
   }, 20_000);
 
   // @verifies requirements.change_anchoring.base_diff
+  // @verifies requirements.cli.base_check
   it("rejects an unanchored base diff side effect change", () => {
     const cwd = createFixtureRepo();
     writeFileSync(join(cwd, "src/main.ts"), "export function saveValue(): void {\n}\n");

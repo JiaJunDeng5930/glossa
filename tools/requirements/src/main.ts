@@ -85,7 +85,9 @@ function main(): void {
 
   const staged = args.includes("--staged");
   const base = parseOptionValue(args, "--base");
+  // @behavior requirements.cli.snapshot_mode The staged flag selects the source snapshot mode used by command execution.
   const mode: SnapshotMode = staged ? "staged" : "worktree";
+  // @behavior requirements.cli.snapshot_load The selected snapshot mode controls which source files enter registry construction.
   const files = loadSnapshot(mode);
   const registry = buildRegistry(files);
 
@@ -103,11 +105,16 @@ function main(): void {
   }
 
   const diagnostics = [...registry.diagnostics];
+  // @behavior requirements.cli.index_check Check commands include AGENTS index freshness diagnostics for the selected snapshot mode.
   diagnostics.push(...checkAgentsIndex(registry, mode));
+  // @behavior requirements.cli.base_check A base ref adds base-diff anchor diagnostics to the current check.
   if (base) {
     diagnostics.push(...checkBaseDiffAnchors(files, registry, base));
-  } else if (mode === "staged") {
-    diagnostics.push(...checkStagedDiffAnchors(files, registry));
+  } else {
+    // @behavior requirements.cli.staged_check Staged mode adds staged-diff anchor diagnostics to the current check.
+    if (mode === "staged") {
+      diagnostics.push(...checkStagedDiffAnchors(files, registry));
+    }
   }
   printDiagnostics(diagnostics);
   process.exitCode = diagnostics.length > 0 ? 1 : 0;
@@ -129,11 +136,13 @@ function parseOptionValue(args: string[], name: string): string | undefined {
 
 // @behavior requirements.cli.help Help output lists the public commands and comparison options used by scripts and hooks.
 function printHelp(): void {
+  // @behavior requirements.cli.help.usage Help output prints the public usage line on stdout.
   console.log("Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged] [--base <git-ref>]");
 }
 
 // @behavior requirements.source_snapshot Requirement validation reads the selected source snapshot from worktree files or Git index blobs.
 function loadSnapshot(mode: SnapshotMode): SourceFile[] {
+  // @behavior requirements.source_snapshot.staged_dispatch Staged mode reads the Git index snapshot.
   if (mode === "staged") return loadStagedSnapshot();
   return listWorktreeFiles().map((path) => ({ path, text: readFileSync(path, "utf8") }));
 }
@@ -161,6 +170,7 @@ function loadStagedSnapshot(): SourceFile[] {
   const paths = git(["ls-files", "-z"]).split("\0").filter(Boolean).filter(isSourcePath);
   const files: SourceFile[] = [];
   for (const path of paths) {
+    // @behavior requirements.source_snapshot.staged.missing_blobs Missing staged blobs are skipped during index snapshot loading.
     try {
       const text = git(["show", `:${path}`]);
       files.push({ path, text });
@@ -203,6 +213,7 @@ function buildRegistry(files: SourceFile[]): Registry {
       diagnostics.push(diag(comment, "duplicate-requirement-id", `requirement id ${comment.id} is already declared at ${existing.file}:${existing.line}`));
       continue;
     }
+    // @constraint requirements.comment_tree.unique_ids The first declaration for an ID becomes the repository declaration entry.
     declarations.set(comment.id, comment);
   }
 
@@ -253,6 +264,7 @@ function collectCommentRanges(text: string, source: ts.SourceFile): ts.CommentRa
   const addRanges = (position: number) => {
     for (const range of ts.getLeadingCommentRanges(text, position) ?? []) {
       const key = `${range.pos}:${range.end}`;
+      // @behavior requirements.comment_syntax.discovery.dedupe Duplicate trivia ranges collapse to one discovered comment.
       if (!seen.has(key)) {
         seen.add(key);
         ranges.push(range);
@@ -293,6 +305,7 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
   for (const comment of comments) {
     const bucket = byFile.get(comment.file) ?? [];
     bucket.push(comment);
+    // @behavior requirements.comment_binding.file_buckets Requirement comments are bucketed by source path before syntax binding.
     byFile.set(comment.file, bucket);
   }
 
@@ -323,6 +336,7 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
 // @constraint requirements.comment_binding.target_nodes Declarations and behavior-owning statements are eligible requirement targets.
 function collectBindableNodes(source: ts.SourceFile): BoundTarget[] {
   const nodes: BoundTarget[] = [];
+  // @constraint requirements.comment_binding.target_nodes.target_facts Bound targets record syntax kind, span, and one-based line range.
   const add = (node: ts.Node, kind: string) => {
     nodes.push({
       kind,
@@ -333,6 +347,7 @@ function collectBindableNodes(source: ts.SourceFile): BoundTarget[] {
       isFile: false,
     });
   };
+  // @behavior requirements.comment_binding.target_nodes.walk The TypeScript syntax walk collects every bindable node in source order.
   const visit = (node: ts.Node) => {
     if (isBindableNode(node)) add(node, ts.SyntaxKind[node.kind]);
     ts.forEachChild(node, visit);
@@ -424,6 +439,7 @@ function validateDeclarations(
     }
     if (target.tag === "@intent") diagnostics.push(diag(verification, "invalid-verification-target", "verification must reference a behavior or constraint"));
     if (!isTestPath(verification.file)) diagnostics.push(diag(verification, "verification-outside-test", "verification comments must appear in configured test paths"));
+    // @constraint requirements.comment_tree.validation.verified_id_set Verification coverage is tracked by referenced requirement ID.
     verifiedIds.add(verification.id);
   }
 
@@ -467,6 +483,7 @@ function buildAgentsMd(registry: Registry): string {
     const end = current.indexOf(INDEX_END) + INDEX_END.length;
     return `${current.slice(0, start)}${block}${current.slice(end)}`;
   }
+  // @behavior requirements.agent_index.default_insertion Missing AGENTS markers receive the baseline requirement instructions before the generated index.
   const insertion = `\n## Requirement Comments\n\nRequirement truth lives in source comments. Use \`@behavior\`, \`@constraint\`, and \`@intent\` for globally unique requirement declarations with one sentence bound to one code unit. A code unit can be a module, type, function, method, branch, state transition, external call, failure path, assertion, or narrower syntax unit. Organize dotted IDs by product or tool requirement domain, then by narrower behavioral detail; a descendant ID expresses a detail of its ancestor next to the code unit that implements that detail. A broad file, type, or function comment covers that code unit only, so inner branches, state transitions, side effects, failure policies, structural abstractions, and test assertions need narrower descendant comments. Public contracts, state policies, durable writes, external calls, observability effects, timeouts, retries, error mapping, access or safety rules, structural abstractions, and test expectations require local requirement comments when they are added or changed. Architecture descriptions, module boundaries, layer duties, helper names, parser roles, loader roles, generator roles, wrapper roles, record shapes, command names, and code-navigation notes belong in ordinary engineering docs or ordinary comments. \`@intent\` is reserved for an active abstraction boundary whose current business purpose is required by the system. Use \`@verifies\` as a direct reference whose content is exactly the tag plus an existing \`@behavior\` or \`@constraint\` ID, choosing the most specific ID that the test expectation verifies. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with \`npm run req:fmt-agents\` after requirement tag changes.\n\n${block}\n`;
   return current.endsWith("\n") ? `${current}${insertion}` : `${current}\n${insertion}`;
 }
@@ -481,6 +498,7 @@ function buildIndexBlock(registry: Registry): string {
   const ids = [...registry.declarations.keys()].sort();
   const children = new Map<string, string[]>();
   for (const id of ids) {
+    // @behavior requirements.agent_index.deterministic_rows.child_buckets Every declaration ID receives a deterministic child bucket before row rendering.
     children.set(id, []);
   }
   for (const id of ids) {
@@ -519,6 +537,7 @@ function parentId(id: string): string | undefined {
 function checkAgentsIndex(registry: Registry, mode: SnapshotMode): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   let text = "";
+  // @behavior requirements.agent_index.freshness.snapshot_read The selected snapshot mode controls where AGENTS.md text is read from.
   try {
     text = mode === "staged" ? git(["show", ":AGENTS.md"]) : readFileSync("AGENTS.md", "utf8");
   } catch {
@@ -593,6 +612,7 @@ function deletedLineAnchorSources(
 
 // @behavior requirements.change_anchoring.deleted_context Deleted TypeScript lines keep old-snapshot syntax context during staged and base checks.
 function loadOldSourceFile(ref: string, path: string): SourceFile | undefined {
+  // @behavior requirements.change_anchoring.deleted_context.missing_old_blob Missing old source blobs drop deletion-context anchor checks for that path.
   try {
     return { path, text: git(["show", `${ref}:${path}`]) };
   } catch {
@@ -667,11 +687,17 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
   const typeMember = isTrackedTypeMemberLine(file, line, trimmed);
   const plainProperty = /^[A-Za-z_$][\w$?]*:\s/.test(trimmed) && !typeMember;
   const categories = new Set<string>();
+  // @behavior requirements.change_anchoring.changed_categories.contract Exported lines and tracked type members require contract anchors.
   if (/^(export|public)\b/.test(trimmed) || typeMember) categories.add("contract");
+  // @behavior requirements.change_anchoring.changed_categories.state State-shaped text and transition markers require state-policy anchors.
   if (/\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b|\bswitch\b|\bcase\b|transition|setState|mark[A-Z]|complete|fail|cancel|retry/.test(trimmed)) categories.add("state-policy");
+  // @behavior requirements.change_anchoring.changed_categories.effect External calls, storage writes, messaging, tracing, and emitted events require side-effect anchors.
   if (/fetch\(|chrome\.|indexedDB|localStorage|sessionStorage|\.put\(|\.add\(|\.delete\(|\.set\(|sendMessage|connect\(|postMessage|console\.|trace|emit|dispatchEvent|createObjectStore/.test(trimmed)) categories.add("side-effect");
+  // @behavior requirements.change_anchoring.changed_categories.failure Failure keywords and timeout or retry mechanisms require failure-policy anchors.
   if (/\btry\b|\bcatch\b|\bfinally\b|\bthrow\b|Error\b|timeout|retry|fallback|AbortController|Promise\.race|setTimeout/.test(trimmed)) categories.add("failure-policy");
+  // @behavior requirements.change_anchoring.changed_categories.safety Access, credential, URL, editing, translation, escaping, redaction, and privacy text require access-safety anchors.
   if (/sanitize|secret|apiKey|token|credential|password|permission|origin|URL|url|editable|notranslate|translate=|escape|redact|privacy/.test(trimmed)) categories.add("access-safety");
+  // @behavior requirements.change_anchoring.changed_categories.structure Structural abstraction declarations require structure-intent anchors.
   if (/\binterface\b|\babstract\s+class\b|\bclass\s+\w*(Adapter|Registry|Factory|Provider|Resolver|Middleware|Plugin|Bridge|Wrapper)\b/.test(trimmed)) categories.add("structure-intent");
   if ((standaloneLiteral || plainProperty) && categories.size === 0) return [];
   return [...categories];
@@ -686,6 +712,7 @@ function isTrackedTypeMemberLine(file: SourceFile, line: number, text: string): 
     if (ts.isPropertySignature(node) || ts.isMethodSignature(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node)) {
       const startLine = offsetLine(file.text, node.getStart(source));
       const endLine = offsetLine(file.text, node.getEnd());
+      // @behavior requirements.change_anchoring.type_member_changes.span_match A changed line inside a type member uses the member visibility and state-shaped text for classification.
       if (startLine <= line && line <= endLine) {
         matched = isExportedTypeMember(node) || isImplicitPublicClassMember(node) || /\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b/.test(text);
         return;
@@ -711,11 +738,13 @@ function isExportedTypeMember(node: ts.Node): boolean {
 function isImplicitPublicClassMember(node: ts.Node): boolean {
   if (!ts.isPropertyDeclaration(node) && !ts.isMethodDeclaration(node)) return false;
   if (!ts.isClassDeclaration(node.parent) || !hasExportModifier(node.parent)) return false;
+  // @constraint requirements.change_anchoring.export_modifier.implicit_public Exported class members count as public unless TypeScript marks them private or protected.
   return !ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword || modifier.kind === ts.SyntaxKind.ProtectedKeyword);
 }
 
 // @constraint requirements.change_anchoring.export_modifier.export_keyword TypeScript export modifiers mark type owners as public contract containers.
 function hasExportModifier(node: ts.HasModifiers): boolean {
+  // @constraint requirements.change_anchoring.export_modifier.export_keyword.scan Modifier scanning detects TypeScript export keywords on target owners.
   return !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 }
 
@@ -725,6 +754,7 @@ function groupComments(comments: RequirementComment[]): Map<string, RequirementC
   for (const comment of comments) {
     const bucket = result.get(comment.file) ?? [];
     bucket.push(comment);
+    // @behavior requirements.change_anchoring.file_local_lookup.bucket Requirement comments are grouped under their declaring file path.
     result.set(comment.file, bucket);
   }
   return result;
@@ -735,6 +765,7 @@ function hasAnchorForLine(comments: RequirementComment[], line: number, category
   const typeMember = isTrackedTypeMemberLine(file, line, text);
   return comments.some((comment) => {
     if (!comment.target || comment.target.isFile) return false;
+    // @constraint requirements.change_anchoring.local_anchor.type_member_target Type-member changes require a matching member-level anchor for contract and state-policy categories.
     if (typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature", "PropertyDeclaration", "MethodDeclaration"].includes(comment.target.kind)) return false;
     if (!targetLocallyCoversLine(comment.target, line, category, typeMember)) return false;
     if (category === "structure-intent") return comment.tag === "@intent";
@@ -776,6 +807,7 @@ const OUTPUT_ENCODING = "utf8";
 
 // @behavior requirements.diagnostic_output.scan_listing Scan output lists discovered declarations, verification references, and binding targets.
 function printScan(registry: Registry): void {
+  // @behavior requirements.diagnostic_output.scan_listing.rows Each scan row prints file, line, tag, ID, and bound target.
   for (const comment of registry.comments) {
     const target = comment.target ? `${comment.target.kind}@${comment.target.line}` : "unbound";
     console.log(`${comment.file}:${comment.line} ${comment.tag} ${comment.id} -> ${target}`);
@@ -784,6 +816,7 @@ function printScan(registry: Registry): void {
 
 // @behavior requirements.diagnostic_output.compiler_style Diagnostic output uses compiler-style messages and stays silent when validation passes.
 function printDiagnostics(diagnostics: Diagnostic[]): void {
+  // @behavior requirements.diagnostic_output.compiler_style.stderr Diagnostics print to stderr as file-line rule messages.
   for (const diagnostic of diagnostics) {
     console.error(`${diagnostic.file}:${diagnostic.line} ${diagnostic.rule} ${diagnostic.message}`);
   }
