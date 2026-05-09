@@ -537,7 +537,7 @@ function checkStagedDiffAnchors(files: SourceFile[], registry: Registry): Diagno
   return diagnostics;
 }
 
-// @behavior requirements.diff.parse The diff parser extracts added and modified staged lines with their new-file line numbers.
+// @behavior requirements.diff.parse The diff parser extracts added and deleted staged lines with adjacent new-file line numbers.
 function parseStagedDiff(): HunkLine[] {
   const diff = git(["diff", "--cached", "--unified=0", "--", "*.ts", "*.tsx", "*.mts", "*.cts"]);
   const lines: HunkLine[] = [];
@@ -560,7 +560,11 @@ function parseStagedDiff(): HunkLine[] {
       newLine += 1;
       continue;
     }
-    if (!raw.startsWith("-")) newLine += 1;
+    if (raw.startsWith("-")) {
+      lines.push({ path, newLine: Math.max(1, newLine), text: raw.slice(1) });
+      continue;
+    }
+    newLine += 1;
   }
   return lines;
 }
@@ -621,7 +625,7 @@ function hasAnchorForLine(comments: RequirementComment[], line: number, category
   const typeMember = isTypeMemberLine(file, line);
   return comments.some((comment) => {
     if (!comment.target || comment.target.isFile) return false;
-    if (typeMember && (category === "contract" || category === "state-policy") && comment.target.line !== line) return false;
+    if (typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature"].includes(comment.target.kind)) return false;
     const startLine = comment.line;
     const endLine = comment.target.endLine;
     if (line < startLine || line > endLine) return false;

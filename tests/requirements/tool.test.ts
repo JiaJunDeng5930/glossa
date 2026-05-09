@@ -103,6 +103,42 @@ describe("requirement automation tool", () => {
 
     expect(stderr).toContain("src/main.ts:12 missing-requirement-anchor");
   }, 20_000);
+
+  // @verifies requirements.diff.parse The test verifies that staged checking records deletion-only hunks as changed lines.
+  it("rejects an unanchored deletion-only side effect change", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "export function saveValue(): void {",
+        "  localStorage.setItem(\"demo\", \"value\");",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+    runGit(cwd, ["add", "."]);
+    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "export function saveValue(): void {",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runGit(cwd, ["add", "src/main.ts"]);
+
+    let stderr = "";
+    try {
+      runTool(cwd, ["check", "--staged"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:1 missing-requirement-anchor");
+  }, 20_000);
 });
 
 function createFixtureRepo(): string {
@@ -128,6 +164,10 @@ function writeValidRequirementFiles(cwd: string): void {
       "export interface DemoState {",
       "  // @constraint demo.contract.value The value member exposes the configured demo value.",
       "  value: string;",
+      "  // @constraint demo.contract.status The status member exposes readiness states across multiple lines.",
+      "  status: {",
+      "    kind: \"ready\" | \"pending\";",
+      "  };",
       "}",
       "",
     ].join("\n"),
@@ -142,6 +182,7 @@ function writeValidRequirementFiles(cwd: string): void {
       "  // @verifies demo.feature The test verifies that the demo feature returns its configured value.",
       "  // @verifies demo.contract.shape The test verifies that the public demo state contract has a verified value member.",
       "  // @verifies demo.contract.value The test verifies that the public demo state keeps its configured value shape.",
+      "  // @verifies demo.contract.status The test verifies that the public demo state exposes readiness status shape.",
       "  it(\"returns the configured value\", () => {",
       "    expect(demoValue()).toBe(\"demo\");",
       "  });",
