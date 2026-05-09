@@ -28,12 +28,14 @@ export interface AnkiCardInput {
   token: TokenCandidate;
 }
 
+// @intent glossa.ai_requests.backend_interface The AI backend interface is the active boundary for gloss and card generation providers.
 export interface AiBackend {
   gloss(input: GlossBackendInput): Promise<GlossBackendOutput>;
   glossFrame(input: GlossFrameBackendInput): Promise<GlossBackendOutput>;
   ankiCard(input: AnkiCardInput): Promise<AnkiCardOutput>;
 }
 
+// @behavior glossa.ai_requests.glossa_backend Non-OpenAI providers send generation tasks to configured glossa-backend endpoints.
 export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
   return {
     async gloss(input) {
@@ -47,6 +49,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         });
         return parseJsonOutput<GlossBackendOutput>(output);
       }
+      // @behavior glossa.ai_requests.glossa_backend.gloss The glossa-backend gloss request posts one sentence, token list, target language, prompts, and version inputs.
       return postJson<GlossBackendOutput>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/gloss`, {
         sentence: input.sentence,
         tokens: input.tokens,
@@ -67,6 +70,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         });
         return parseJsonOutput<GlossBackendOutput>(output);
       }
+      // @behavior glossa.ai_requests.glossa_backend.gloss_frame The glossa-backend frame request posts sentence-grounded token items and target language.
       return postJson<GlossBackendOutput>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/gloss`, {
         // glossa-backend accepts the same frame shape as the serial AI outlet:
         // one request carries multiple sentence-grounded token lookups.
@@ -89,6 +93,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         });
         return parseJsonOutput<AnkiCardOutput>(output);
       }
+      // @behavior glossa.ai_requests.glossa_backend.anki_card The glossa-backend card request posts one sentence, clicked token, target language, prompts, and version inputs.
       return postJson<AnkiCardOutput>(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/anki-card`, {
         sentence: input.sentence,
         token: input.token,
@@ -102,8 +107,10 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
   };
 }
 
+// @behavior glossa.ai_requests.openai OpenAI providers encode generation tasks into provider-specific request formats.
 async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettings, systemInstruction: string, payload: unknown): Promise<string> {
   if (settings.ai.provider === "openai-chat-completions") {
+    // @behavior glossa.ai_requests.openai.chat_completions Chat Completions requests send developer and user messages and read the first message content.
     const response = await postJson<OpenAiChatCompletionResponse>(fetchImpl, settings.ai.endpoint, {
       model: settings.modelVersion,
       messages: [
@@ -115,6 +122,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
     return response.choices[0]?.message.content ?? "";
   }
   if (settings.ai.provider === "openai-completions") {
+    // @behavior glossa.ai_requests.openai.legacy_completions Legacy Completions requests combine the system instruction and task payload into one prompt.
     const response = await postJson<OpenAiCompletionResponse>(fetchImpl, settings.ai.endpoint, {
       model: settings.modelVersion,
       prompt: `${systemInstruction}\n\n${JSON.stringify(payload)}`,
@@ -122,6 +130,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
     }, settings.ai.apiKey);
     return response.choices[0]?.text ?? "";
   }
+  // @behavior glossa.ai_requests.openai.responses Responses API requests send system and user input items and read output text.
   const response = await postJson<OpenAiResponse>(fetchImpl, settings.ai.endpoint, {
     model: settings.modelVersion,
     input: [
@@ -150,6 +159,7 @@ function isOpenAiProvider(provider: GlossaSettings["ai"]["provider"]): boolean {
   return provider === "openai-responses" || provider === "openai-chat-completions" || provider === "openai-completions";
 }
 
+// @constraint glossa.ai_requests.reasoning_effort Non-none reasoning effort settings are sent through provider request bodies.
 function reasoningBody(settings: GlossaSettings): { reasoning?: { effort: Exclude<GlossaSettings["ai"]["reasoningEffort"], "none"> } } {
   if (settings.ai.reasoningEffort === "none") {
     return {};
@@ -173,14 +183,17 @@ function parseJsonOutput<T>(value: string): T {
   }
 }
 
+// @behavior glossa.ai_requests.failure Provider HTTP, JSON, and transport failures become AI diagnostics.
 async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey?: string): Promise<T> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) {
     headers.authorization = `Bearer ${apiKey}`;
   }
   let lastError: unknown;
+  // @constraint glossa.ai_requests.failure.retry_limit AI JSON requests try at most two transport attempts.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
+    // @constraint glossa.ai_requests.failure.timeout AI JSON requests abort each transport attempt after fifteen seconds.
     const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
     try {
       const response = await fetchImpl(url, {
@@ -190,16 +203,20 @@ async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, 
         signal: controller.signal
       });
       if (!response.ok) {
+        // @behavior glossa.ai_requests.failure.http_status Non-OK AI HTTP responses become diagnostics with provider service and status.
         throw createDiagnosticErrorFromPayload(response.status);
       }
       try {
         return await response.json() as T;
       } catch (error) {
+        // @behavior glossa.ai_requests.failure.invalid_json Malformed AI JSON responses become invalid-response diagnostics for AI.
         throw createDiagnosticError("invalid-response", "AI returned invalid JSON", { service: "ai", cause: error });
       }
     } catch (error) {
+      // @behavior glossa.ai_requests.failure.request_error AI request failures pass through the shared request error mapper before retry exhaustion.
       lastError = requestDiagnosticErrorFrom(error, { reason: "service-error", message: "AI backend request failed", service: "ai" });
     } finally {
+      // @constraint glossa.ai_requests.failure.timeout_cleanup AI JSON requests clear each attempt timeout after success or failure.
       globalThis.clearTimeout(timeout);
     }
   }

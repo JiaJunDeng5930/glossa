@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { createAiBackend } from "../../src/background/ai";
 import { DEFAULT_SETTINGS, type GlossaSettings } from "../../src/shared/types";
 
-// @verifies glossa.ai_requests
-// @verifies glossa.failure_reporting
 describe("AI backend adapters", () => {
+  // @verifies glossa.ai_requests.openai.responses
+  // @verifies glossa.ai_requests.reasoning_effort
+  // @verifies glossa.ai_requests.failure.timeout_cleanup
   it("sends reasoning effort to the Responses API and parses output_text", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "{\"items\":[]}" }));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
 
     await createAiBackend(fetchImpl as never).gloss({
       settings,
@@ -19,8 +21,12 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledWith("https://api.openai.com/v1/responses", expect.objectContaining({
       body: expect.stringContaining("\"reasoning\":{\"effort\":\"high\"}")
     }));
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+    clearTimeoutSpy.mockRestore();
   });
 
+  // @verifies glossa.ai_requests.openai.chat_completions
+  // @verifies glossa.ai_requests.reasoning_effort
   it("supports Chat Completions request and response shape", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       choices: [{ message: { content: "{\"items\":[{\"tokenId\":\"t1\",\"targetText\":\"submit\",\"display\":\"提交\"}]}" } }]
@@ -45,6 +51,7 @@ describe("AI backend adapters", () => {
     expect(result.items[0]).toMatchObject({ display: "提交" });
   });
 
+  // @verifies glossa.ai_requests.glossa_backend.gloss_frame
   it("sends frame-shaped gloss batches to the backend", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       items: [{ tokenId: "t1", targetText: "submit", display: "提交" }]
@@ -67,6 +74,29 @@ describe("AI backend adapters", () => {
     expect(result.items[0]).toMatchObject({ display: "提交" });
   });
 
+  // @verifies glossa.ai_requests.glossa_backend.gloss
+  it("sends single gloss requests to the glossa backend", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      items: [{ tokenId: "t1", targetText: "submit", display: "提交" }]
+    }));
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
+
+    const result = await createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: [{ id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }]
+    });
+
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const body = JSON.parse(calls[0]![1].body as string) as { sentence: string; tokens: unknown[]; targetLang: string };
+    expect(calls[0]![0]).toBe("https://ai.example.test/gloss");
+    expect(body).toMatchObject({ sentence: "Submit the form.", targetLang: "zh-CN" });
+    expect(body.tokens).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ display: "提交" });
+  });
+
+  // @verifies glossa.ai_requests.openai.legacy_completions
+  // @verifies glossa.ai_requests.reasoning_effort
   it("supports legacy Completions request and response shape", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       choices: [{ text: "{\"cards\":[{\"front\":\"<b>Submit</b> the form.\",\"back\":\"提交\"}]}" }]
@@ -92,6 +122,28 @@ describe("AI backend adapters", () => {
     expect(result.cards[0]).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
   });
 
+  // @verifies glossa.ai_requests.glossa_backend.anki_card
+  it("sends card requests to the glossa backend", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      cards: [{ front: "<b>Submit</b> the form.", back: "提交" }]
+    }));
+    const settings = settingsFor("glossa-backend", "https://ai.example.test/", "medium");
+
+    const result = await createAiBackend(fetchImpl as never).ankiCard({
+      settings,
+      sentence: "Submit the form.",
+      token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
+    });
+
+    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+    const body = JSON.parse(calls[0]![1].body as string) as { sentence: string; token: unknown; targetLang: string };
+    expect(calls[0]![0]).toBe("https://ai.example.test/anki-card");
+    expect(body).toMatchObject({ sentence: "Submit the form.", targetLang: "zh-CN" });
+    expect(body.token).toMatchObject({ lemma: "submit" });
+    expect(result.cards[0]).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
+  });
+
+  // @verifies glossa.ai_requests.failure.http_status
   it("classifies HTTP auth failures as AI diagnostic errors", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "bad key" }, 401));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
@@ -105,6 +157,8 @@ describe("AI backend adapters", () => {
     });
   });
 
+  // @verifies glossa.ai_requests.failure.request_error
+  // @verifies glossa.ai_requests.failure.retry_limit
   it("classifies network failures as AI diagnostic errors", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError("fetch failed");
@@ -118,8 +172,10 @@ describe("AI backend adapters", () => {
     })).rejects.toMatchObject({
       payload: { reason: "network", service: "ai" }
     });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  // @verifies glossa.ai_requests.failure.invalid_json
   it("classifies invalid model JSON as an AI response diagnostic error", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "not json" }));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
@@ -131,6 +187,37 @@ describe("AI backend adapters", () => {
     })).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
     });
+  });
+
+  // @verifies glossa.ai_requests.failure.timeout
+  it("aborts slow AI transport attempts after the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const fetchImpl = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal ?? undefined;
+        if (signal) signals.push(signal);
+        signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }));
+      const settings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
+
+      const request = createAiBackend(fetchImpl as never).gloss({
+        settings,
+        sentence: "Submit the form.",
+        tokens: []
+      });
+      const assertion = expect(request).rejects.toMatchObject({
+        payload: { service: "ai" }
+      });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      await assertion;
+      expect(signals).toHaveLength(2);
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

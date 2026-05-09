@@ -50,7 +50,7 @@ For Chrome extension debugability work, run `.skills/chrome-extension-debugabili
 
 ## Requirement Comments
 
-Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and `@intent` for globally unique requirement declarations with one sentence. Organize dotted IDs by product or tool requirement domain, then by narrower behavioral detail; a descendant ID expresses a detail of its ancestor. Architecture descriptions, module boundaries, layer duties, helper names, parser roles, loader roles, generator roles, wrapper roles, record shapes, command names, and code-navigation notes belong in ordinary engineering docs or ordinary comments. `@intent` is reserved for an active abstraction boundary whose current business purpose is required by the system. Use `@verifies` as a direct reference whose content is exactly the tag plus an existing `@behavior` or `@constraint` ID. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with `npm run req:fmt-agents` after requirement tag changes.
+Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and `@intent` for globally unique requirement declarations with one sentence bound to one code unit. A code unit can be a module, type, function, method, branch, state transition, external call, failure path, assertion, or narrower syntax unit. Organize dotted IDs by product or tool requirement domain, then by narrower behavioral detail; a descendant ID expresses a detail of its ancestor next to the code unit that implements that detail. A broad file, type, or function comment covers that code unit only, so inner branches, state transitions, side effects, failure policies, structural abstractions, and test assertions need narrower descendant comments. Public contracts, state policies, durable writes, external calls, observability effects, timeouts, retries, error mapping, access or safety rules, structural abstractions, and test expectations require local requirement comments when they are added or changed. Architecture descriptions, module boundaries, layer duties, helper names, parser roles, loader roles, generator roles, wrapper roles, record shapes, command names, and code-navigation notes belong in ordinary engineering docs or ordinary comments. `@intent` is reserved for an active abstraction boundary whose current business purpose is required by the system. Use `@verifies` as a direct reference whose content is exactly the tag plus an existing `@behavior` or `@constraint` ID, choosing the most specific ID that the test expectation verifies. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with `npm run req:fmt-agents` after requirement tag changes.
 
 <!-- BEGIN AGENTS_MD_REQUIREMENT_INDEX -->
 [Requirement Index]|root:.
@@ -58,13 +58,45 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |source:source_comments_only
 |declaration_body:single_sentence
 |verification_body:tag_plus_existing_id
+|binding:one_requirement_comment_per_code_unit
+|inner_details:descendant_ids_near_inner_code_units
 |tags:{@behavior,@constraint,@intent,@verifies}
 |glossa|glossa.{ai_requests,cache_identity,card_creation,extension_contracts,extension_storage,failure_reporting,page_translation,settings_save,shortcuts,translation_start_popup,word_memory}
-|glossa.ai_requests|glossa.ai_requests.{}
+|glossa.ai_requests|glossa.ai_requests.{backend_interface,failure,glossa_backend,openai,reasoning_effort}
+|glossa.ai_requests.backend_interface|glossa.ai_requests.backend_interface.{}
+|glossa.ai_requests.failure|glossa.ai_requests.failure.{http_status,invalid_json,request_error,retry_limit,timeout,timeout_cleanup}
+|glossa.ai_requests.failure.http_status|glossa.ai_requests.failure.http_status.{}
+|glossa.ai_requests.failure.invalid_json|glossa.ai_requests.failure.invalid_json.{}
+|glossa.ai_requests.failure.request_error|glossa.ai_requests.failure.request_error.{}
+|glossa.ai_requests.failure.retry_limit|glossa.ai_requests.failure.retry_limit.{}
+|glossa.ai_requests.failure.timeout|glossa.ai_requests.failure.timeout.{}
+|glossa.ai_requests.failure.timeout_cleanup|glossa.ai_requests.failure.timeout_cleanup.{}
+|glossa.ai_requests.glossa_backend|glossa.ai_requests.glossa_backend.{anki_card,gloss,gloss_frame}
+|glossa.ai_requests.glossa_backend.anki_card|glossa.ai_requests.glossa_backend.anki_card.{}
+|glossa.ai_requests.glossa_backend.gloss|glossa.ai_requests.glossa_backend.gloss.{}
+|glossa.ai_requests.glossa_backend.gloss_frame|glossa.ai_requests.glossa_backend.gloss_frame.{}
+|glossa.ai_requests.openai|glossa.ai_requests.openai.{chat_completions,legacy_completions,responses}
+|glossa.ai_requests.openai.chat_completions|glossa.ai_requests.openai.chat_completions.{}
+|glossa.ai_requests.openai.legacy_completions|glossa.ai_requests.openai.legacy_completions.{}
+|glossa.ai_requests.openai.responses|glossa.ai_requests.openai.responses.{}
+|glossa.ai_requests.reasoning_effort|glossa.ai_requests.reasoning_effort.{}
 |glossa.cache_identity|glossa.cache_identity.{request_parts,text_hash}
 |glossa.cache_identity.request_parts|glossa.cache_identity.request_parts.{}
 |glossa.cache_identity.text_hash|glossa.cache_identity.text_hash.{}
-|glossa.card_creation|glossa.card_creation.{}
+|glossa.card_creation|glossa.card_creation.{anki_client,failure,note_request}
+|glossa.card_creation.anki_client|glossa.card_creation.anki_client.{}
+|glossa.card_creation.failure|glossa.card_creation.failure.{http_status,invalid_response,request_error,service_error}
+|glossa.card_creation.failure.http_status|glossa.card_creation.failure.http_status.{}
+|glossa.card_creation.failure.invalid_response|glossa.card_creation.failure.invalid_response.{}
+|glossa.card_creation.failure.request_error|glossa.card_creation.failure.request_error.{}
+|glossa.card_creation.failure.service_error|glossa.card_creation.failure.service_error.{}
+|glossa.card_creation.note_request|glossa.card_creation.note_request.{fields,http_call,payload,tags,timeout,timeout_cleanup}
+|glossa.card_creation.note_request.fields|glossa.card_creation.note_request.fields.{}
+|glossa.card_creation.note_request.http_call|glossa.card_creation.note_request.http_call.{}
+|glossa.card_creation.note_request.payload|glossa.card_creation.note_request.payload.{}
+|glossa.card_creation.note_request.tags|glossa.card_creation.note_request.tags.{}
+|glossa.card_creation.note_request.timeout|glossa.card_creation.note_request.timeout.{}
+|glossa.card_creation.note_request.timeout_cleanup|glossa.card_creation.note_request.timeout_cleanup.{}
 |glossa.extension_contracts|glossa.extension_contracts.{message_envelopes,payload_consistency,request_effects,restart_continuity}
 |glossa.extension_contracts.message_envelopes|glossa.extension_contracts.message_envelopes.{}
 |glossa.extension_contracts.payload_consistency|glossa.extension_contracts.payload_consistency.{}
