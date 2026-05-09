@@ -679,7 +679,7 @@ function isExportedTypeMember(node: ts.Node): boolean {
 }
 
 // @constraint requirements.enforcement.type_member_export_modifier Type-member owners use TypeScript export modifiers to indicate public contract membership.
-function hasExportModifier(node: ts.Node): boolean {
+function hasExportModifier(node: ts.HasModifiers): boolean {
   return !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 }
 
