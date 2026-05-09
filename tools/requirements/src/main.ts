@@ -29,6 +29,7 @@ interface RequirementComment {
 
 // @intent requirements.types.target The bound-target interface records the syntax span that owns a requirement comment.
 interface BoundTarget {
+  // @constraint requirements.types.target.kind The kind member stores the TypeScript syntax kind used in scan output and anchor checks.
   kind: string;
   start: number;
   end: number;
@@ -548,7 +549,7 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
     if (categories.length === 0) continue;
     const comments = commentsByFile.get(line.path) ?? [];
     for (const category of categories) {
-      if (hasAnchorForLine(comments, line.newLine, category, file)) continue;
+      if (hasAnchorForLine(comments, line.newLine, category, file, line.text)) continue;
       diagnostics.push({
         file: line.path,
         line: line.newLine,
@@ -624,7 +625,7 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
   if (isTestPath(path)) {
     return /\b(expect|assert|mock|fixture|snapshot|toEqual|toBe|toThrow)\b/.test(trimmed) ? ["test-expectation"] : [];
   }
-  const typeMember = isTypeMemberLine(file, line);
+  const typeMember = isTrackedTypeMemberLine(file, line, trimmed);
   if (/^[A-Za-z_$][\w$?]*:\s/.test(trimmed) && !typeMember) return [];
   const categories = new Set<string>();
   if (/^(export|public)\b/.test(trimmed) || typeMember) categories.add("contract");
@@ -636,8 +637,8 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
   return [...categories];
 }
 
-// @behavior requirements.diff.type_member The syntax classifier keeps interface and type-literal members visible to contract and state-policy checks.
-function isTypeMemberLine(file: SourceFile, line: number): boolean {
+// @behavior requirements.diff.type_member The syntax classifier keeps exported and state-shaped type members visible to contract and state-policy checks.
+function isTrackedTypeMemberLine(file: SourceFile, line: number, text: string): boolean {
   const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
   let matched = false;
   const visit = (node: ts.Node) => {
@@ -646,7 +647,7 @@ function isTypeMemberLine(file: SourceFile, line: number): boolean {
       const startLine = offsetLine(file.text, node.getStart(source));
       const endLine = offsetLine(file.text, node.getEnd());
       if (startLine <= line && line <= endLine) {
-        matched = true;
+        matched = isExportedTypeMember(node) || /\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b/.test(text);
         return;
       }
     }
@@ -654,6 +655,21 @@ function isTypeMemberLine(file: SourceFile, line: number): boolean {
   };
   visit(source);
   return matched;
+}
+
+// @behavior requirements.diff.type_member_export The export detector treats members of exported interfaces and exported type literals as public contracts.
+function isExportedTypeMember(node: ts.Node): boolean {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (ts.isInterfaceDeclaration(current) || ts.isTypeAliasDeclaration(current)) return hasExportModifier(current);
+    current = current.parent;
+  }
+  return false;
+}
+
+// @behavior requirements.diff.type_member_export_modifier The modifier detector reads TypeScript export keywords from declarations that own type members.
+function hasExportModifier(node: ts.Node): boolean {
+  return !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 }
 
 // @behavior requirements.diff.group The grouping helper indexes parsed comments by source path for anchor lookup.
@@ -668,8 +684,8 @@ function groupComments(comments: RequirementComment[]): Map<string, RequirementC
 }
 
 // @constraint requirements.diff.anchor The anchor lookup accepts a non-file target whose local span covers the changed line and whose tag matches the forced category.
-function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile): boolean {
-  const typeMember = isTypeMemberLine(file, line);
+function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile, text: string): boolean {
+  const typeMember = isTrackedTypeMemberLine(file, line, text);
   return comments.some((comment) => {
     if (!comment.target || comment.target.isFile) return false;
     if (typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature"].includes(comment.target.kind)) return false;

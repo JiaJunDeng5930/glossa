@@ -26,6 +26,7 @@ describe("requirement automation tool", () => {
   // @verifies requirements.parse.sentence The test verifies that single-sentence comments pass the scanner.
   // @verifies requirements.binding.nodes The test verifies that syntax nodes are bound during scan output.
   // @verifies requirements.binding.kinds The test verifies that declarations can own requirement comments.
+  // @verifies requirements.types.target.kind The test verifies that bound target kinds appear in scan output.
   // @verifies requirements.binding.first_code The test verifies that file-level requirements can bind before code.
   // @verifies requirements.binding.trivia The test verifies that comment trivia can appear before a target node.
   // @verifies requirements.validate.ancestors The test verifies that declared requirement ancestors are accepted.
@@ -65,6 +66,8 @@ describe("requirement automation tool", () => {
   // @verifies requirements.diff.parse The test verifies that staged checking can parse Git diff hunks.
   // @verifies requirements.diff.classify The test verifies that staged checking classifies forced-anchor categories.
   // @verifies requirements.diff.type_member The test verifies that type member changes remain visible to contract and state-policy checks.
+  // @verifies requirements.diff.type_member_export The test verifies that exported type members are treated as public contract changes.
+  // @verifies requirements.diff.type_member_export_modifier The test verifies that export modifiers mark type-member owners as public contracts.
   // @verifies requirements.diff.group The test verifies that staged checking groups anchors by file path.
   // @verifies requirements.diff.rule The test verifies that staged checking emits stable missing-anchor rules.
   // @verifies requirements.output.diagnostics The test verifies that diagnostic output stays compiler-style.

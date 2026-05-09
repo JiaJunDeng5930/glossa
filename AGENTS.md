@@ -104,7 +104,7 @@ Requirement truth lives in one-sentence source comments. Use only `@behavior`, `
 |requirements.cli.help|requirements.cli.help.{}
 |requirements.cli.option|requirements.cli.option.{}
 |requirements.diagnostic|requirements.diagnostic.{}
-|requirements.diff|requirements.diff.{anchor,base,check,classify,group,old_blob,parse,rule,type_member}
+|requirements.diff|requirements.diff.{anchor,base,check,classify,group,old_blob,parse,rule,type_member,type_member_export,type_member_export_modifier}
 |requirements.diff.anchor|requirements.diff.anchor.{}
 |requirements.diff.base|requirements.diff.base.{}
 |requirements.diff.check|requirements.diff.check.{}
@@ -114,6 +114,8 @@ Requirement truth lives in one-sentence source comments. Use only `@behavior`, `
 |requirements.diff.parse|requirements.diff.parse.{}
 |requirements.diff.rule|requirements.diff.rule.{}
 |requirements.diff.type_member|requirements.diff.type_member.{}
+|requirements.diff.type_member_export|requirements.diff.type_member_export.{}
+|requirements.diff.type_member_export_modifier|requirements.diff.type_member_export_modifier.{}
 |requirements.git|requirements.git.{}
 |requirements.location|requirements.location.{}
 |requirements.output|requirements.output.{diagnostics,scan}
@@ -137,7 +139,8 @@ Requirement truth lives in one-sentence source comments. Use only `@behavior`, `
 |requirements.types.hunk_line.old_path|requirements.types.hunk_line.old_path.{}
 |requirements.types.registry|requirements.types.registry.{}
 |requirements.types.source_file|requirements.types.source_file.{}
-|requirements.types.target|requirements.types.target.{}
+|requirements.types.target|requirements.types.target.{kind}
+|requirements.types.target.kind|requirements.types.target.kind.{}
 |requirements.validate|requirements.validate.{ancestors,leaf,tests}
 |requirements.validate.ancestors|requirements.validate.ancestors.{}
 |requirements.validate.leaf|requirements.validate.leaf.{}
