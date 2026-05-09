@@ -296,10 +296,8 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
     const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
     const nodes = collectBindableNodes(source);
     const firstCodeStart = findFirstCodeStart(source);
-    const firstStatement = source.statements[0];
-    const firstStatementIsImport = !!firstStatement && (ts.isImportDeclaration(firstStatement) || ts.isImportEqualsDeclaration(firstStatement));
     for (const comment of fileComments) {
-      if (firstStatementIsImport && comment.end <= firstCodeStart && onlyWhitespaceAndComments(file.text.slice(0, comment.start))) {
+      if (comment.end <= firstCodeStart && onlyWhitespaceAndComments(file.text.slice(0, comment.start))) {
         comment.target = { kind: "file", start: 0, end: file.text.length, line: 1, endLine: offsetLine(file.text, file.text.length), isFile: true };
         continue;
       }

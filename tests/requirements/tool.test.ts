@@ -53,7 +53,7 @@ describe("requirement automation tool", () => {
     runGit(cwd, ["add", "AGENTS.md"]);
 
     const scan = runTool(cwd, ["scan"]);
-    expect(scan).toContain("src/main.ts:1 @behavior demo -> FunctionDeclaration@3");
+    expect(scan).toContain("src/main.ts:1 @behavior demo -> file@1");
     expect(scan).toContain("InterfaceDeclaration");
 
     runTool(cwd, ["check"]);
@@ -249,6 +249,8 @@ function writeValidRequirementFiles(cwd: string): void {
     join(cwd, "src/main.ts"),
     [
       "// @behavior demo The module exposes a demo feature with a verified contract.",
+      "import type { DemoType } from \"./types\";",
+      "",
       "// @behavior demo.feature The function returns the configured demo value.",
       "export function demoValue(): string {",
       "  return \"demo\";",
