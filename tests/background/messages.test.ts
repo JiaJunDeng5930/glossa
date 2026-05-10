@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createBackgroundMessageHandler } from "../../src/background/messages";
+import { buildCardCacheKey } from "../../src/core/cache";
+import { hashText } from "../../src/shared/hash";
 import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, type AnkiCardOutput, type CardedWordRecord, type GlossItem, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossItem, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
 // @verifies glossa.extension_contracts.request_effects
 // @verifies glossa.extension_storage.typed_access
@@ -198,6 +200,41 @@ describe("background message handler", () => {
 
     expect(ai.ankiCard).toHaveBeenCalledTimes(1);
     expect(anki.createNote).toHaveBeenCalledTimes(2);
+  });
+
+  // @verifies glossa.cache_identity.card_content_cache
+  it("strips legacy note ids when rewriting cached card content", async () => {
+    const storage = createMemoryStorage();
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      promptVersion: "gloss-v1",
+      prompts: { ...DEFAULT_SETTINGS.prompts, ankiCard: "Create one card." }
+    };
+    await storage.settings.set(settings);
+    const cardKey = await buildCardCacheKey({
+      lang: "en",
+      lemma: "submit",
+      targetLang: GLOSS_TARGET_LANG,
+      promptVersion: [settings.promptVersion, await hashText(settings.prompts.ankiCard)].join(":")
+    });
+    await storage.cardCache.put(cardKey, {
+      cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }],
+      noteIds: [99]
+    } as never);
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = { gloss: vi.fn(), glossFrame: vi.fn(), ankiCard: vi.fn() };
+    const anki = { createNote: vi.fn(async () => 42) };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    await handler(message);
+
+    expect(await storage.cardCache.get(cardKey)).toEqual({
+      cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }]
+    });
   });
 
 });

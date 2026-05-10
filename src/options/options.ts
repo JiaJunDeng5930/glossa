@@ -264,8 +264,20 @@ async function addKnownWord(): Promise<void> {
     return;
   }
   const now = Date.now();
+  const key = vocabularyKey("en", lemma);
+  const existing = await extensionStorage.lexicon.get(key);
   // @behavior glossa.word_memory.known_management.add_known Adding a known word writes a known vocabulary record keyed by normalized English lemma.
-  await extensionStorage.lexicon.put(markRecordShown(createCandidateRecord(lemma, lemma, "en", now), now));
+  const shown = markRecordShown(existing ?? createCandidateRecord(lemma, lemma, "en", now), now);
+  // @behavior glossa.word_memory.known_management.preserve_card_history_add Adding a known word preserves existing Anki note history in the lexicon and carded-word store.
+  if ((existing?.ankiNoteIds.length ?? 0) > 0) {
+    await extensionStorage.cardedWords.put(key, {
+      key,
+      lang: existing?.lang ?? "en",
+      lemma,
+      createdAt: existing?.lastClickedAt ?? existing?.lastShownAt ?? now
+    });
+  }
+  await extensionStorage.lexicon.put({ ...shown, state: "known", ankiNoteIds: existing?.ankiNoteIds ?? shown.ankiNoteIds });
   knownWordInput.value = "";
   await refreshKnownWords();
 }
@@ -295,7 +307,7 @@ function renderKnownWords(records: VocabularyRecord[]): void {
   }));
 }
 
-// @behavior glossa.word_memory.known_management.preserve_card_history Removing a known word preserves existing Anki note history in the carded-word store.
+// @behavior glossa.word_memory.known_management.preserve_card_history_remove Removing a known word preserves existing Anki note history in the carded-word store.
 async function removeKnownWord(record: VocabularyRecord): Promise<void> {
   const key = vocabularyKey(record.lang, record.lemma);
   if (record.ankiNoteIds.length > 0) {

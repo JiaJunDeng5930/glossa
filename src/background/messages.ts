@@ -83,10 +83,11 @@ async function handleWordClicked(
   });
   const cachedCardOutput = await deps.storage.cardCache.get(cardKey);
   const cardOutput = cachedCardOutput ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
-  const noteIds = await createNotes(cardOutput.cards, payload.token, settings, deps.anki);
+  const sanitizedCardOutput = { cards: cardOutput.cards };
+  const noteIds = await createNotes(sanitizedCardOutput.cards, payload.token, settings, deps.anki);
   const ankiNoteIds = noteIds.length === 0 ? clicked.ankiNoteIds : [...new Set([...clicked.ankiNoteIds, ...noteIds])];
   // @constraint glossa.cache_identity.card_content_cache Card content cache stores AI card content only, so each confirmed click can write a fresh Anki note.
-  await deps.storage.cardCache.put(cardKey, cardOutput);
+  await deps.storage.cardCache.put(cardKey, sanitizedCardOutput);
   // @behavior glossa.card_creation.duplicate_gate.success Only successful Anki note creation writes the word-only carded record.
   if (noteIds.length > 0) {
     await deps.storage.cardedWords.put(wordKey, {
