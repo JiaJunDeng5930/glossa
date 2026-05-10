@@ -28,13 +28,18 @@ export interface BackgroundMessageHandlerDeps {
 
 export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDeps) {
   const now = deps.now ?? Date.now;
+  const wordClickLanes = new Map<string, Promise<void>>();
   return async function handleMessage(message: ContentToBackgroundMessage): Promise<BackgroundResponseMessage> {
     try {
       if (message.type === "settings.get") {
         return createBackgroundResponse(message, "settings.response", { settings: await deps.storage.settings.get() });
       }
       // @behavior glossa.card_creation.duplicate_gate.response Word-click responses use the duplicate-card envelope when a carded word needs content-side confirmation.
-      const result = await handleWordClicked(message.payload, deps, now());
+      const result = await runSerializedWordClick(
+        wordClickLanes,
+        vocabularyKey("en", message.payload.token.lemma),
+        () => handleWordClicked(message.payload, deps, now())
+      );
       return result.kind === "duplicate"
         ? createBackgroundResponse(message, "word.card.duplicate", result.payload)
         : createBackgroundResponse(message, "word.clicked.ok", result.payload);
@@ -46,6 +51,23 @@ export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDep
       }));
     }
   };
+}
+
+async function runSerializedWordClick<T>(lanes: Map<string, Promise<void>>, wordKey: string, task: () => Promise<T>): Promise<T> {
+  const previous = lanes.get(wordKey) ?? Promise.resolve();
+  // @behavior glossa.card_creation.duplicate_gate.inflight_serialization Same-word card creation waits for prior word-click work before rechecking duplicate state.
+  const current = previous.catch(() => undefined).then(task);
+  const settled = current.then(() => undefined, () => undefined);
+  // @behavior glossa.card_creation.duplicate_gate.inflight_lane Same-word card creation records the current lane before AI or Anki work can start.
+  lanes.set(wordKey, settled);
+  try {
+    return await current;
+  } finally {
+    // @behavior glossa.card_creation.duplicate_gate.inflight_cleanup Completed same-word card work clears the lane only when it is still the newest queued task.
+    if (lanes.get(wordKey) === settled) {
+      lanes.delete(wordKey);
+    }
+  }
 }
 
 async function handleWordClicked(

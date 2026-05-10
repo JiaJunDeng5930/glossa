@@ -219,6 +219,52 @@ describe("background message handler", () => {
     expect(await storage.lexicon.get("en:submit")).toBeUndefined();
   });
 
+  // @verifies glossa.card_creation.duplicate_gate.inflight_serialization
+  // @verifies glossa.card_creation.duplicate_gate.inflight_lane
+  // @verifies glossa.card_creation.duplicate_gate.inflight_cleanup
+  it("rechecks duplicate state after overlapping same-word card creation settles", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    const firstMessage = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const secondMessage = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
+    };
+    const note = deferred<number>();
+    const anki = { createNote: vi.fn(() => note.promise) };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const first = handler(firstMessage);
+    await vi.waitFor(() => {
+      expect(anki.createNote).toHaveBeenCalledTimes(1);
+    });
+    const second = handler(secondMessage);
+    await Promise.resolve();
+
+    expect(ai.ankiCard).toHaveBeenCalledTimes(1);
+    expect(anki.createNote).toHaveBeenCalledTimes(1);
+    note.resolve(42);
+
+    await expect(first).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42, noteIds: [42] } });
+    await expect(second).resolves.toMatchObject({
+      type: "word.card.duplicate",
+      requestId: secondMessage.requestId,
+      payload: { lang: "en", lemma: "submit", surface: "submit", promptMs: 5_000 }
+    });
+    expect(ai.ankiCard).toHaveBeenCalledTimes(1);
+    expect(anki.createNote).toHaveBeenCalledTimes(1);
+  });
+
   // @verifies glossa.card_creation.duplicate_gate.existing_note_history
   it("returns duplicate-card confirmation when existing vocabulary already has Anki note ids", async () => {
     const storage = createMemoryStorage();
