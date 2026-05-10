@@ -15,6 +15,7 @@ describe("background message handler", () => {
   // @verifies glossa.card_creation.note_request.ids
   // @verifies glossa.card_creation.note_request.empty_result
   // @verifies glossa.card_creation.note_request.response_payload
+  // @verifies glossa.card_creation.note_request.response_payload.created_ids
   // @verifies glossa.card_creation.duplicate_gate.record_key
   // @verifies glossa.card_creation.duplicate_gate.record_lang
   // @verifies glossa.card_creation.duplicate_gate.record_lemma
@@ -101,6 +102,85 @@ describe("background message handler", () => {
     secondNote.resolve(43);
 
     await expect(response).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42, noteIds: [42, 43] } });
+  });
+
+  // @verifies glossa.card_creation.note_request.settled_result
+  // @verifies glossa.card_creation.note_request.settled_result_note_ids
+  // @verifies glossa.card_creation.note_request.settled_result_error
+  // @verifies glossa.card_creation.note_request.settled_success_ids
+  // @verifies glossa.card_creation.note_request.settled_failure_reason
+  // @verifies glossa.card_creation.note_request.partial_success_persistence
+  it("persists successful note ids before reporting a partial Anki failure", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({
+        cards: [
+          { front: "A <b>submit</b> button finishes the form.", back: "提交" },
+          { front: "Click <b>submit</b> after reviewing.", back: "提交按钮" }
+        ]
+      }))
+    };
+    const anki = {
+      createNote: vi.fn(async () => {
+        if (anki.createNote.mock.calls.length === 1) {
+          return 42;
+        }
+        throw new Error("AnkiConnect request failed");
+      })
+    };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const response = await handler(message);
+
+    expect(response).toMatchObject({ type: "error" });
+    expect(await storage.lexicon.get("en:submit")).toMatchObject({ ankiNoteIds: [42] });
+    expect(await storage.cardedWords.get("en:submit")).toMatchObject({
+      key: "en:submit",
+      lang: "en",
+      lemma: "submit",
+      createdAt: 1_000
+    });
+  });
+
+  // @verifies glossa.card_creation.note_request.full_failure
+  it("reports Anki failure without card history when every note write fails", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({
+        cards: [
+          { front: "A <b>submit</b> button finishes the form.", back: "提交" },
+          { front: "Click <b>submit</b> after reviewing.", back: "提交按钮" }
+        ]
+      }))
+    };
+    const anki = {
+      createNote: vi.fn(async () => {
+        throw new Error("AnkiConnect request failed");
+      })
+    };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const response = await handler(message);
+
+    expect(response).toMatchObject({ type: "error" });
+    expect(await storage.lexicon.get("en:submit")).toBeUndefined();
+    expect(await storage.cardedWords.get("en:submit")).toBeUndefined();
   });
 
   // @verifies glossa.card_creation.duplicate_gate

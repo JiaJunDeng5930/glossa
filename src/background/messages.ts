@@ -85,11 +85,16 @@ async function handleWordClicked(
   const cardOutput = cachedCardOutput ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
   const sanitizedCardOutput = { cards: cardOutput.cards };
   const noteIds = await createNotes(sanitizedCardOutput.cards, payload.token, settings, deps.anki);
-  const ankiNoteIds = noteIds.length === 0 ? clicked.ankiNoteIds : [...new Set([...clicked.ankiNoteIds, ...noteIds])];
+  // @behavior glossa.card_creation.note_request.full_failure A failed Anki batch with no successful note ids reports the failure before writing card history.
+  if (noteIds.noteIds.length === 0 && noteIds.error) {
+    throw noteIds.error;
+  }
+  const createdNoteIds = noteIds.noteIds;
+  const ankiNoteIds = createdNoteIds.length === 0 ? clicked.ankiNoteIds : [...new Set([...clicked.ankiNoteIds, ...createdNoteIds])];
   // @constraint glossa.cache_identity.card_content_cache Card content cache stores AI card content only, so each confirmed click can write a fresh Anki note.
   await deps.storage.cardCache.put(cardKey, sanitizedCardOutput);
   // @behavior glossa.card_creation.duplicate_gate.success Only successful Anki note creation writes the word-only carded record.
-  if (noteIds.length > 0) {
+  if (createdNoteIds.length > 0) {
     await deps.storage.cardedWords.put(wordKey, {
       key: wordKey,
       lang: "en",
@@ -99,24 +104,41 @@ async function handleWordClicked(
   }
   // @behavior glossa.card_creation.note_request.ids Successful note ids are merged into the clicked vocabulary record after Anki writes finish.
   await deps.storage.lexicon.put({ ...clicked, ankiNoteIds });
+  // @behavior glossa.card_creation.note_request.partial_success_persistence Partial Anki success is persisted before the failed note write is reported.
+  if (noteIds.error) {
+    throw noteIds.error;
+  }
   // @behavior glossa.card_creation.note_request.empty_result Empty Anki note results return an empty success payload.
-  if (noteIds.length === 0) {
+  if (createdNoteIds.length === 0) {
     return { kind: "created", payload: {} };
   }
   // @behavior glossa.card_creation.note_request.response_payload Successful card creation returns the first note id and the complete note id list.
-  const [noteId] = noteIds as [number, ...number[]];
-  return { kind: "created", payload: { noteId, noteIds } };
+  const [noteId] = createdNoteIds as [number, ...number[]];
+  // @behavior glossa.card_creation.note_request.response_payload.created_ids Successful card creation returns the created note id list after settled Anki writes.
+  return { kind: "created", payload: { noteId, noteIds: createdNoteIds } };
 }
 
+interface CreateNotesResult {
+  // @behavior glossa.card_creation.note_request.settled_result_note_ids Settled note write results expose every successful numeric note id.
+  noteIds: number[];
+  // @behavior glossa.card_creation.note_request.settled_result_error Settled note write results expose the first Anki rejection as an optional diagnostic error.
+  error?: unknown;
+}
+
+// @behavior glossa.card_creation.note_request.settled_result Card creation returns collected note ids with an optional diagnostic error after all Anki writes settle.
 async function createNotes(
   cards: Awaited<ReturnType<AiBackend["ankiCard"]>>["cards"],
   token: Extract<ContentToBackgroundMessage, { type: "word.clicked" }>["payload"]["token"],
   settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>,
   anki: AnkiClient
-): Promise<number[]> {
+): Promise<CreateNotesResult> {
   // @behavior glossa.card_creation.note_request.concurrent_cards Multiple generated cards start their Anki note writes in one concurrent request window.
-  const noteIds = await Promise.all(cards.map((card) => anki.createNote({ settings, card, token })));
-  return noteIds.filter((noteId): noteId is number => noteId !== undefined);
+  const results = await Promise.allSettled(cards.map((card) => anki.createNote({ settings, card, token })));
+  // @behavior glossa.card_creation.note_request.settled_success_ids Fulfilled Anki note writes keep every numeric note id returned by AnkiConnect.
+  const noteIds = results.flatMap((result) => result.status === "fulfilled" && result.value !== undefined ? [result.value] : []);
+  // @behavior glossa.card_creation.note_request.settled_failure_reason The first rejected Anki note write becomes the diagnostic error for the card response.
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  return { noteIds, ...(rejected ? { error: rejected.reason } : {}) };
 }
 
 async function promptCacheVersion(settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>, prompt: string): Promise<string> {
