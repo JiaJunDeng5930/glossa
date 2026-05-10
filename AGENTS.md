@@ -72,8 +72,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.ai_requests.failure.invalid_json|glossa.ai_requests.failure.invalid_json.{}
 |glossa.ai_requests.failure.request_error|glossa.ai_requests.failure.request_error.{}
 |glossa.ai_requests.failure.retry_limit|glossa.ai_requests.failure.retry_limit.{}
-|glossa.ai_requests.failure.timeout|glossa.ai_requests.failure.timeout.{connection_helper,options_check,setting}
+|glossa.ai_requests.failure.timeout|glossa.ai_requests.failure.timeout.{connection_helper,live_grouping,options_check,setting}
 |glossa.ai_requests.failure.timeout.connection_helper|glossa.ai_requests.failure.timeout.connection_helper.{}
+|glossa.ai_requests.failure.timeout.live_grouping|glossa.ai_requests.failure.timeout.live_grouping.{}
 |glossa.ai_requests.failure.timeout.options_check|glossa.ai_requests.failure.timeout.options_check.{}
 |glossa.ai_requests.failure.timeout.setting|glossa.ai_requests.failure.timeout.setting.{}
 |glossa.ai_requests.failure.timeout_cleanup|glossa.ai_requests.failure.timeout_cleanup.{}

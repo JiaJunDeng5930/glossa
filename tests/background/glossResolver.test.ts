@@ -282,6 +282,75 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
+  // @verifies glossa.ai_requests.failure.timeout.live_grouping
+  it("splits in-flight AI reuse by timeout for the same cache entry", async () => {
+    const storage = createMemoryStorage();
+    const shortTimeoutSettings: GlossaSettings = {
+      ...testSettings(),
+      ai: {
+        ...DEFAULT_SETTINGS.ai,
+        provider: "openai-responses",
+        endpoint: "https://api.openai.com/v1/responses",
+        reasoningEffort: "medium",
+        requestTimeoutMs: 2_500
+      }
+    };
+    const longTimeoutSettings: GlossaSettings = {
+      ...shortTimeoutSettings,
+      ai: {
+        ...shortTimeoutSettings.ai,
+        requestTimeoutMs: 30_000
+      }
+    };
+    const frameResolvers = new Map<number, (value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void>();
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn((input: { settings: GlossaSettings }) => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+        frameResolvers.set(input.settings.ai.requestTimeoutMs, resolve);
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 2,
+      aiFrameMaxMs: 1,
+      dbReadCoalesceMs: 0
+    });
+    const sentence = "A novel archive appears.";
+    const shortTimeoutEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const longTimeoutEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const first = resolver.resolve("https://example.test/short", [{
+      id: "s-short",
+      text: sentence,
+      tokens: [{ id: "t-short", sentenceId: "s-short", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], shortTimeoutSettings, 100, { emit: (event) => shortTimeoutEvents.push(event) });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+
+    const second = resolver.resolve("https://example.test/long", [{
+      id: "s-long",
+      text: sentence,
+      tokens: [{ id: "t-long", sentenceId: "s-long", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], longTimeoutSettings, 100, { emit: (event) => longTimeoutEvents.push(event) });
+    await vi.waitFor(() => expect(longTimeoutEvents).toEqual([{ tokenId: "t-long", status: "pending" }]));
+
+    frameResolvers.get(2_500)?.({ items: [{ tokenId: "t-short", targetText: "novel", display: "短时" }] });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(2));
+    frameResolvers.get(30_000)?.({ items: [{ tokenId: "t-long", targetText: "novel", display: "长时" }] });
+    await Promise.all([first, second]);
+
+    expect(ai.glossFrame.mock.calls.map(([input]) => input.settings.ai.requestTimeoutMs)).toEqual(expect.arrayContaining([2_500, 30_000]));
+    expect(shortTimeoutEvents).toEqual([
+      { tokenId: "t-short", status: "pending" },
+      { tokenId: "t-short", status: "ready", item: { tokenId: "t-short", targetText: "novel", display: "短时" } }
+    ]);
+    expect(longTimeoutEvents).toEqual([
+      { tokenId: "t-long", status: "pending" },
+      { tokenId: "t-long", status: "ready", item: { tokenId: "t-long", targetText: "novel", display: "长时" } }
+    ]);
+  });
+
   it("resolves duplicate token ids inside one AI frame independently", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();

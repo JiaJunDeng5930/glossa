@@ -701,11 +701,13 @@ function aiInFlightKey(settings: GlossaSettings, cacheKey: string): string {
   return `${aiFrameKey(settings)}\n${cacheKey}`;
 }
 
+// @constraint glossa.ai_requests.failure.timeout.live_grouping Concurrent gloss AI request grouping includes the configured AI timeout so overlapping scans use their own transport budgets.
 function aiFrameKey(settings: GlossaSettings): string {
   return [
     settings.ai.provider,
     settings.ai.endpoint,
     settings.ai.reasoningEffort,
+    String(settings.ai.requestTimeoutMs),
     settings.ai.apiKey ? hashSmall(settings.ai.apiKey) : "",
     settings.promptVersion,
     settings.modelVersion,
