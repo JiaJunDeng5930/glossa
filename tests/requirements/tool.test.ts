@@ -1,11 +1,15 @@
-import { execFileSync } from "node:child_process";
+// @vitest-environment node
+// @constraint requirements.test_config.requirement_node Requirement automation tests run in Node because they exercise CLI fixture repositories through asynchronous child processes.
+import { execFile } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 const TOOL = resolve("tools/requirements/src/main.ts");
 const TSX = resolve("node_modules/tsx/dist/cli.mjs");
+const execFileAsync = promisify(execFile);
 
 describe("requirement automation tool", () => {
   // @verifies requirements.cli.dispatch
@@ -14,9 +18,11 @@ describe("requirement automation tool", () => {
   // @verifies requirements.cli.compare_ref_option
   // @verifies requirements.cli.full_anchor_check
   // @verifies requirements.test_config
+  // @verifies requirements.test_config.requirement_node
+  // @verifies requirements.test_config.requirement_node.exec_helpers
   // @verifies requirements.test_config.browser
-  it("prints public help", () => {
-    const output = runTool(process.cwd(), ["help"]);
+  it("prints public help", async () => {
+    const output = await runTool(process.cwd(), ["help"]);
 
     expect(output).toContain("Usage: tsx tools/requirements/src/main.ts");
     expect(output).toContain("[--all]");
@@ -64,20 +70,20 @@ describe("requirement automation tool", () => {
   // @verifies requirements.agent_index.deterministic_rows.child_buckets
   // @verifies requirements.agent_index.freshness.snapshot_read
   // @verifies requirements.diagnostic_output.scan_listing.rows
-  it("formats AGENTS.md and checks a valid staged requirement snapshot", () => {
-    const cwd = createFixtureRepo();
+  it("formats AGENTS.md and checks a valid staged requirement snapshot", async () => {
+    const cwd = await createFixtureRepo();
     writeValidRequirementFiles(cwd);
 
-    runGit(cwd, ["add", "."]);
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "AGENTS.md"]);
+    await runGit(cwd, ["add", "."]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "AGENTS.md"]);
 
-    const scan = runTool(cwd, ["scan"]);
+    const scan = await runTool(cwd, ["scan"]);
     expect(scan).toContain("src/main.ts:1 @behavior demo -> file@1");
     expect(scan).toContain("InterfaceDeclaration");
 
-    runTool(cwd, ["check"]);
-    runTool(cwd, ["check", "--staged"]);
+    await runTool(cwd, ["check"]);
+    await runTool(cwd, ["check", "--staged"]);
 
     const agents = readFileSync(join(cwd, "AGENTS.md"), "utf8");
     expect(agents).toContain("|demo.feature|demo.feature.{}");
@@ -101,12 +107,12 @@ describe("requirement automation tool", () => {
   // @verifies requirements.change_anchoring.export_modifier.implicit_public
   // @verifies requirements.change_anchoring.export_modifier.export_keyword.scan
   // @verifies requirements.change_anchoring.local_anchor.type_member_target
-  it("rejects an unanchored staged type-member state change", () => {
-    const cwd = createFixtureRepo();
+  it("rejects an unanchored staged type-member state change", async () => {
+    const cwd = await createFixtureRepo();
     writeValidRequirementFiles(cwd);
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(
       join(cwd, "src/main.ts"),
@@ -127,21 +133,21 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runGit(cwd, ["add", "src/main.ts"]);
+    await runGit(cwd, ["add", "src/main.ts"]);
 
     let stderr = "";
     try {
-      runTool(cwd, ["check", "--staged"]);
+      await runTool(cwd, ["check", "--staged"]);
     } catch (error) {
-      stderr = String((error as { stderr?: Buffer }).stderr);
+      stderr = errorStderr(error);
     }
 
     expect(stderr).toContain("src/main.ts:12 missing-requirement-anchor");
   }, 120_000);
 
   // @verifies requirements.change_anchoring.type_member_changes
-  it("rejects an unanchored implicit-public class member change", () => {
-    const cwd = createFixtureRepo();
+  it("rejects an unanchored implicit-public class member change", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
@@ -151,9 +157,9 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(
       join(cwd, "src/main.ts"),
@@ -164,13 +170,13 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runGit(cwd, ["add", "src/main.ts"]);
+    await runGit(cwd, ["add", "src/main.ts"]);
 
     let stderr = "";
     try {
-      runTool(cwd, ["check", "--staged"]);
+      await runTool(cwd, ["check", "--staged"]);
     } catch (error) {
-      stderr = String((error as { stderr?: Buffer }).stderr);
+      stderr = errorStderr(error);
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
@@ -178,13 +184,13 @@ describe("requirement automation tool", () => {
 
   // @verifies requirements.comment_binding.target_kinds
   // @verifies requirements.change_anchoring.local_anchor
-  it("accepts an anchored staged re-export contract change", () => {
-    const cwd = createFixtureRepo();
+  it("accepts an anchored staged re-export contract change", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(join(cwd, "src/foo.ts"), "export const foo = 1;\n");
     writeFileSync(join(cwd, "src/main.ts"), "");
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(
       join(cwd, "src/main.ts"),
@@ -207,20 +213,20 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
 
-    runTool(cwd, ["check", "--staged"]);
+    await runTool(cwd, ["check", "--staged"]);
   }, 120_000);
 
   // @verifies requirements.comment_binding.first_declaration
   // @verifies requirements.change_anchoring.local_anchor
-  it("accepts an anchored first declaration in a new staged file", () => {
-    const cwd = createFixtureRepo();
+  it("accepts an anchored first declaration in a new staged file", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(join(cwd, "src/main.ts"), "");
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(
       join(cwd, "src/main.ts"),
@@ -244,18 +250,18 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
 
-    runTool(cwd, ["check", "--staged"]);
+    await runTool(cwd, ["check", "--staged"]);
   }, 120_000);
 
   // @verifies requirements.change_anchoring.changed_categories
   // @verifies requirements.change_anchoring.changed_categories.structure
   // @verifies requirements.change_anchoring.changed_categories.failure
   // @verifies requirements.change_anchoring.changed_categories.safety
-  it("rejects unanchored staged state literals before property skipping", () => {
-    const cwd = createFixtureRepo();
+  it("rejects unanchored staged state literals before property skipping", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
@@ -270,9 +276,9 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(
       join(cwd, "src/main.ts"),
@@ -289,13 +295,13 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runGit(cwd, ["add", "src/main.ts"]);
+    await runGit(cwd, ["add", "src/main.ts"]);
 
     let stderr = "";
     try {
-      runTool(cwd, ["check", "--staged"]);
+      await runTool(cwd, ["check", "--staged"]);
     } catch (error) {
-      stderr = String((error as { stderr?: Buffer }).stderr);
+      stderr = errorStderr(error);
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
@@ -311,8 +317,8 @@ describe("requirement automation tool", () => {
   // @verifies requirements.analysis_consistency.diff_lines.old_path
   // @verifies requirements.analysis_consistency.diff_lines.deleted
   // @verifies requirements.analysis_consistency.diff_lines.current_line
-  it("rejects an unanchored deletion-only side effect change", () => {
-    const cwd = createFixtureRepo();
+  it("rejects an unanchored deletion-only side effect change", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
@@ -323,9 +329,9 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(
       join(cwd, "src/main.ts"),
@@ -335,21 +341,21 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runGit(cwd, ["add", "src/main.ts"]);
+    await runGit(cwd, ["add", "src/main.ts"]);
 
     let stderr = "";
     try {
-      runTool(cwd, ["check", "--staged"]);
+      await runTool(cwd, ["check", "--staged"]);
     } catch (error) {
-      stderr = String((error as { stderr?: Buffer }).stderr);
+      stderr = errorStderr(error);
     }
 
     expect(stderr).toContain("src/main.ts:3 missing-requirement-anchor");
   }, 120_000);
 
   // @verifies requirements.change_anchoring.current_deletion_anchor
-  it("accepts a current anchor for a deletion-only side effect change", () => {
-    const cwd = createFixtureRepo();
+  it("accepts a current anchor for a deletion-only side effect change", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
@@ -359,9 +365,9 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(
       join(cwd, "src/main.ts"),
@@ -387,30 +393,30 @@ describe("requirement automation tool", () => {
         "",
       ].join("\n"),
     );
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
 
-    runTool(cwd, ["check", "--staged"]);
-    runTool(cwd, ["check", "--base", "HEAD"]);
+    await runTool(cwd, ["check", "--staged"]);
+    await runTool(cwd, ["check", "--base", "HEAD"]);
   }, 120_000);
 
   // @verifies requirements.change_anchoring.deleted_context
   // @verifies requirements.change_anchoring.exported_type_members
-  it("rejects an unanchored staged deleted exported type member", () => {
-    const cwd = createFixtureRepo();
+  it("rejects an unanchored staged deleted exported type member", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(join(cwd, "src/main.ts"), "export interface DemoContract {\n  value: string;\n}\n");
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(join(cwd, "src/main.ts"), "export interface DemoContract {\n}\n");
-    runGit(cwd, ["add", "src/main.ts"]);
+    await runGit(cwd, ["add", "src/main.ts"]);
 
     let stderr = "";
     try {
-      runTool(cwd, ["check", "--staged"]);
+      await runTool(cwd, ["check", "--staged"]);
     } catch (error) {
-      stderr = String((error as { stderr?: Buffer }).stderr);
+      stderr = errorStderr(error);
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
@@ -418,31 +424,31 @@ describe("requirement automation tool", () => {
 
   // @verifies requirements.change_anchoring.base_diff
   // @verifies requirements.cli.base_check
-  it("rejects an unanchored base diff side effect change", () => {
-    const cwd = createFixtureRepo();
+  it("rejects an unanchored base diff side effect change", async () => {
+    const cwd = await createFixtureRepo();
     writeFileSync(join(cwd, "src/main.ts"), "export function saveValue(): void {\n}\n");
-    runTool(cwd, ["fmt-agents"]);
-    runGit(cwd, ["add", "."]);
-    runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
+    await runTool(cwd, ["fmt-agents"]);
+    await runGit(cwd, ["add", "."]);
+    await runGit(cwd, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-m", "seed"]);
 
     writeFileSync(join(cwd, "src/main.ts"), "export function saveValue(): void {\n  localStorage.setItem(\"demo\", \"value\");\n}\n");
 
     let stderr = "";
     try {
-      runTool(cwd, ["check", "--base", "HEAD"]);
+      await runTool(cwd, ["check", "--base", "HEAD"]);
     } catch (error) {
-      stderr = String((error as { stderr?: Buffer }).stderr);
+      stderr = errorStderr(error);
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
   }, 120_000);
 });
 
-function createFixtureRepo(): string {
+async function createFixtureRepo(): Promise<string> {
   const cwd = mkdtempSync(join(tmpdir(), "glossa-req-"));
   mkdirSync(join(cwd, "src"), { recursive: true });
   mkdirSync(join(cwd, "tests"), { recursive: true });
-  runGit(cwd, ["init"]);
+  await runGit(cwd, ["init"]);
   return cwd;
 }
 
@@ -491,15 +497,27 @@ function writeValidRequirementFiles(cwd: string): void {
   );
 }
 
-function runTool(cwd: string, args: string[]): string {
-  return execFileSync(process.execPath, [TSX, TOOL, ...args], {
+// @behavior requirements.test_config.requirement_node.exec_helpers Requirement automation CLI helpers spawn child processes asynchronously so the test worker can keep serving runner updates.
+async function runTool(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync(process.execPath, [TSX, TOOL, ...args], {
     cwd,
     encoding: "utf8",
     env: { ...process.env, TMPDIR: "/tmp" },
-    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 10 * 1024 * 1024,
   });
+  return stdout;
 }
 
-function runGit(cwd: string, args: string[]): string {
-  return execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8" });
+async function runGit(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", ["-c", "commit.gpgsign=false", ...args], {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return stdout;
+}
+
+function errorStderr(error: unknown): string {
+  const stderr = (error as { stderr?: string | Buffer }).stderr;
+  return typeof stderr === "string" ? stderr : String(stderr ?? "");
 }
