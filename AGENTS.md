@@ -131,8 +131,11 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.card_creation.failure.invalid_response|glossa.card_creation.failure.invalid_response.{}
 |glossa.card_creation.failure.request_error|glossa.card_creation.failure.request_error.{}
 |glossa.card_creation.failure.service_error|glossa.card_creation.failure.service_error.{}
-|glossa.card_creation.note_request|glossa.card_creation.note_request.{content_feedback,empty_result,feedback_badge,feedback_display,fields,http_call,ids,payload,response_payload,tags,timeout,timeout_cleanup}
+|glossa.card_creation.note_request|glossa.card_creation.note_request.{concurrent_cards,content_feedback,content_timeout,empty_result,feedback_badge,feedback_display,fields,http_call,ids,payload,response_payload,tags,timeout,timeout_cleanup}
+|glossa.card_creation.note_request.concurrent_cards|glossa.card_creation.note_request.concurrent_cards.{}
 |glossa.card_creation.note_request.content_feedback|glossa.card_creation.note_request.content_feedback.{}
+|glossa.card_creation.note_request.content_timeout|glossa.card_creation.note_request.content_timeout.{budget}
+|glossa.card_creation.note_request.content_timeout.budget|glossa.card_creation.note_request.content_timeout.budget.{}
 |glossa.card_creation.note_request.empty_result|glossa.card_creation.note_request.empty_result.{}
 |glossa.card_creation.note_request.feedback_badge|glossa.card_creation.note_request.feedback_badge.{}
 |glossa.card_creation.note_request.feedback_display|glossa.card_creation.note_request.feedback_display.{}

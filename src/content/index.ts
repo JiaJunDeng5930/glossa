@@ -7,11 +7,11 @@ import { createContentMessage, createGlossPortMessage, messageTimeoutError, vali
 import { matchesShortcut } from "../shared/shortcut";
 import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
+import { wordClickTimeoutMs } from "./cardTimeout";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
 import { createSelectionController, type WordSelection } from "./selection";
 
-const WORD_CLICK_TIMEOUT_MS = 60_000;
 const SCAN_CHUNK_MAX_TOKENS = 64;
 const SCAN_CHUNK_MAX_MS = 16;
 const MAX_UNACKED_SCAN_CHUNKS = 4;
@@ -55,6 +55,7 @@ async function boot(): Promise<void> {
   let pageUrl = urlWithoutHash(location.href);
   let stopped = false;
   const autoTranslateEnabled = settings?.autoTranslateEnabled ?? false;
+  const wordClickTimeout = wordClickTimeoutMs(settings);
   let translationEnabled = autoTranslateEnabled;
   let selectionController: ReturnType<typeof createSelectionController> | undefined;
   let observer: MutationObserver | undefined;
@@ -574,7 +575,7 @@ async function boot(): Promise<void> {
         pageUrl: location.href,
         sentence: selection.sentence,
         token: selection.token
-      }), WORD_CLICK_TIMEOUT_MS).then((response) => {
+      }), wordClickTimeout).then((response) => {
         // @behavior glossa.card_creation.duplicate_gate.content_prompt Duplicate-card responses open a page prompt before content retries the word-click request.
         if (response.type === "word.card.duplicate") {
           return promptDuplicateCardCreation(document, {
@@ -592,7 +593,7 @@ async function boot(): Promise<void> {
               sentence: selection.sentence,
               token: selection.token,
               allowDuplicateCard: true
-            }), WORD_CLICK_TIMEOUT_MS).then((confirmedResponse) => {
+            }), wordClickTimeout).then((confirmedResponse) => {
               applyCardResponse(selection, confirmedResponse);
             });
           });

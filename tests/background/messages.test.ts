@@ -66,6 +66,43 @@ describe("background message handler", () => {
     });
   });
 
+  // @verifies glossa.card_creation.note_request.concurrent_cards
+  it("starts generated card note writes in the same Anki request window", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({
+        cards: [
+          { front: "A <b>submit</b> button finishes the form.", back: "提交" },
+          { front: "Click <b>submit</b> after reviewing.", back: "提交按钮" }
+        ]
+      }))
+    };
+    const firstNote = deferred<number>();
+    const secondNote = deferred<number>();
+    const anki = {
+      createNote: vi.fn(() => anki.createNote.mock.calls.length === 1 ? firstNote.promise : secondNote.promise)
+    };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const response = handler(message);
+
+    await vi.waitFor(() => {
+      expect(anki.createNote).toHaveBeenCalledTimes(2);
+    });
+    firstNote.resolve(42);
+    secondNote.resolve(43);
+
+    await expect(response).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42, noteIds: [42, 43] } });
+  });
+
   // @verifies glossa.card_creation.duplicate_gate
   // @verifies glossa.card_creation.duplicate_gate.response
   // @verifies glossa.card_creation.duplicate_gate.message_lang
@@ -327,4 +364,12 @@ function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T
     }
   }
   return result;
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
 }

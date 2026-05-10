@@ -114,14 +114,9 @@ async function createNotes(
   settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>,
   anki: AnkiClient
 ): Promise<number[]> {
-  const noteIds: number[] = [];
-  for (const card of cards) {
-    const noteId = await anki.createNote({ settings, card, token });
-    if (noteId !== undefined) {
-      noteIds.push(noteId);
-    }
-  }
-  return noteIds;
+  // @behavior glossa.card_creation.note_request.concurrent_cards Multiple generated cards start their Anki note writes in one concurrent request window.
+  const noteIds = await Promise.all(cards.map((card) => anki.createNote({ settings, card, token })));
+  return noteIds.filter((noteId): noteId is number => noteId !== undefined);
 }
 
 async function promptCacheVersion(settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>, prompt: string): Promise<string> {
