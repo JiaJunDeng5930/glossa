@@ -40,6 +40,7 @@ describe("selection controller", () => {
       <p>
         <span
           data-glossa-token="t-submit"
+          data-glossa-owned="1"
           data-glossa-surface="Submit"
           data-glossa-lemma="submit"
           data-glossa-original-start="0"
@@ -90,9 +91,9 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.glossa_owned_controls
-  it("lets Glossa-owned controls receive clicks while the shortcut is held", () => {
-    document.body.innerHTML = `<div data-glossa-owned="1"><button id="confirm">Confirm</button></div>`;
+  // @verifies glossa.page_translation.shortcut_selection.duplicate_prompt_controls
+  it("lets duplicate prompt controls receive clicks while the shortcut is held", () => {
+    document.body.innerHTML = `<div data-glossa-owned="1" data-glossa-duplicate-card-prompt="1"><button id="confirm">Confirm</button></div>`;
     const button = document.querySelector<HTMLButtonElement>("#confirm")!;
     const onWordSelected = vi.fn();
     const onButtonClick = vi.fn();

@@ -57,8 +57,8 @@ export function createSelectionController(options: SelectionControllerOptions): 
       return;
     }
     const element = event.target instanceof Element ? event.target : null;
-    // @behavior glossa.page_translation.shortcut_selection.glossa_owned_controls Glossa-owned controls receive clicks during shortcut selection mode.
-    if (element?.closest("[data-glossa-owned='1']")) {
+    // @behavior glossa.page_translation.shortcut_selection.duplicate_prompt_controls Duplicate-card prompt controls receive clicks during shortcut selection mode.
+    if (element?.closest("[data-glossa-duplicate-card-prompt]")) {
       return;
     }
     event.preventDefault();

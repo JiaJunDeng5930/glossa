@@ -440,7 +440,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
 // @verifies glossa.card_creation.duplicate_gate.feedback_clear
 // @verifies glossa.card_creation.note_request.feedback_display
 // @verifies glossa.card_creation.note_request.feedback_badge
-// @verifies glossa.page_translation.shortcut_selection.glossa_owned_controls
+// @verifies glossa.page_translation.shortcut_selection.duplicate_prompt_controls
 test("content bundle asks before creating another card for a carded word", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
   await installChromeRuntime(page, {
