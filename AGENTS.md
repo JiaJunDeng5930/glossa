@@ -180,7 +180,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{}
 |glossa.page_translation.lookup_order|glossa.page_translation.lookup_order.{chunk_error_trace}
 |glossa.page_translation.lookup_order.chunk_error_trace|glossa.page_translation.lookup_order.chunk_error_trace.{}
-|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{}
+|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{glossa_owned_controls}
+|glossa.page_translation.shortcut_selection.glossa_owned_controls|glossa.page_translation.shortcut_selection.glossa_owned_controls.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
 |glossa.settings_save|glossa.settings_save.{timeout_seconds}
 |glossa.settings_save.timeout_seconds|glossa.settings_save.timeout_seconds.{}

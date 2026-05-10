@@ -56,11 +56,15 @@ export function createSelectionController(options: SelectionControllerOptions): 
     if (!active) {
       return;
     }
+    const element = event.target instanceof Element ? event.target : null;
+    // @behavior glossa.page_translation.shortcut_selection.glossa_owned_controls Glossa-owned controls receive clicks during shortcut selection mode.
+    if (element?.closest("[data-glossa-owned='1']")) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
 
-    const element = event.target instanceof Element ? event.target : null;
     const selection = element ? selectionFromClick(element, event) : undefined;
     if (selection) {
       try {

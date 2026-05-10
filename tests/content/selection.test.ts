@@ -90,6 +90,30 @@ describe("selection controller", () => {
     controller.detach();
   });
 
+  // @verifies glossa.page_translation.shortcut_selection.glossa_owned_controls
+  it("lets Glossa-owned controls receive clicks while the shortcut is held", () => {
+    document.body.innerHTML = `<div data-glossa-owned="1"><button id="confirm">Confirm</button></div>`;
+    const button = document.querySelector<HTMLButtonElement>("#confirm")!;
+    const onWordSelected = vi.fn();
+    const onButtonClick = vi.fn();
+    button.addEventListener("click", onButtonClick);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected
+    });
+    controller.attach();
+
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(onButtonClick).toHaveBeenCalledTimes(1);
+    expect(onWordSelected).not.toHaveBeenCalled();
+
+    controller.detach();
+  });
+
   it("routes async selection failures to the error handler", async () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;

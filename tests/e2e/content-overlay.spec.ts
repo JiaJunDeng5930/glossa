@@ -440,6 +440,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
 // @verifies glossa.card_creation.duplicate_gate.feedback_clear
 // @verifies glossa.card_creation.note_request.feedback_display
 // @verifies glossa.card_creation.note_request.feedback_badge
+// @verifies glossa.page_translation.shortcut_selection.glossa_owned_controls
 test("content bundle asks before creating another card for a carded word", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
   await installChromeRuntime(page, {
@@ -492,9 +493,9 @@ test("content bundle asks before creating another card for a carded word", async
 
   await page.keyboard.down("Alt");
   await page.locator("#target").click();
-  await page.keyboard.up("Alt");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
   await page.getByRole("button", { name: "继续制卡" }).click();
+  await page.keyboard.up("Alt");
 
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
