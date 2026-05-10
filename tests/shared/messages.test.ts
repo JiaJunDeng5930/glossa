@@ -10,6 +10,7 @@ import {
   validateGlossPortInbound,
   validateGlossPortOutbound
 } from "../../src/shared/messages";
+import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
 // @verifies glossa.extension_contracts.message_envelopes
 describe("extension message envelopes", () => {
@@ -47,8 +48,8 @@ describe("extension message envelopes", () => {
           fontSize: 11
         },
         prompts: { gloss: "gloss", ankiCard: "card" },
-        ai: { provider: "glossa-backend", endpoint: "https://example.test", reasoningEffort: "medium" },
-        anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "Basic" }
+        ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "https://example.test", reasoningEffort: "medium" },
+        anki: { ...DEFAULT_SETTINGS.anki, endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "Basic" }
       }
     });
 
@@ -58,6 +59,28 @@ describe("extension message envelopes", () => {
       source: "service-worker",
       target: "content-script",
       payload: expect.objectContaining({ settings: expect.objectContaining({ shortcutKey: "Alt" }) })
+    });
+  });
+
+  // @verifies glossa.card_creation.duplicate_gate.message_type
+  // @verifies glossa.extension_contracts.payload_consistency.duplicate_response
+  it("validates duplicate-card background responses", () => {
+    const request = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "Create archive card.",
+      token: { id: "t1", sentenceId: "s1", surface: "archive", lemma: "archive", startOffset: 7, endOffset: 14 }
+    });
+    const response = createBackgroundResponse(request, "word.card.duplicate", {
+      lang: "en",
+      lemma: "archive",
+      surface: "archive",
+      promptMs: 5_000
+    });
+
+    expect(validateBackgroundResponse(response, request)).toMatchObject({
+      type: "word.card.duplicate",
+      requestId: request.requestId,
+      payload: { lang: "en", lemma: "archive", surface: "archive", promptMs: 5_000 }
     });
   });
 

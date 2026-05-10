@@ -18,53 +18,78 @@
           <div class="field-grid">
             <label>
               选词快捷键
+              <span class="field-help">按住这个快捷键并点击页面单词来制卡。</span>
               <input name="shortcutKey" type="hidden">
               <button id="shortcut-capture" class="secondary" type="button"></button>
             </label>
             <label>
               翻译快捷键
+              <span class="field-help">在页面中按下这个快捷键来开启或关闭本页翻译。</span>
               <input name="translateShortcutKey" type="hidden">
               <button id="translate-shortcut-capture" class="secondary" type="button"></button>
             </label>
             <label class="checkbox-field">
               <input name="autoTranslateEnabled" type="checkbox">
-              <span>自动翻译</span>
+              <span>
+                自动翻译
+                <small class="field-help">打开页面后自动开始扫描并显示释义。</small>
+              </span>
             </label>
             <label>
               学习窗口天数
+              <span class="field-help">点击制卡后的词会在这段时间内继续显示释义。</span>
               <input name="learningWindowDays" type="number" min="1" step="1">
             </label>
             <label>
               基础过滤词表
+              <span class="field-help">词表内的基础词会在页面扫描时跳过。</span>
               <select name="knownWordList"></select>
             </label>
           </div>
+        </section>
+        <section class="settings-card" aria-labelledby="known-words-heading">
+          <h2 id="known-words-heading">已掌握词汇</h2>
+          <div class="known-word-tools">
+            <label>
+              添加词汇
+              <span class="field-help">加入后这个词会按 known 状态处理。</span>
+              <input id="known-word-input" name="knownWordInput" autocomplete="off">
+            </label>
+            <button id="add-known-word" class="secondary" type="button">添加</button>
+          </div>
+          <div id="known-words-list" class="known-words-list" role="list"></div>
         </section>
         <section class="settings-card" aria-labelledby="appearance-heading">
           <h2 id="appearance-heading">释义样式</h2>
           <div class="style-grid">
             <label>
               文字颜色
+              <span class="field-help">控制释义标签中的文字颜色。</span>
               <input name="glossTextColor" type="color">
             </label>
             <label>
               背景颜色
+              <span class="field-help">控制普通释义标签的背景颜色。</span>
               <input name="glossBackgroundColor" type="color">
             </label>
             <label>
               制卡成功背景
+              <span class="field-help">控制制卡成功反馈的背景颜色。</span>
               <input name="cardSuccessBackgroundColor" type="color">
             </label>
             <label>
               制卡失败背景
+              <span class="field-help">控制制卡失败反馈的背景颜色。</span>
               <input name="cardErrorBackgroundColor" type="color">
             </label>
             <label>
               深浅
+              <span class="field-help">控制释义和反馈标签的背景透明度。</span>
               <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
             </label>
             <label>
               字体
+              <span class="field-help">控制释义标签和预览的字体。</span>
               <select name="glossFontFamily">
                 <option value="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">系统无衬线</option>
                 <option value="Georgia, Times New Roman, serif">衬线</option>
@@ -74,6 +99,7 @@
             </label>
             <label>
               字号
+              <span class="field-help">控制释义标签的文字大小。</span>
               <input name="glossFontSize" type="number" min="9" max="24" step="1">
             </label>
           </div>
@@ -101,6 +127,7 @@
             <h2 id="ai-heading">AI</h2>
             <label>
               AI 服务
+              <span class="field-help">选择生成释义和卡片内容的服务类型。</span>
               <select name="provider">
                 <option value="openai-responses">OpenAI Responses API</option>
                 <option value="openai-chat-completions">OpenAI Chat Completions API</option>
@@ -110,18 +137,22 @@
             </label>
             <label>
               AI 接口地址
+              <span class="field-help">发送 AI 请求的 HTTP 地址。</span>
               <input name="aiEndpoint" autocomplete="off">
             </label>
             <label>
               AI API 密钥
+              <span class="field-help">发送 OpenAI 请求时使用的密钥。</span>
               <input name="apiKey" type="password" autocomplete="off">
             </label>
             <label>
               模型
+              <span class="field-help">AI 请求体中的模型名称。</span>
               <input name="modelVersion" autocomplete="off">
             </label>
             <label>
               推理强度
+              <span class="field-help">控制支持推理参数的 AI 请求强度。</span>
               <select name="reasoningEffort">
                 <option value="none">无</option>
                 <option value="minimal">极简</option>
@@ -130,6 +161,11 @@
                 <option value="high">高</option>
                 <option value="xhigh">超高</option>
               </select>
+            </label>
+            <label>
+              AI 超时秒数
+              <span class="field-help">单次 AI 请求等待响应的最长时间。</span>
+              <input name="aiRequestTimeoutSeconds" type="number" min="1" step="1">
             </label>
             <button id="test-ai" class="test-button" type="button" data-state="idle" aria-label="测试 AI">
               <span class="test-label">测试 AI</span>
@@ -146,15 +182,28 @@
             <h2 id="anki-heading">Anki</h2>
             <label>
               AnkiConnect 接口地址
+              <span class="field-help">发送 AnkiConnect 请求的本机地址。</span>
               <input name="ankiEndpoint" autocomplete="off">
             </label>
             <label>
               Anki 牌组
+              <span class="field-help">新卡片写入的 Anki 牌组。</span>
               <select name="ankiDeck" disabled></select>
             </label>
             <label>
               Anki 卡片模板
+              <span class="field-help">新卡片写入的模板，需要包含 Front 和 Back 字段。</span>
               <select name="ankiModelName" disabled></select>
+            </label>
+            <label>
+              Anki 超时秒数
+              <span class="field-help">单次 AnkiConnect 请求等待响应的最长时间。</span>
+              <input name="ankiRequestTimeoutSeconds" type="number" min="1" step="1">
+            </label>
+            <label>
+              重复制卡提示秒数
+              <span class="field-help">已制卡词汇的确认提示在页面上停留的时间。</span>
+              <input name="duplicatePromptSeconds" type="number" min="1" step="1">
             </label>
             <div class="anki-actions">
               <button id="refresh-anki" class="icon-button" type="button" data-state="idle" aria-label="刷新 Anki">
@@ -180,10 +229,12 @@
           <h2 id="prompt-heading">提示词</h2>
           <label>
             释义提示词
+            <span class="field-help">控制 AI 如何生成页面行内释义。</span>
             <textarea name="glossPrompt" rows="5"></textarea>
           </label>
           <label>
             Anki 卡片提示词
+            <span class="field-help">控制 AI 如何生成 Anki 卡片正反面。</span>
             <textarea name="ankiPrompt" rows="5"></textarea>
           </label>
         </section>

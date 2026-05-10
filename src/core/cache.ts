@@ -1,14 +1,13 @@
 // @constraint glossa.cache_identity Repeated translation and card requests use stable cache identity for equivalent inputs.
-// @constraint glossa.cache_identity.request_parts Cache identity includes model, prompt, language, text, token, and card content inputs.
+// @constraint glossa.cache_identity.request_parts Gloss cache identity uses language, sentence text, and token position while card cache identity also uses the card prompt version.
 import { hashText } from "../shared/hash";
 
+// @constraint glossa.cache_identity.request_parts.gloss_key_fields Gloss cache key input exposes target language, sentence text, token text, and token span.
 export interface GlossCacheKeyInput {
   targetLang: string;
   sentence: string;
   targetText: string;
   targetSpan: readonly [number, number];
-  promptVersion: string;
-  modelVersion: string;
 }
 
 export async function buildGlossCacheKey(input: GlossCacheKeyInput): Promise<string> {
@@ -18,9 +17,7 @@ export async function buildGlossCacheKey(input: GlossCacheKeyInput): Promise<str
     input.targetLang,
     sentenceHash,
     input.targetText.toLocaleLowerCase("en-US"),
-    `${input.targetSpan[0]}-${input.targetSpan[1]}`,
-    input.promptVersion,
-    input.modelVersion
+    `${input.targetSpan[0]}-${input.targetSpan[1]}`
   ].join(":");
 }
 

@@ -89,6 +89,14 @@ label {
   font-weight: 600;
 }
 
+.field-help {
+  display: block;
+  color: var(--color-graphite);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 400;
+}
+
 .checkbox-field {
   align-self: end;
   min-height: 44px;
@@ -167,6 +175,53 @@ select:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-16);
   align-items: end;
+}
+
+.known-word-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-16);
+  align-items: end;
+}
+
+.known-word-tools .secondary {
+  width: auto;
+  min-width: 96px;
+}
+
+.known-words-list {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.known-word-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 44px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-silver-mist);
+}
+
+.known-word-row:first-child {
+  border-top: 0;
+}
+
+.known-word-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.known-word-row button {
+  width: auto;
+  min-width: 72px;
+  min-height: 36px;
+  padding: 7px 12px;
+  background: var(--color-frosted);
+  border-color: transparent;
+  color: var(--color-ink);
+  font-size: 14px;
 }
 
 .style-grid {
@@ -359,7 +414,8 @@ output {
 
   .settings-grid,
   .field-grid,
-  .style-grid {
+  .style-grid,
+  .known-word-tools {
     grid-template-columns: 1fr;
   }
 

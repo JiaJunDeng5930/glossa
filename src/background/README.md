@@ -2,7 +2,7 @@
 
 `GlossResolver` owns the transient display pipeline for gloss requests. Content sends scan chunks over `gloss.session`; the resolver accepts each chunk, runs token lookup through a limited parallel gate, and emits token outcomes as soon as each lookup resolves. The background sends `gloss.chunk.ack` after that chunk has completed the lookup phase, so content-side backpressure limits queued resolver work.
 
-1. Build the stable gloss cache key from target language, sentence text, token span, prompt/provider/reasoning version, and model.
+1. Build the stable gloss cache key from target language, sentence text, token text, and token span.
 2. Check the page-scoped in-memory gloss cache first. A hit returns a display item for the current token id without reading lexicon state. This keeps labels stable when the page mutates and the content script immediately rescans during the same service-worker lifetime.
 3. On memory miss, read the lexicon state from IndexedDB. `known` and `ignored` stop the pipeline before IndexedDB cache and AI work.
 4. For displayable records, check the IndexedDB gloss cache. A hit hydrates the memory cache, returns a display item for the current token id, and records the show event in lexicon state.
@@ -16,7 +16,7 @@ AI misses use an in-flight map keyed by the durable gloss cache key plus the liv
 
 The AI outlet frames owner misses by count or time: 32 misses or 50ms closes a frame. Frames are real AI requests and execute through a global serial outlet with concurrency 1. A frame request sends multiple `{ sentence, token }` items and returns per-token `GlossItem` results. Returned token ids consume one unresolved miss at a time, so duplicate DOM token ids in the same frame still resolve independently. A closed sink stops after pending DB reads and before AI enqueue.
 
-Card creation uses the word-click request path. The AI card payload has its own system instruction and returns `{ "cards": [{ "front": "...", "back": "..." }] }`. Each card becomes one Anki note using the configured model's `Front` and `Back` fields. When the prompt does not ask for a card count, the AI creates one card.
+Card creation uses the word-click request path. Before card generation, the background checks the word-only carded-word store; a recorded word returns a duplicate-confirmation response to content. Confirmed clicks continue to the AI card payload, which has its own system instruction and returns `{ "cards": [{ "front": "...", "back": "..." }] }`. Each card becomes one Anki note using the configured model's `Front` and `Back` fields, and successful Anki writes record the word in the carded-word store. When the prompt does not ask for a card count, the AI creates one card.
 
 For `glossa-backend`, `/gloss` receives the same frame-shaped payload: `{ items: Array<{ sentence, token }>, targetLang, prompt, reasoningEffort, promptVersion, modelVersion }`. The single-sentence `gloss(...)` adapter remains for legacy callers and tests.
 

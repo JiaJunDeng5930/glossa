@@ -427,6 +427,126 @@ test("content bundle shows card loading feedback before creation finishes", asyn
   });
 });
 
+// @verifies glossa.card_creation.duplicate_gate
+// @verifies glossa.card_creation.duplicate_gate.content_prompt
+// @verifies glossa.card_creation.duplicate_gate.content_cancel
+// @verifies glossa.card_creation.duplicate_gate.content_confirm
+// @verifies glossa.card_creation.note_request.content_feedback
+// @verifies glossa.card_creation.duplicate_gate.prompt
+// @verifies glossa.card_creation.duplicate_gate.prompt_dom
+// @verifies glossa.card_creation.duplicate_gate.prompt_controls
+// @verifies glossa.card_creation.duplicate_gate.feedback_state
+// @verifies glossa.card_creation.duplicate_gate.feedback_dataset_state
+// @verifies glossa.card_creation.duplicate_gate.feedback_clear
+// @verifies glossa.card_creation.note_request.feedback_display
+// @verifies glossa.card_creation.note_request.feedback_badge
+test("content bundle asks before creating another card for a carded word", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    const messages: unknown[] = [];
+    Reflect.set(window, "__duplicateMessages", messages);
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script"; payload?: { allowDuplicateCard?: boolean } }, callback?: (response: unknown) => void) => {
+      if (message.type !== "word.clicked") {
+        return undefined;
+      }
+      messages.push(message);
+      const response = message.payload?.allowDuplicateCard === true ? {
+        type: "word.clicked.ok",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { noteId: 12 }
+      } : {
+        type: "word.card.duplicate",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { lang: "en", lemma: "archive", surface: "archive", promptMs: 5_000 }
+      };
+      callback?.(response);
+      return Promise.resolve(response);
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+  await page.getByRole("button", { name: "取消制卡" }).click();
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0);
+  expect(await page.evaluate(() => {
+    const messages = Reflect.get(window, "__duplicateMessages") as Array<{ payload?: { allowDuplicateCard?: boolean } }>;
+    return messages.map((message) => message.payload?.allowDuplicateCard === true);
+  })).toEqual([false]);
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+  await page.getByRole("button", { name: "继续制卡" }).click();
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-success";
+  });
+  expect(await page.evaluate(() => {
+    const messages = Reflect.get(window, "__duplicateMessages") as Array<{ payload?: { allowDuplicateCard?: boolean } }>;
+    return messages.map((message) => message.payload?.allowDuplicateCard === true);
+  })).toEqual([false, false, true]);
+});
+
+// @verifies glossa.card_creation.duplicate_gate.prompt_timeout
+// @verifies glossa.card_creation.duplicate_gate.feedback_skip
+test("content bundle cancels duplicate card prompts after their timeout", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    const messages: unknown[] = [];
+    Reflect.set(window, "__duplicateMessages", messages);
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) => {
+      if (message.type !== "word.clicked") {
+        return undefined;
+      }
+      messages.push(message);
+      const response = {
+        type: "word.card.duplicate",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { lang: "en", lemma: "archive", surface: "archive", promptMs: 300 }
+      };
+      callback?.(response);
+      return Promise.resolve(response);
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0, { timeout: 2_000 });
+  expect(await page.evaluate(() => (Reflect.get(window, "__duplicateMessages") as unknown[]).length)).toBe(1);
+});
+
 // @verifies glossa.card_creation.failure.request_error
 test("content bundle keeps waiting for slow card creation Anki errors", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");

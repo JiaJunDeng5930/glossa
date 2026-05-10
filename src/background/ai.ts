@@ -58,7 +58,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         reasoningEffort: input.settings.ai.reasoningEffort,
         promptVersion: input.settings.promptVersion,
         modelVersion: input.settings.modelVersion
-      });
+      }, undefined, input.settings.ai.requestTimeoutMs);
     },
     async glossFrame(input) {
       if (isOpenAiProvider(input.settings.ai.provider)) {
@@ -80,7 +80,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         reasoningEffort: input.settings.ai.reasoningEffort,
         promptVersion: input.settings.promptVersion,
         modelVersion: input.settings.modelVersion
-      });
+      }, undefined, input.settings.ai.requestTimeoutMs);
     },
     async ankiCard(input) {
       if (isOpenAiProvider(input.settings.ai.provider)) {
@@ -102,7 +102,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         reasoningEffort: input.settings.ai.reasoningEffort,
         promptVersion: input.settings.promptVersion,
         modelVersion: input.settings.modelVersion
-      });
+      }, undefined, input.settings.ai.requestTimeoutMs);
     }
   };
 }
@@ -118,7 +118,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
         { role: "user", content: JSON.stringify(payload) }
       ],
       ...reasoningBody(settings)
-    }, settings.ai.apiKey);
+    }, settings.ai.apiKey, settings.ai.requestTimeoutMs);
     return response.choices[0]?.message.content ?? "";
   }
   if (settings.ai.provider === "openai-completions") {
@@ -127,7 +127,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
       model: settings.modelVersion,
       prompt: `${systemInstruction}\n\n${JSON.stringify(payload)}`,
       temperature: 0
-    }, settings.ai.apiKey);
+    }, settings.ai.apiKey, settings.ai.requestTimeoutMs);
     return response.choices[0]?.text ?? "";
   }
   // @behavior glossa.ai_requests.openai.responses Responses API requests send system and user input items and read output text.
@@ -138,7 +138,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
       { role: "user", content: JSON.stringify(payload) }
     ],
     ...reasoningBody(settings)
-  }, settings.ai.apiKey);
+  }, settings.ai.apiKey, settings.ai.requestTimeoutMs);
   return response.output_text ?? response.output?.flatMap((item) => item.content ?? []).map((part) => part.text ?? "").join("") ?? "";
 }
 
@@ -184,7 +184,7 @@ function parseJsonOutput<T>(value: string): T {
 }
 
 // @behavior glossa.ai_requests.failure Provider HTTP, JSON, and transport failures become AI diagnostics.
-async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey?: string): Promise<T> {
+async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey?: string, timeoutMs = 30_000): Promise<T> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) {
     headers.authorization = `Bearer ${apiKey}`;
@@ -193,8 +193,8 @@ async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, 
   // @constraint glossa.ai_requests.failure.retry_limit AI JSON requests try at most two transport attempts.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
-    // @constraint glossa.ai_requests.failure.timeout AI JSON requests abort each transport attempt after fifteen seconds.
-    const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
+    // @constraint glossa.ai_requests.failure.timeout AI JSON requests abort each transport attempt after the configured request timeout, which defaults to thirty seconds.
+    const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchImpl(url, {
         method: "POST",

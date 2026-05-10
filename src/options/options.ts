@@ -1,11 +1,14 @@
 // @behavior glossa.settings_save User edits on the options page persist translation, provider, Anki, prompt, shortcut, and appearance settings.
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
+import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey } from "../core/state";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { formatShortcutFromEvent } from "../shared/shortcut";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type ErrorService, type GlossaSettings, type KnownWordListId } from "../shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type ErrorService, type GlossaSettings, type KnownWordListId, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
+import { createExtensionStorage } from "../storage/db";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
+const extensionStorage = createExtensionStorage();
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-capture")!;
 const translateShortcutCapture = document.querySelector<HTMLButtonElement>("#translate-shortcut-capture")!;
@@ -19,6 +22,9 @@ const ankiModelNameSelect = form.elements.namedItem("ankiModelName") as HTMLSele
 const testAiButton = document.querySelector<HTMLButtonElement>("#test-ai")!;
 const testAnkiButton = document.querySelector<HTMLButtonElement>("#test-anki")!;
 const refreshAnkiButton = document.querySelector<HTMLButtonElement>("#refresh-anki")!;
+const knownWordInput = document.querySelector<HTMLInputElement>("#known-word-input")!;
+const addKnownWordButton = document.querySelector<HTMLButtonElement>("#add-known-word")!;
+const knownWordsList = document.querySelector<HTMLElement>("#known-words-list")!;
 let capturingShortcutName: "shortcutKey" | "translateShortcutKey" | undefined;
 let pendingShortcut = "";
 
@@ -40,6 +46,10 @@ testAnkiButton.addEventListener("click", () => {
 
 refreshAnkiButton.addEventListener("click", () => {
   void refreshAnkiOptions(readFormSettings(), { reportStatus: true });
+});
+
+addKnownWordButton.addEventListener("click", () => {
+  void addKnownWord();
 });
 
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
@@ -102,14 +112,18 @@ async function loadSettings(): Promise<void> {
   setInput("aiEndpoint", settings.ai.endpoint);
   setInput("apiKey", settings.ai.apiKey ?? "");
   setInput("reasoningEffort", settings.ai.reasoningEffort);
+  setInput("aiRequestTimeoutSeconds", String(msToSeconds(settings.ai.requestTimeoutMs)));
   setInput("modelVersion", settings.modelVersion);
   setInput("ankiEndpoint", settings.anki.endpoint);
+  setInput("ankiRequestTimeoutSeconds", String(msToSeconds(settings.anki.requestTimeoutMs)));
+  setInput("duplicatePromptSeconds", String(msToSeconds(settings.anki.duplicatePromptMs)));
   setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
   setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
   setAnkiSelectsEnabled(false);
   setInput("glossPrompt", settings.prompts.gloss);
   setInput("ankiPrompt", settings.prompts.ankiCard);
   updatePreview(settings);
+  void refreshKnownWords();
   void refreshAnkiOptions(settings, { reportStatus: false });
 }
 
@@ -145,12 +159,15 @@ function readFormSettings(): GlossaSettings {
       provider,
       endpoint: readInput("aiEndpoint").trim() || DEFAULT_SETTINGS.ai.endpoint,
       reasoningEffort: readInput("reasoningEffort") as GlossaSettings["ai"]["reasoningEffort"],
+      requestTimeoutMs: secondsToMs(readInput("aiRequestTimeoutSeconds"), DEFAULT_SETTINGS.ai.requestTimeoutMs),
       ...(apiKey ? { apiKey } : {})
     },
     anki: {
       endpoint: readInput("ankiEndpoint").trim() || DEFAULT_SETTINGS.anki.endpoint,
       deck: readInput("ankiDeck").trim() || DEFAULT_SETTINGS.anki.deck,
-      modelName: readInput("ankiModelName").trim() || DEFAULT_SETTINGS.anki.modelName
+      modelName: readInput("ankiModelName").trim() || DEFAULT_SETTINGS.anki.modelName,
+      requestTimeoutMs: secondsToMs(readInput("ankiRequestTimeoutSeconds"), DEFAULT_SETTINGS.anki.requestTimeoutMs),
+      duplicatePromptMs: secondsToMs(readInput("duplicatePromptSeconds"), DEFAULT_SETTINGS.anki.duplicatePromptMs)
     }
   };
 }
@@ -180,11 +197,13 @@ async function testAi(settings: GlossaSettings): Promise<void> {
       : settings.ai.provider === "openai-completions"
         ? { model: settings.modelVersion, prompt: "Return {\"items\":[]} as JSON.", temperature: 0 }
         : { model: settings.modelVersion, input: "Return {\"items\":[]} as JSON.", ...reasoningBody(settings) };
-  await postConnectionTest(endpoint, body, "ai", settings.ai.apiKey);
+  // @behavior glossa.ai_requests.failure.timeout.options_check AI connection checks use the configured AI request timeout.
+  await postConnectionTest(endpoint, body, "ai", settings.ai.apiKey, settings.ai.requestTimeoutMs);
 }
 
 async function testAnki(settings: GlossaSettings): Promise<void> {
-  const catalog = await loadAnkiCatalog(settings.anki.endpoint);
+  // @behavior glossa.card_creation.note_request.timeout.options_check Anki connection checks use the configured Anki request timeout.
+  const catalog = await loadAnkiCatalog(settings.anki.endpoint, settings.anki.requestTimeoutMs);
   if (!catalog.decks.includes(settings.anki.deck)) {
     throw createDiagnosticError("service-error", "Anki deck was not found", { service: "anki" });
   }
@@ -231,6 +250,49 @@ function setStatus(value: string): void {
 function setAnkiSelectsEnabled(enabled: boolean): void {
   ankiDeckSelect.disabled = !enabled;
   ankiModelNameSelect.disabled = !enabled;
+}
+
+// @behavior glossa.word_memory.known_management The options page lists known vocabulary records and lets users add or remove known words manually.
+async function refreshKnownWords(): Promise<void> {
+  const records = await extensionStorage.lexicon.listByState("known");
+  renderKnownWords(records);
+}
+
+async function addKnownWord(): Promise<void> {
+  const lemma = normalizeLemma(knownWordInput.value);
+  if (!lemma) {
+    return;
+  }
+  const now = Date.now();
+  // @behavior glossa.word_memory.known_management.add_known Adding a known word writes a known vocabulary record keyed by normalized English lemma.
+  await extensionStorage.lexicon.put(markRecordShown(createCandidateRecord(lemma, lemma, "en", now), now));
+  knownWordInput.value = "";
+  await refreshKnownWords();
+}
+
+function renderKnownWords(records: VocabularyRecord[]): void {
+  if (records.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "field-help";
+    empty.textContent = "当前没有手动记录的 known 词汇。";
+    knownWordsList.replaceChildren(empty);
+    return;
+  }
+  knownWordsList.replaceChildren(...records.map((record) => {
+    const row = document.createElement("div");
+    row.className = "known-word-row";
+    row.setAttribute("role", "listitem");
+    const word = document.createElement("span");
+    word.textContent = record.lemma;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "移除";
+    remove.addEventListener("click", () => {
+      void extensionStorage.lexicon.delete(vocabularyKey(record.lang, record.lemma)).then(refreshKnownWords);
+    });
+    row.append(word, remove);
+    return row;
+  }));
 }
 
 function populateKnownWordLists(): void {
@@ -305,7 +367,7 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
   setTestState(refreshAnkiButton, "loading");
   setAnkiSelectsEnabled(false);
   try {
-    const catalog = await loadAnkiCatalog(settings.anki.endpoint);
+    const catalog = await loadAnkiCatalog(settings.anki.endpoint, settings.anki.requestTimeoutMs);
     const deck = pickExistingValue(settings.anki.deck, catalog.decks);
     const modelName = pickExistingValue(settings.anki.modelName, catalog.modelNames);
     setSelectOptions(ankiDeckSelect, catalog.decks, deck);
@@ -330,16 +392,17 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
   }
 }
 
-async function loadAnkiCatalog(endpoint: string): Promise<AnkiCatalog> {
-  await ankiAction<number>(endpoint, "version");
-  const decks = await ankiAction<string[]>(endpoint, "deckNames");
-  const modelNames = await ankiAction<string[]>(endpoint, "modelNames");
+// @behavior glossa.card_creation.note_request.timeout.anki_catalog Anki catalog refresh applies the selected timeout to every AnkiConnect catalog action.
+async function loadAnkiCatalog(endpoint: string, timeoutMs: number): Promise<AnkiCatalog> {
+  await ankiAction<number>(endpoint, "version", undefined, timeoutMs);
+  const decks = await ankiAction<string[]>(endpoint, "deckNames", undefined, timeoutMs);
+  const modelNames = await ankiAction<string[]>(endpoint, "modelNames", undefined, timeoutMs);
   if (!isStringArray(decks) || !isStringArray(modelNames)) {
     throw createDiagnosticError("invalid-response", "AnkiConnect returned invalid catalog data", { service: "anki" });
   }
   const compatibleModels: string[] = [];
   for (const modelName of modelNames) {
-    const fields = await ankiAction<string[]>(endpoint, "modelFieldNames", { modelName });
+    const fields = await ankiAction<string[]>(endpoint, "modelFieldNames", { modelName }, timeoutMs);
     if (isStringArray(fields) && fields.includes("Front") && fields.includes("Back")) {
       compatibleModels.push(modelName);
     }
@@ -350,12 +413,13 @@ async function loadAnkiCatalog(endpoint: string): Promise<AnkiCatalog> {
   return { decks, modelNames: compatibleModels };
 }
 
-async function ankiAction<T>(endpoint: string, action: string, params?: Record<string, unknown>): Promise<T> {
+// @behavior glossa.card_creation.note_request.timeout.anki_action Anki option-page actions pass their timeout into the shared connection request helper.
+async function ankiAction<T>(endpoint: string, action: string, params?: Record<string, unknown>, timeoutMs = DEFAULT_SETTINGS.anki.requestTimeoutMs): Promise<T> {
   const response = await postConnectionTest(endpoint, {
     action,
     version: 6,
     ...(params ? { params } : {})
-  }, "anki") as AnkiActionResponse<T>;
+  }, "anki", undefined, timeoutMs) as AnkiActionResponse<T>;
   if (!response || typeof response !== "object") {
     throw createDiagnosticError("invalid-response", "AnkiConnect returned invalid response data", { service: "anki" });
   }
@@ -387,9 +451,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-async function postConnectionTest(endpoint: string, body: unknown, service: Extract<ErrorService, "ai" | "anki">, apiKey?: string): Promise<unknown> {
+// @behavior glossa.ai_requests.failure.timeout.connection_helper Option-page connection requests abort after the supplied timeout, defaulting to 30 seconds.
+async function postConnectionTest(endpoint: string, body: unknown, service: Extract<ErrorService, "ai" | "anki">, apiKey?: string, timeoutMs = DEFAULT_SETTINGS.ai.requestTimeoutMs): Promise<unknown> {
   const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
+  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -474,6 +539,16 @@ function shortcutButtonFor(name: "shortcutKey" | "translateShortcutKey"): HTMLBu
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+// @constraint glossa.settings_save.timeout_seconds Timeout settings are stored in milliseconds after positive second values are rounded to whole milliseconds.
+function secondsToMs(value: string, fallbackMs: number): number {
+  const seconds = Math.max(1, Number(value) || fallbackMs / 1_000);
+  return Math.round(seconds * 1_000);
+}
+
+function msToSeconds(value: number): number {
+  return Math.max(1, Math.round(value / 1_000));
 }
 
 function hexToRgb(hex: string, alpha: number): string {

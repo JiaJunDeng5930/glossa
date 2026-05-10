@@ -3,8 +3,22 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 // @verifies glossa.settings_save
+// @verifies glossa.settings_save.timeout_seconds
+// @verifies glossa.word_memory.known_management
+// @verifies glossa.word_memory.known_management.add_known
+// @verifies glossa.word_memory.known_management.store_listing
+// @verifies glossa.word_memory.known_management.store_read
+// @verifies glossa.extension_storage.typed_access.key_value_delete
+// @verifies glossa.extension_storage.typed_access.lexicon_delete
+// @verifies glossa.extension_storage.typed_access.lexicon_delete_impl
+// @verifies glossa.card_creation.duplicate_gate.record_store_upgrade
+// @verifies glossa.ai_requests.failure.timeout.options_check
+// @verifies glossa.ai_requests.failure.timeout.connection_helper
+// @verifies glossa.card_creation.note_request.timeout.options_check
 test("options page captures shortcuts, previews style changes and saves prompts", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
+  await page.route("https://options.test/", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));
+  await page.goto("https://options.test/");
   await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "").replace("<script type=\"module\" src=\"../options.js\"></script>", ""));
   await page.addStyleTag({ path: resolve("dist/assets/options.css") });
   await page.evaluate(() => {
@@ -52,6 +66,45 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       }
     });
   });
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const deleteRequest = indexedDB.deleteDatabase("glossa");
+      deleteRequest.onsuccess = () => resolve();
+      deleteRequest.onerror = () => reject(deleteRequest.error);
+      deleteRequest.onblocked = () => resolve();
+    });
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        for (const store of ["lexicon", "glossCache", "cardCache", "cardedWords"]) {
+          if (!db.objectStoreNames.contains(store)) {
+            db.createObjectStore(store);
+          }
+        }
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("lexicon", "readwrite");
+        tx.objectStore("lexicon").put({
+          key: "en:archive",
+          lemma: "archive",
+          surface: "archive",
+          lang: "en",
+          state: "known",
+          shownCount: 1,
+          clickCount: 0,
+          ankiNoteIds: []
+        }, "en:archive");
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
   await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
 
   await page.locator("#shortcut-capture").click();
@@ -78,14 +131,23 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("input[name=autoTranslateEnabled]").check();
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
+  await page.locator("input[name=aiRequestTimeoutSeconds]").fill("45");
   await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
   await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
   await expect(page.locator("select[name=ankiDeck] option")).toHaveCount(3);
   await expect(page.locator("select[name=ankiModelName] option")).toHaveCount(1);
   await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
   await page.locator("select[name=ankiDeck]").selectOption("temp");
+  await page.locator("input[name=ankiRequestTimeoutSeconds]").fill("35");
+  await page.locator("input[name=duplicatePromptSeconds]").fill("7");
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
+  await expect(page.locator("#known-words-list")).toContainText("archive");
+  await page.locator(".known-word-row", { hasText: "archive" }).getByRole("button", { name: "移除" }).click();
+  await expect(page.locator("#known-words-list")).not.toContainText("archive");
+  await page.locator("#known-word-input").fill("calibrate");
+  await page.locator("#add-known-word").click();
+  await expect(page.locator("#known-words-list")).toContainText("calibrate");
 
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
   await expect(page.locator("#translate-shortcut-capture")).toHaveText("Alt+G");
@@ -164,18 +226,41 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     },
     ai: {
       provider: "openai-chat-completions",
-      reasoningEffort: "high"
+      reasoningEffort: "high",
+      requestTimeoutMs: 45000
     },
     anki: {
       deck: "temp",
-      modelName: "KaTeX and Markdown Basic"
+      modelName: "KaTeX and Markdown Basic",
+      requestTimeoutMs: 35000,
+      duplicatePromptMs: 7000
     }
   });
+  expect(await page.evaluate(async () => {
+    return await new Promise<unknown>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("lexicon", "readonly");
+        const getRequest = tx.objectStore("lexicon").get("en:calibrate");
+        getRequest.onsuccess = () => {
+          db.close();
+          resolve(getRequest.result);
+        };
+        getRequest.onerror = () => reject(getRequest.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  })).toMatchObject({ lemma: "calibrate", state: "known" });
 });
 
 // @verifies glossa.settings_save
+// @verifies glossa.card_creation.note_request.timeout.anki_catalog
+// @verifies glossa.card_creation.note_request.timeout.anki_action
 test("options page disables Anki selectors until refresh reaches AnkiConnect", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
+  await page.route("https://options.test/", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));
+  await page.goto("https://options.test/");
   await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "").replace("<script type=\"module\" src=\"../options.js\"></script>", ""));
   await page.addStyleTag({ path: resolve("dist/assets/options.css") });
   await page.evaluate(() => {

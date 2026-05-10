@@ -90,7 +90,40 @@ describe("AnkiConnect adapter diagnostics", () => {
       const assertion = expect(request).rejects.toMatchObject({
         payload: { service: "anki" }
       });
-      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      await assertion;
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // @verifies glossa.card_creation.note_request.timeout
+  // @verifies glossa.card_creation.note_request.timeout.setting
+  it("uses the configured Anki request timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      const fetchImpl = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        signal = init?.signal ?? undefined;
+        signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }));
+
+      const request = createAnkiClient(fetchImpl as never).createNote({
+        ...noteInput(),
+        settings: {
+          ...DEFAULT_SETTINGS,
+          anki: {
+            ...DEFAULT_SETTINGS.anki,
+            requestTimeoutMs: 2_500
+          }
+        }
+      });
+      const assertion = expect(request).rejects.toMatchObject({
+        payload: { service: "anki" }
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
 
       await assertion;
       expect(signal?.aborted).toBe(true);

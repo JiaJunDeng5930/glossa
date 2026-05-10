@@ -20,7 +20,8 @@ export interface RenderSummary {
   reason?: "missing-token" | "stale-token" | "stale-scan" | "detached-node" | "changed-text" | "invisible-range" | "overlap";
 }
 
-export type CardFeedback = "card-pending" | "card-success" | "card-error";
+// @behavior glossa.card_creation.duplicate_gate.feedback_state Card feedback includes a cancellation state that clears duplicate-card pending UI.
+export type CardFeedback = "card-pending" | "card-success" | "card-error" | "card-cancelled";
 
 export interface CardFeedbackInput {
   tokenId: string;
@@ -317,12 +318,21 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       pruneDisconnectedNodes();
       const existing = findRenderedToken(input.tokenId);
       if (existing) {
+        // @behavior glossa.card_creation.duplicate_gate.feedback_clear Cancelling duplicate card creation restores the wrapper display instead of showing a failure badge.
+        if (input.feedback === "card-cancelled") {
+          clearCardFeedback(existing);
+          return { result: "updated" };
+        }
         const status = readTokenStatus(existing);
         const badge = badgeForFeedback(existing, input.feedback);
         updateRenderedNode(existing, badge.display, status, input.feedback, badge.displayKind, input.message);
         return { result: "updated" };
       }
       if (!input.token) {
+        return { result: "skipped", reason: "missing-token" };
+      }
+      // @behavior glossa.card_creation.duplicate_gate.feedback_skip Cancellation feedback without a rendered wrapper is ignored.
+      if (input.feedback === "card-cancelled") {
         return { result: "skipped", reason: "missing-token" };
       }
       return renderToken({
@@ -504,10 +514,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     node: HTMLElement,
     display: string,
     status: GlossTokenPayload["status"],
-    feedback?: CardFeedback,
+    feedback?: Exclude<CardFeedback, "card-cancelled">,
     displayKind: BadgeDisplayKind = "gloss",
     userMessage?: string
   ): void {
+    // @behavior glossa.card_creation.note_request.feedback_display Inline card feedback preserves translated gloss text when success or error only changes the wrapper background.
     const nextFeedback = feedback ?? readFeedback(node);
     const nextKind = visibleDisplayKind(displayKind, nextFeedback);
     const nextDisplay = visibleDisplay(display, displayKind, nextFeedback);
@@ -562,10 +573,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
 
   function readFeedback(node: HTMLElement): CardFeedback | undefined {
     const feedback = node.dataset.glossaFeedback;
+    // @constraint glossa.card_creation.duplicate_gate.feedback_dataset_state Cancellation is a transient input and is not persisted in token dataset feedback.
     return feedback === "card-pending" || feedback === "card-success" || feedback === "card-error" ? feedback : undefined;
   }
 
-  function badgeForFeedback(node: HTMLElement, feedback: CardFeedback): { display: string; displayKind: BadgeDisplayKind } {
+  function badgeForFeedback(node: HTMLElement, feedback: Exclude<CardFeedback, "card-cancelled">): { display: string; displayKind: BadgeDisplayKind } {
     if (feedback === "card-pending") {
       return { display: feedbackFallback(feedback), displayKind: "feedback" };
     }
@@ -578,6 +590,28 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       return { display, displayKind: "gloss" };
     }
     return { display: feedbackFallback(feedback), displayKind: "feedback" };
+  }
+
+  function clearCardFeedback(node: HTMLElement): void {
+    const glossDisplay = node.dataset.glossaGlossDisplay;
+    if (glossDisplay) {
+      const label = node.querySelector<HTMLElement>("[data-glossa-token-label]");
+      const width = node.querySelector<HTMLElement>("[data-glossa-token-width]");
+      if (label) {
+        label.textContent = glossDisplay;
+      }
+      if (width) {
+        width.textContent = glossDisplay;
+      }
+      node.dataset.glossaDisplay = glossDisplay;
+      node.dataset.glossaDisplayKind = "gloss";
+      node.dataset.glossaStatus = readTokenStatus(node);
+      delete node.dataset.glossaFeedback;
+      applyUserMessage(node, undefined);
+      rememberMutationTarget(node);
+      return;
+    }
+    unwrapRenderedNode(node);
   }
 
   function visibleDisplay(display: string, displayKind: BadgeDisplayKind, feedback?: CardFeedback): string {
@@ -738,7 +772,8 @@ function applyAppearance(host: HTMLElement, appearance: AppearanceSettings): voi
   host.style.setProperty("--glossa-font-size", `${appearance.fontSize ?? DEFAULT_SETTINGS.appearance.fontSize}px`);
 }
 
-function feedbackFallback(feedback: CardFeedback): string {
+// @behavior glossa.card_creation.note_request.feedback_badge Manual card feedback uses loading, success, and error badges when no gloss text exists.
+function feedbackFallback(feedback: Exclude<CardFeedback, "card-cancelled">): string {
   if (feedback === "card-pending") {
     return "...";
   }

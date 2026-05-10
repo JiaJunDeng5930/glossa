@@ -17,6 +17,17 @@ export interface VocabularyRecord {
   ankiNoteIds: number[];
 }
 
+export interface CardedWordRecord {
+  // @constraint glossa.card_creation.duplicate_gate.record_key Carded-word records use the same language-and-lemma key as vocabulary records.
+  key: string;
+  // @constraint glossa.card_creation.duplicate_gate.record_lang Carded-word records store the source language for the keyed lemma.
+  lang: string;
+  // @constraint glossa.card_creation.duplicate_gate.record_lemma Carded-word records store the normalized lemma that was successfully carded.
+  lemma: string;
+  // @constraint glossa.card_creation.duplicate_gate.record_created_at Carded-word records store the time of the successful Anki write.
+  createdAt: number;
+}
+
 export interface TokenCandidate {
   id: string;
   sentenceId: string;
@@ -123,11 +134,24 @@ export interface UserWordClickPayload {
   pageUrl: string;
   sentence: string;
   token: TokenCandidate;
+  // @behavior glossa.card_creation.duplicate_gate.message_confirmed Word-click requests carry duplicate approval only after content prompt confirmation.
+  allowDuplicateCard?: boolean;
 }
 
 export interface WordClickedOkPayload {
   noteId?: number;
   noteIds?: number[];
+}
+
+export interface WordCardDuplicatePayload {
+  // @constraint glossa.card_creation.duplicate_gate.message_lang Duplicate-card responses include the source language for the carded lemma.
+  lang: string;
+  // @constraint glossa.card_creation.duplicate_gate.message_lemma Duplicate-card responses include the lemma that matched the carded-word record.
+  lemma: string;
+  // @constraint glossa.card_creation.duplicate_gate.message_surface Duplicate-card responses include the clicked surface text for the prompt copy.
+  surface: string;
+  // @constraint glossa.card_creation.duplicate_gate.message_prompt_ms Duplicate-card responses include the configured prompt duration in milliseconds.
+  promptMs: number;
 }
 
 export type SettingsGetPayload = Record<string, never>;
@@ -155,6 +179,8 @@ export type GlossDoneMessage = GlossPortMessage<"gloss.done", GlossDonePayload>;
 export type GlossPortErrorMessage = GlossPortMessage<"gloss.error", GlossPortErrorPayload>;
 export type UserWordClickMessage = MessageEnvelope<"word.clicked", "content-script", "service-worker", UserWordClickPayload>;
 export type WordClickedOkMessage = MessageEnvelope<"word.clicked.ok", "service-worker", "content-script", WordClickedOkPayload>;
+// @behavior glossa.card_creation.duplicate_gate.message_type The duplicate-card envelope is a service-worker response consumed by content.
+export type WordCardDuplicateMessage = MessageEnvelope<"word.card.duplicate", "service-worker", "content-script", WordCardDuplicatePayload>;
 export type SettingsGetMessage = MessageEnvelope<"settings.get", "content-script", "service-worker", SettingsGetPayload>;
 export type SettingsGetResponseMessage = MessageEnvelope<"settings.response", "service-worker", "content-script", SettingsGetResponsePayload>;
 export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
@@ -163,7 +189,8 @@ export type GlossPortInboundMessage = GlossScanMessage | GlossScanStartMessage |
 export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage | GlossChunkAckMessage;
 
 export type ContentToBackgroundMessage = UserWordClickMessage | SettingsGetMessage;
-export type BackgroundResponseMessage = WordClickedOkMessage | SettingsGetResponseMessage | ErrorMessage;
+// @constraint glossa.extension_contracts.payload_consistency.duplicate_response Background responses include duplicate-card prompts alongside success, settings, and error envelopes.
+export type BackgroundResponseMessage = WordClickedOkMessage | WordCardDuplicateMessage | SettingsGetResponseMessage | ErrorMessage;
 
 export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -176,12 +203,18 @@ export interface AiSettings {
   endpoint: string;
   apiKey?: string;
   reasoningEffort: ReasoningEffort;
+  // @behavior glossa.ai_requests.failure.timeout.setting AI requests abort after this configured timeout in milliseconds.
+  requestTimeoutMs: number;
 }
 
 export interface AnkiSettings {
   endpoint: string;
   deck: string;
   modelName: string;
+  // @behavior glossa.card_creation.note_request.timeout.setting Anki note and catalog requests abort after this configured timeout in milliseconds.
+  requestTimeoutMs: number;
+  // @behavior glossa.card_creation.duplicate_gate.prompt_setting Duplicate-card prompts wait this many milliseconds before cancellation.
+  duplicatePromptMs: number;
 }
 
 export interface AppearanceSettings {
@@ -246,11 +279,14 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   ai: {
     provider: "openai-responses",
     endpoint: "https://api.openai.com/v1/responses",
-    reasoningEffort: "medium"
+    reasoningEffort: "medium",
+    requestTimeoutMs: 30_000
   },
   anki: {
     endpoint: "http://127.0.0.1:8765",
     deck: "Glossa",
-    modelName: "Basic"
+    modelName: "Basic",
+    requestTimeoutMs: 30_000,
+    duplicatePromptMs: 5_000
   }
 };

@@ -9,7 +9,7 @@ import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayloa
 import { userMessageForError } from "../shared/userMessages";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
-import { createSelectionController } from "./selection";
+import { createSelectionController, type WordSelection } from "./selection";
 
 const WORD_CLICK_TIMEOUT_MS = 60_000;
 const SCAN_CHUNK_MAX_TOKENS = 64;
@@ -570,23 +570,29 @@ async function boot(): Promise<void> {
         sentence: selection.sentence,
         token: selection.token
       }), WORD_CLICK_TIMEOUT_MS).then((response) => {
-        const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
-        const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
-        overlay.applyCardFeedback(selection.renderToken
-          ? {
-            tokenId: selection.token.id,
-            token: selection.renderToken,
-            feedback: created ? "card-success" : "card-error",
-            ...(failureMessage ? { message: failureMessage } : {})
-          }
-          : {
-            tokenId: selection.token.id,
-            feedback: created ? "card-success" : "card-error",
-            ...(failureMessage ? { message: failureMessage } : {})
+        // @behavior glossa.card_creation.duplicate_gate.content_prompt Duplicate-card responses open a page prompt before content retries the word-click request.
+        if (response.type === "word.card.duplicate") {
+          return promptDuplicateCardCreation(document, {
+            surface: response.payload.surface,
+            timeoutMs: response.payload.promptMs
+          }).then((confirmed) => {
+            // @behavior glossa.card_creation.duplicate_gate.content_cancel Duplicate-card timeout or cancellation clears the pending card feedback.
+            if (!confirmed) {
+              overlay.applyCardFeedback({ tokenId: selection.token.id, feedback: "card-cancelled" });
+              return undefined;
+            }
+            // @behavior glossa.card_creation.duplicate_gate.content_confirm Confirming the duplicate-card prompt resends the word-click request with duplicate approval.
+            return runtimeMessage(createContentMessage("word.clicked", {
+              pageUrl: location.href,
+              sentence: selection.sentence,
+              token: selection.token,
+              allowDuplicateCard: true
+            }), WORD_CLICK_TIMEOUT_MS).then((confirmedResponse) => {
+              applyCardResponse(selection, confirmedResponse);
+            });
           });
-        if (!created && response.type === "error") {
-          reportError("word.clicked", response.payload, response.requestId);
         }
+        applyCardResponse(selection, response);
       }).catch((error) => {
         if (isExtensionContextInvalidated(error)) {
           handleRuntimeError("word.clicked", error);
@@ -605,6 +611,27 @@ async function boot(): Promise<void> {
       handleRuntimeError("word.clicked", error);
     }
   });
+
+  // @behavior glossa.card_creation.note_request.content_feedback Content maps card responses into inline success or failure feedback.
+  function applyCardResponse(selection: WordSelection, response: BackgroundResponseMessage): void {
+    const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
+    const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
+    overlay.applyCardFeedback(selection.renderToken
+      ? {
+        tokenId: selection.token.id,
+        token: selection.renderToken,
+        feedback: created ? "card-success" : "card-error",
+        ...(failureMessage ? { message: failureMessage } : {})
+      }
+      : {
+        tokenId: selection.token.id,
+        feedback: created ? "card-success" : "card-error",
+        ...(failureMessage ? { message: failureMessage } : {})
+      });
+    if (!created && response.type === "error") {
+      reportError("word.clicked", response.payload, response.requestId);
+    }
+  }
   selectionController.attach();
 
   observer = new MutationObserver((mutations) => {
@@ -700,6 +727,72 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
         reject(error);
       });
     }
+  });
+}
+
+// @behavior glossa.card_creation.duplicate_gate.prompt The duplicate-card prompt resolves true only from the confirmation control and otherwise resolves false.
+function promptDuplicateCardCreation(doc: Document, input: { surface: string; timeoutMs: number }): Promise<boolean> {
+  const existing = doc.querySelector("[data-glossa-duplicate-card-prompt]");
+  existing?.remove();
+  return new Promise((resolve) => {
+    const prompt = doc.createElement("div");
+    // @constraint glossa.card_creation.duplicate_gate.prompt_dom The duplicate-card prompt is extension-owned page UI anchored at the top right of the viewport.
+    prompt.dataset.glossaOwned = "1";
+    prompt.dataset.glossaDuplicateCardPrompt = "1";
+    prompt.setAttribute("role", "dialog");
+    prompt.setAttribute("aria-label", "重复制卡确认");
+    prompt.style.cssText = [
+      "position:fixed",
+      "top:16px",
+      "right:16px",
+      "z-index:2147483647",
+      "display:grid",
+      "grid-template-columns:minmax(0,1fr) auto auto",
+      "align-items:center",
+      "gap:8px",
+      "max-width:min(360px,calc(100vw - 32px))",
+      "padding:10px 12px",
+      "border-radius:12px",
+      "background:#1d1d1f",
+      "color:#ffffff",
+      "font:14px/1.35 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
+      "box-shadow:0 8px 24px rgba(0,0,0,0.2)"
+    ].join(";");
+    const text = doc.createElement("span");
+    text.textContent = `${input.surface} 已经制过卡，继续制卡？`;
+    text.style.cssText = "min-width:0;overflow-wrap:anywhere";
+    const confirm = doc.createElement("button");
+    confirm.type = "button";
+    // @behavior glossa.card_creation.duplicate_gate.prompt_controls The duplicate-card prompt exposes one confirmation control and one cancellation control.
+    confirm.textContent = "✓";
+    confirm.setAttribute("aria-label", "继续制卡");
+    const cancel = doc.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "×";
+    cancel.setAttribute("aria-label", "取消制卡");
+    for (const button of [confirm, cancel]) {
+      button.style.cssText = [
+        "width:30px",
+        "height:30px",
+        "border:0",
+        "border-radius:999px",
+        "background:rgba(255,255,255,0.16)",
+        "color:#ffffff",
+        "font:18px/1 ui-sans-serif,system-ui",
+        "cursor:pointer"
+      ].join(";");
+    }
+    prompt.append(text, confirm, cancel);
+    const finish = (confirmed: boolean): void => {
+      globalThis.clearTimeout(timer);
+      prompt.remove();
+      resolve(confirmed);
+    };
+    // @behavior glossa.card_creation.duplicate_gate.prompt_timeout Duplicate-card prompt timeout resolves as cancellation.
+    const timer = globalThis.setTimeout(() => finish(false), input.timeoutMs);
+    confirm.addEventListener("click", () => finish(true), { once: true });
+    cancel.addEventListener("click", () => finish(false), { once: true });
+    (doc.body ?? doc.documentElement).append(prompt);
   });
 }
 

@@ -12,8 +12,8 @@ export function createAnkiClient(fetchImpl: typeof fetch = fetch): AnkiClient {
     // @behavior glossa.card_creation.note_request The create note operation submits one configured AnkiConnect note request and returns its note id.
     async createNote(input) {
       const controller = new AbortController();
-      // @constraint glossa.card_creation.note_request.timeout The note request aborts after fifteen seconds so AnkiConnect calls cannot wait forever.
-      const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
+      // @constraint glossa.card_creation.note_request.timeout The note request aborts after the configured request timeout, which defaults to thirty seconds.
+      const timeout = globalThis.setTimeout(() => controller.abort(), input.settings.anki.requestTimeoutMs);
       // @behavior glossa.card_creation.failure AnkiConnect request, response, and service failures become diagnostics for card creation.
       try {
         // @constraint glossa.card_creation.note_request.fields The Anki note fields map generated card front and back into Basic Front and Back fields.

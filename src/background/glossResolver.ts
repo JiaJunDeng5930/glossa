@@ -3,7 +3,6 @@ import pLimit from "p-limit";
 
 import { buildGlossCacheKey } from "../core/cache";
 import { diagnosticPayloadFrom } from "../shared/errors";
-import { hashText } from "../shared/hash";
 import { trace } from "../shared/diagnostics";
 import {
   createCandidateRecord,
@@ -153,7 +152,6 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
 
   const createSession = (pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession => {
     const startedAt = nowMs();
-    const promptVersionPromise = promptCacheVersion(settings, settings.prompts.gloss);
     const tasks = new Set<Promise<void>>();
     const stats: ResolverStats = {
       chunks: 0,
@@ -199,7 +197,8 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
         const chunkStartedAt = nowMs();
         stats.chunks += 1;
         stats.tokens += sentences.reduce((total, sentence) => total + sentence.tokens.length, 0);
-        const task = promptVersionPromise.then(async (promptVersion) => {
+        // @behavior glossa.page_translation.lookup_order.chunk_error_trace Lookup chunk tasks emit success or failure diagnostic traces around token lookup.
+        const task = (async () => {
           const tokenTasks = sentences.flatMap((sentence) => {
             return sentence.tokens.map((token) => lookupLimit(async () => {
               await resolveToken({
@@ -209,7 +208,6 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 settings,
                 now,
                 pageUrl,
-                promptVersion,
                 inFlight,
                 recall,
                 remember,
@@ -239,7 +237,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
               chunkIdHash: hashSmall(chunkId)
             }
           });
-        }).catch((error) => {
+        })().catch((error) => {
           trace({
             component: "service-worker",
             operation: "service-worker.lookup.chunk",
@@ -296,7 +294,6 @@ async function resolveToken(input: {
   settings: GlossaSettings;
   now: number;
   pageUrl: string;
-  promptVersion: string;
   inFlight: Map<string, InFlightGloss>;
   recall(key: string): GlossItem | undefined;
   remember(key: string, item: GlossItem): void;
@@ -312,7 +309,7 @@ async function resolveToken(input: {
     if (input.sink.isActive?.() === false) {
       return;
     }
-    const cacheKey = await glossCacheKey(input.settings, input.promptVersion, input.sentence, input.token);
+    const cacheKey = await glossCacheKey(input.sentence, input.token);
     const memoryKey = transientMemoryKey(input.pageUrl, cacheKey);
     const memoryCached = input.recall(memoryKey);
     if (memoryCached) {
@@ -651,8 +648,6 @@ async function emitReusedMiss(
 }
 
 async function glossCacheKey(
-  settings: GlossaSettings,
-  promptVersion: string,
   sentence: SentenceCandidate,
   token: TokenCandidate
 ): Promise<string> {
@@ -660,19 +655,8 @@ async function glossCacheKey(
     targetLang: GLOSS_TARGET_LANG,
     sentence: sentence.text,
     targetText: token.surface,
-    targetSpan: [token.startOffset, token.endOffset],
-    promptVersion,
-    modelVersion: settings.modelVersion
+    targetSpan: [token.startOffset, token.endOffset]
   });
-}
-
-async function promptCacheVersion(settings: GlossaSettings, prompt: string): Promise<string> {
-  return [
-    settings.promptVersion,
-    settings.ai.provider,
-    settings.ai.reasoningEffort,
-    await hashText(prompt)
-  ].join(":");
 }
 
 async function currentRecord(

@@ -3,11 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 import { createBackgroundMessageHandler } from "../../src/background/messages";
 import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, type AnkiCardOutput, type GlossItem, type VocabularyRecord } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, type AnkiCardOutput, type CardedWordRecord, type GlossItem, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
 // @verifies glossa.extension_contracts.request_effects
 // @verifies glossa.extension_storage.typed_access
 describe("background message handler", () => {
+  // @verifies glossa.card_creation.duplicate_gate.success
+  // @verifies glossa.card_creation.duplicate_gate.learning_state
+  // @verifies glossa.card_creation.note_request.ids
+  // @verifies glossa.card_creation.note_request.empty_result
+  // @verifies glossa.card_creation.note_request.response_payload
+  // @verifies glossa.card_creation.duplicate_gate.record_key
+  // @verifies glossa.card_creation.duplicate_gate.record_lang
+  // @verifies glossa.card_creation.duplicate_gate.record_lemma
+  // @verifies glossa.card_creation.duplicate_gate.record_created_at
+  // @verifies glossa.card_creation.duplicate_gate.record_store
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
@@ -16,8 +26,8 @@ describe("background message handler", () => {
       learningWindowDays: 3,
       promptVersion: "gloss-v1",
       modelVersion: "gpt-4.1-mini",
-      ai: { provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" },
-      anki: { endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "Basic" }
+      ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" },
+      anki: { ...DEFAULT_SETTINGS.anki, endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "Basic" }
     });
     const message = createContentMessage("word.clicked", {
       pageUrl: "https://example.test",
@@ -46,6 +56,115 @@ describe("background message handler", () => {
       clickCount: 1,
       ankiNoteIds: [42, 43]
     });
+    expect(await storage.cardedWords.get("en:submit")).toMatchObject({
+      key: "en:submit",
+      lang: "en",
+      lemma: "submit",
+      createdAt: 1_000
+    });
+  });
+
+  // @verifies glossa.card_creation.duplicate_gate
+  // @verifies glossa.card_creation.duplicate_gate.response
+  // @verifies glossa.card_creation.duplicate_gate.message_lang
+  // @verifies glossa.card_creation.duplicate_gate.message_lemma
+  // @verifies glossa.card_creation.duplicate_gate.message_surface
+  // @verifies glossa.card_creation.duplicate_gate.message_prompt_ms
+  // @verifies glossa.card_creation.duplicate_gate.prompt_setting
+  it("returns duplicate-card confirmation before creating another note for a carded word", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    await storage.cardedWords.put("en:submit", { key: "en:submit", lang: "en", lemma: "submit", createdAt: 500 });
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
+    };
+    const anki = { createNote: vi.fn(async () => 42) };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const response = await handler(message);
+
+    expect(response).toMatchObject({
+      type: "word.card.duplicate",
+      requestId: message.requestId,
+      payload: { lang: "en", lemma: "submit", surface: "submit", promptMs: 5_000 }
+    });
+    expect(ai.ankiCard).not.toHaveBeenCalled();
+    expect(anki.createNote).not.toHaveBeenCalled();
+    expect(await storage.lexicon.get("en:submit")).toBeUndefined();
+  });
+
+  // @verifies glossa.card_creation.duplicate_gate
+  // @verifies glossa.card_creation.duplicate_gate.message_confirmed
+  it("creates another note for a carded word after explicit confirmation", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    await storage.cardedWords.put("en:submit", { key: "en:submit", lang: "en", lemma: "submit", createdAt: 500 });
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 },
+      allowDuplicateCard: true
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
+    };
+    const anki = { createNote: vi.fn(async () => 42) };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const response = await handler(message);
+
+    expect(response).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42, noteIds: [42] } });
+    expect(await storage.cardedWords.get("en:submit")).toMatchObject({ createdAt: 1_000 });
+  });
+
+  // @verifies glossa.cache_identity.card_content_cache
+  // @verifies glossa.cache_identity.card_content_cache.store
+  it("reuses cached card content across provider and reasoning changes", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set({
+      ...DEFAULT_SETTINGS,
+      promptVersion: "gloss-v1",
+      prompts: { ...DEFAULT_SETTINGS.prompts, ankiCard: "Create one card." },
+      ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" }
+    });
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
+    };
+    const anki = { createNote: vi.fn(async () => 42) };
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+
+    await handler(message);
+    await storage.settings.set({
+      ...DEFAULT_SETTINGS,
+      promptVersion: "gloss-v1",
+      prompts: { ...DEFAULT_SETTINGS.prompts, ankiCard: "Create one card." },
+      ai: { ...DEFAULT_SETTINGS.ai, provider: "openai-responses", endpoint: "https://api.openai.com/v1/responses", reasoningEffort: "high" }
+    });
+    await handler(createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t3", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 },
+      allowDuplicateCard: true
+    }));
+
+    expect(ai.ankiCard).toHaveBeenCalledTimes(1);
+    expect(anki.createNote).toHaveBeenCalledTimes(2);
   });
 
 });
@@ -55,6 +174,7 @@ export function createMemoryStorage(): ExtensionStorage {
   const lexicon = new Map<string, unknown>();
   const glossCache = new Map<string, unknown>();
   const cardCache = new Map<string, unknown>();
+  const cardedWords = new Map<string, unknown>();
 
   return {
     settings: {
@@ -72,8 +192,16 @@ export function createMemoryStorage(): ExtensionStorage {
       async getMany(keys) {
         return readMany<VocabularyRecord>(lexicon, keys);
       },
+      async listByState(state: VocabularyState) {
+        return Array.from(lexicon.values())
+          .filter((record): record is VocabularyRecord => (record as VocabularyRecord).state === state)
+          .sort((left, right) => left.lemma.localeCompare(right.lemma));
+      },
       async put(record) {
         lexicon.set(record.key, record);
+      },
+      async delete(key) {
+        lexicon.delete(key);
       }
     },
     glossCache: {
@@ -85,6 +213,9 @@ export function createMemoryStorage(): ExtensionStorage {
       },
       async put(key, value) {
         glossCache.set(key, value);
+      },
+      async delete(key) {
+        glossCache.delete(key);
       }
     },
     cardCache: {
@@ -92,10 +223,27 @@ export function createMemoryStorage(): ExtensionStorage {
         return cardCache.get(key) as never;
       },
       async getMany(keys) {
-        return readMany<AnkiCardOutput & { noteIds?: number[] }>(cardCache, keys);
+        return readMany<AnkiCardOutput>(cardCache, keys);
       },
       async put(key, value) {
         cardCache.set(key, value);
+      },
+      async delete(key) {
+        cardCache.delete(key);
+      }
+    },
+    cardedWords: {
+      async get(key) {
+        return cardedWords.get(key) as never;
+      },
+      async getMany(keys) {
+        return readMany<CardedWordRecord>(cardedWords, keys);
+      },
+      async put(key, value) {
+        cardedWords.set(key, value);
+      },
+      async delete(key) {
+        cardedWords.delete(key);
       }
     }
   };

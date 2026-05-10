@@ -209,12 +209,49 @@ describe("AI backend adapters", () => {
       const assertion = expect(request).rejects.toMatchObject({
         payload: { service: "ai" }
       });
-      await vi.advanceTimersByTimeAsync(15_000);
-      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(30_000);
 
       await assertion;
       expect(signals).toHaveLength(2);
       expect(signals.every((signal) => signal.aborted)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // @verifies glossa.ai_requests.failure.timeout
+  // @verifies glossa.ai_requests.failure.timeout.setting
+  it("uses the configured AI request timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      const fetchImpl = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        signal = init?.signal ?? undefined;
+        signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }));
+      const baseSettings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
+      const settings = {
+        ...baseSettings,
+        ai: {
+          ...baseSettings.ai,
+          requestTimeoutMs: 2_500
+        }
+      };
+
+      const request = createAiBackend(fetchImpl as never).gloss({
+        settings,
+        sentence: "Submit the form.",
+        tokens: []
+      });
+      const assertion = expect(request).rejects.toMatchObject({
+        payload: { service: "ai" }
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
+      await vi.advanceTimersByTimeAsync(2_500);
+
+      await assertion;
+      expect(signal?.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -230,6 +267,7 @@ function settingsFor(
     ...DEFAULT_SETTINGS,
     modelVersion: provider === "openai-completions" ? "gpt-3.5-turbo-instruct" : DEFAULT_SETTINGS.modelVersion,
     ai: {
+      ...DEFAULT_SETTINGS.ai,
       provider,
       endpoint,
       apiKey: "test-key",

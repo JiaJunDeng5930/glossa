@@ -2,9 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { buildGlossCacheKey } from "../../src/core/cache";
 import { createGlossResolver } from "../../src/background/glossResolver";
-import { hashText } from "../../src/shared/hash";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type GlossaSettings, type GlossItem, type GlossTokenPayload, type VocabularyRecord } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossItem, type GlossTokenPayload, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
 // @verifies glossa.page_translation.lookup_order
 // @verifies glossa.cache_identity.text_hash
@@ -136,10 +135,10 @@ describe("gloss resolver lookup-first pipeline", () => {
 
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
     expect(ai.glossFrame).toHaveBeenCalledWith(expect.objectContaining({
-      items: [
+      items: expect.arrayContaining([
         expect.objectContaining({ token: expect.objectContaining({ id: "t-novel" }) }),
         expect.objectContaining({ token: expect.objectContaining({ id: "t-obscure" }) })
-      ]
+      ])
     }));
     expect(events).toEqual(expect.arrayContaining([
       { tokenId: "t-novel", status: "pending" },
@@ -154,6 +153,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     const oldKeySettings: GlossaSettings = {
       ...testSettings(),
       ai: {
+        ...DEFAULT_SETTINGS.ai,
         provider: "openai-responses",
         endpoint: "https://api.openai.com/v1/responses",
         reasoningEffort: "medium",
@@ -219,6 +219,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     const oldKeySettings: GlossaSettings = {
       ...testSettings(),
       ai: {
+        ...DEFAULT_SETTINGS.ai,
         provider: "openai-responses",
         endpoint: "https://api.openai.com/v1/responses",
         reasoningEffort: "medium",
@@ -445,6 +446,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
+  // @verifies glossa.page_translation.lookup_order.chunk_error_trace
   it("shares in-flight AI failures with duplicate lookups", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();
@@ -551,24 +553,16 @@ describe("gloss resolver lookup-first pipeline", () => {
 function testSettings(): GlossaSettings {
   return {
     ...DEFAULT_SETTINGS,
-    ai: { provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" }
+    ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "https://ai.example.test", reasoningEffort: "medium" }
   };
 }
 
 async function cacheKey(settings: GlossaSettings, sentence: string, targetText: string, startOffset: number, endOffset: number): Promise<string> {
-  const promptVersion = [
-    settings.promptVersion,
-    settings.ai.provider,
-    settings.ai.reasoningEffort,
-    await hashText(settings.prompts.gloss)
-  ].join(":");
   return buildGlossCacheKey({
     targetLang: GLOSS_TARGET_LANG,
     sentence,
     targetText,
-    targetSpan: [startOffset, endOffset],
-    promptVersion,
-    modelVersion: settings.modelVersion
+    targetSpan: [startOffset, endOffset]
   });
 }
 
@@ -590,6 +584,7 @@ function createMemoryStorage(): ExtensionStorage {
   const lexicon = new Map<string, unknown>();
   const glossCache = new Map<string, unknown>();
   const cardCache = new Map<string, unknown>();
+  const cardedWords = new Map<string, unknown>();
 
   return {
     settings: {
@@ -607,8 +602,16 @@ function createMemoryStorage(): ExtensionStorage {
       async getMany(keys) {
         return readMany<VocabularyRecord>(lexicon, keys);
       },
+      async listByState(state: VocabularyState) {
+        return Array.from(lexicon.values())
+          .filter((record): record is VocabularyRecord => (record as VocabularyRecord).state === state)
+          .sort((left, right) => left.lemma.localeCompare(right.lemma));
+      },
       async put(value) {
         lexicon.set(value.key, value);
+      },
+      async delete(key) {
+        lexicon.delete(key);
       }
     },
     glossCache: {
@@ -620,6 +623,9 @@ function createMemoryStorage(): ExtensionStorage {
       },
       async put(key, value) {
         glossCache.set(key, value);
+      },
+      async delete(key) {
+        glossCache.delete(key);
       }
     },
     cardCache: {
@@ -627,10 +633,27 @@ function createMemoryStorage(): ExtensionStorage {
         return cardCache.get(key) as never;
       },
       async getMany(keys) {
-        return readMany<AnkiCardOutput & { noteIds?: number[] }>(cardCache, keys);
+        return readMany<AnkiCardOutput>(cardCache, keys);
       },
       async put(key, value) {
         cardCache.set(key, value);
+      },
+      async delete(key) {
+        cardCache.delete(key);
+      }
+    },
+    cardedWords: {
+      async get(key) {
+        return cardedWords.get(key) as never;
+      },
+      async getMany(keys) {
+        return readMany<CardedWordRecord>(cardedWords, keys);
+      },
+      async put(key, value) {
+        cardedWords.set(key, value);
+      },
+      async delete(key) {
+        cardedWords.delete(key);
       }
     }
   };

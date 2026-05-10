@@ -7,7 +7,7 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 - `src/content/*`: page scanning, DOM range mapping, inline gloss wrappers, and shortcut-based selection mode. Content code sends requests to background and keeps page interaction local.
 - `src/background/*`: message orchestration, AI calls, AnkiConnect calls, cache lookup, and vocabulary state persistence. Service worker code persists task state and cache results.
 - `src/core/*`: vocabulary state machine, lemma normalization, known-word-list loading, and cache key construction.
-- `src/storage/db.ts`: minimal wrapper for `chrome.storage.local` settings and IndexedDB-backed lexicon/cache stores.
+- `src/storage/db.ts`: minimal wrapper for `chrome.storage.local` settings and IndexedDB-backed lexicon, cache, and carded-word stores.
 - `src/options/*`: settings UI for shortcut, known-word filter, AI endpoint, OpenAI Responses API key, AnkiConnect endpoint, prompts, and connection checks.
 - `src/popup/*`: action popup menu. The translate button sends a tab message that activates content translation for the current page.
 - `src/shared/shortcut.ts`: shared shortcut capture and matching rules for options and content selection mode.
@@ -16,13 +16,15 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 
 Vocabulary records use one table keyed by `lang:lemma`. `candidate` records become `known` after a displayed gloss. A clicked word becomes `learning_active`, receives an `expiresAt`, and stays eligible for display until expiry. Expired `learning_active` records transition to `known`. `ignored` records stay hidden.
 
-Settings contain `autoTranslateEnabled`, `translateShortcutKey`, `shortcutKey`, `appearance` for inline label colors, opacity, font family, and font size, plus `knownWordList`, `prompts.gloss`, and `prompts.ankiCard`. The extension is fixed to English source text and `zh-CN` gloss output through `GLOSS_TARGET_LANG`. Anki settings contain endpoint, deck, and model name; note creation writes `Front` and `Back`, so options only enables model names whose fields include both. Prompt text, OpenAI provider, and reasoning effort are included in cache versioning so edits create fresh gloss/card cache entries. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` uses `/gloss` with frame-shaped `items` for gloss batches and `/anki-card` for card creation.
+Settings contain `autoTranslateEnabled`, `translateShortcutKey`, `shortcutKey`, `appearance` for inline label colors, opacity, font family, and font size, plus `knownWordList`, `prompts.gloss`, and `prompts.ankiCard`. The extension is fixed to English source text and `zh-CN` gloss output through `GLOSS_TARGET_LANG`. AI settings include provider, endpoint, reasoning effort, API key, and request timeout. Anki settings contain endpoint, deck, model name, request timeout, and duplicate-card prompt duration; note creation writes `Front` and `Back`, so options only enables model names whose fields include both. Gloss cache identity uses target language, sentence text, token text, and token span. Card content cache identity uses language, target language, lemma, and Anki-card prompt version. Model names stay outside cache identity. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` uses `/gloss` with frame-shaped `items` for gloss batches and `/anki-card` for card creation.
 
 Content translation has a page-local activation flag. It starts from `settings.autoTranslateEnabled`, turns on when the action popup sends `glossa.activateTranslation`, toggles when the page receives `settings.translateShortcutKey`, and resets to the setting value after a route URL change. Toggling off clears queued scans, closes gloss ports, unwraps rendered tokens, and keeps mutation and scroll rescans idle while the page is inactive.
 
 Runtime messages use `src/shared/messages.ts`. Settings and word-click messages use request/response envelopes with `type`, `version`, `requestId`, `source`, `target`, `createdAt`, and `payload`. Gloss lookup uses a `chrome.runtime.connect({ name: "gloss.session" })` port: content sends `gloss.scan.start`, streams `gloss.scan.chunk`, sends `gloss.scan.end`, receives `gloss.chunk.ack` for backpressure, then receives streamed `gloss.token` outcomes with `ready`, `pending`, `hidden`, or `error` before `gloss.done`. Content opens a fresh port for each scan and disconnects all gloss ports on route changes and teardown.
 
-Background gloss resolution is lookup-first and chunked: page memory replay, lexicon state, IndexedDB gloss cache, then framed AI. Memory and cache hits emit `ready` immediately and update shown state. `known` and `ignored` emit `hidden`. AI misses emit `pending`, enter an in-flight map keyed by durable gloss cache key, then owner misses enter an AI frame buffer. Frames close at 32 misses or 50ms and execute through a global serial AI outlet with concurrency 1. Duplicate misses subscribe to the owner in-flight result and receive per-token `ready` or `error`.
+Background gloss resolution is lookup-first and chunked: page memory replay, lexicon state, IndexedDB gloss cache, then framed AI. Memory and cache hits emit `ready` immediately and update shown state. `known` and `ignored` emit `hidden`. AI misses emit `pending`, enter an in-flight map keyed by durable gloss cache key plus active AI settings, then owner misses enter an AI frame buffer. Frames close at 32 misses or 50ms and execute through a global serial AI outlet with concurrency 1. Duplicate misses subscribe to the owner in-flight result and receive per-token `ready` or `error`.
+
+Card creation keeps a word-only `cardedWords` store keyed by `lang:lemma`. A normal Anki success writes that record after note creation returns at least one note id. When a clicked word already has a carded-word record, background returns `word.card.duplicate`; content shows a top-right confirmation for `settings.anki.duplicatePromptMs`, defaults to no on timeout or cancel, and resends `word.clicked` with `allowDuplicateCard` only after the user confirms.
 
 IndexedDB reads for lexicon and gloss cache pass through a DB read coalescer. It batches same-store key reads within an 8ms window and exposes aggregate trace events through `service-worker.db.read`. Visible lookup outcomes are emitted before shown-state writes complete.
 
@@ -32,7 +34,7 @@ Structured diagnostics use `src/shared/diagnostics.ts`. Trace events include com
 
 Runtime error payloads are diagnostic data: `reason`, `message`, optional `service`, and optional `status`. Background code reports diagnostic facts through message and port payloads. Frontend code maps those diagnostics to user-facing text through `src/shared/userMessages.ts`; inline page UI keeps the `×` badge and exposes the text through title and aria-label.
 
-Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip. Extra filter presets cover CET-4, CET-6, TOEFL, GRE, and COCA 20000.
+Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip. Extra filter presets cover CET-4, CET-6, TOEFL, GRE, and COCA 20000. The options page also lists lexicon records whose state is `known` and lets the user add or remove those records manually.
 
 The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no shadows, and a single blue Save action. Connection test buttons are text buttons placed directly below Reasoning effort and Anki deck.
 
@@ -70,7 +72,10 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.ai_requests.failure.invalid_json|glossa.ai_requests.failure.invalid_json.{}
 |glossa.ai_requests.failure.request_error|glossa.ai_requests.failure.request_error.{}
 |glossa.ai_requests.failure.retry_limit|glossa.ai_requests.failure.retry_limit.{}
-|glossa.ai_requests.failure.timeout|glossa.ai_requests.failure.timeout.{}
+|glossa.ai_requests.failure.timeout|glossa.ai_requests.failure.timeout.{connection_helper,options_check,setting}
+|glossa.ai_requests.failure.timeout.connection_helper|glossa.ai_requests.failure.timeout.connection_helper.{}
+|glossa.ai_requests.failure.timeout.options_check|glossa.ai_requests.failure.timeout.options_check.{}
+|glossa.ai_requests.failure.timeout.setting|glossa.ai_requests.failure.timeout.setting.{}
 |glossa.ai_requests.failure.timeout_cleanup|glossa.ai_requests.failure.timeout_cleanup.{}
 |glossa.ai_requests.glossa_backend|glossa.ai_requests.glossa_backend.{anki_card,gloss,gloss_frame}
 |glossa.ai_requests.glossa_backend.anki_card|glossa.ai_requests.glossa_backend.anki_card.{}
@@ -81,30 +86,75 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.ai_requests.openai.legacy_completions|glossa.ai_requests.openai.legacy_completions.{}
 |glossa.ai_requests.openai.responses|glossa.ai_requests.openai.responses.{}
 |glossa.ai_requests.reasoning_effort|glossa.ai_requests.reasoning_effort.{}
-|glossa.cache_identity|glossa.cache_identity.{request_parts,text_hash}
-|glossa.cache_identity.request_parts|glossa.cache_identity.request_parts.{}
+|glossa.cache_identity|glossa.cache_identity.{card_content_cache,request_parts,text_hash}
+|glossa.cache_identity.card_content_cache|glossa.cache_identity.card_content_cache.{store}
+|glossa.cache_identity.card_content_cache.store|glossa.cache_identity.card_content_cache.store.{}
+|glossa.cache_identity.request_parts|glossa.cache_identity.request_parts.{gloss_key_fields}
+|glossa.cache_identity.request_parts.gloss_key_fields|glossa.cache_identity.request_parts.gloss_key_fields.{}
 |glossa.cache_identity.text_hash|glossa.cache_identity.text_hash.{}
-|glossa.card_creation|glossa.card_creation.{anki_client,failure,note_request}
+|glossa.card_creation|glossa.card_creation.{anki_client,duplicate_gate,failure,note_request}
 |glossa.card_creation.anki_client|glossa.card_creation.anki_client.{}
+|glossa.card_creation.duplicate_gate|glossa.card_creation.duplicate_gate.{content_cancel,content_confirm,content_prompt,feedback_clear,feedback_dataset_state,feedback_skip,feedback_state,learning_state,message_confirmed,message_lang,message_lemma,message_prompt_ms,message_surface,message_type,prompt,prompt_controls,prompt_dom,prompt_setting,prompt_timeout,record_created_at,record_key,record_lang,record_lemma,record_store,record_store_upgrade,response,success}
+|glossa.card_creation.duplicate_gate.content_cancel|glossa.card_creation.duplicate_gate.content_cancel.{}
+|glossa.card_creation.duplicate_gate.content_confirm|glossa.card_creation.duplicate_gate.content_confirm.{}
+|glossa.card_creation.duplicate_gate.content_prompt|glossa.card_creation.duplicate_gate.content_prompt.{}
+|glossa.card_creation.duplicate_gate.feedback_clear|glossa.card_creation.duplicate_gate.feedback_clear.{}
+|glossa.card_creation.duplicate_gate.feedback_dataset_state|glossa.card_creation.duplicate_gate.feedback_dataset_state.{}
+|glossa.card_creation.duplicate_gate.feedback_skip|glossa.card_creation.duplicate_gate.feedback_skip.{}
+|glossa.card_creation.duplicate_gate.feedback_state|glossa.card_creation.duplicate_gate.feedback_state.{}
+|glossa.card_creation.duplicate_gate.learning_state|glossa.card_creation.duplicate_gate.learning_state.{}
+|glossa.card_creation.duplicate_gate.message_confirmed|glossa.card_creation.duplicate_gate.message_confirmed.{}
+|glossa.card_creation.duplicate_gate.message_lang|glossa.card_creation.duplicate_gate.message_lang.{}
+|glossa.card_creation.duplicate_gate.message_lemma|glossa.card_creation.duplicate_gate.message_lemma.{}
+|glossa.card_creation.duplicate_gate.message_prompt_ms|glossa.card_creation.duplicate_gate.message_prompt_ms.{}
+|glossa.card_creation.duplicate_gate.message_surface|glossa.card_creation.duplicate_gate.message_surface.{}
+|glossa.card_creation.duplicate_gate.message_type|glossa.card_creation.duplicate_gate.message_type.{}
+|glossa.card_creation.duplicate_gate.prompt|glossa.card_creation.duplicate_gate.prompt.{}
+|glossa.card_creation.duplicate_gate.prompt_controls|glossa.card_creation.duplicate_gate.prompt_controls.{}
+|glossa.card_creation.duplicate_gate.prompt_dom|glossa.card_creation.duplicate_gate.prompt_dom.{}
+|glossa.card_creation.duplicate_gate.prompt_setting|glossa.card_creation.duplicate_gate.prompt_setting.{}
+|glossa.card_creation.duplicate_gate.prompt_timeout|glossa.card_creation.duplicate_gate.prompt_timeout.{}
+|glossa.card_creation.duplicate_gate.record_created_at|glossa.card_creation.duplicate_gate.record_created_at.{}
+|glossa.card_creation.duplicate_gate.record_key|glossa.card_creation.duplicate_gate.record_key.{}
+|glossa.card_creation.duplicate_gate.record_lang|glossa.card_creation.duplicate_gate.record_lang.{}
+|glossa.card_creation.duplicate_gate.record_lemma|glossa.card_creation.duplicate_gate.record_lemma.{}
+|glossa.card_creation.duplicate_gate.record_store|glossa.card_creation.duplicate_gate.record_store.{}
+|glossa.card_creation.duplicate_gate.record_store_upgrade|glossa.card_creation.duplicate_gate.record_store_upgrade.{}
+|glossa.card_creation.duplicate_gate.response|glossa.card_creation.duplicate_gate.response.{}
+|glossa.card_creation.duplicate_gate.success|glossa.card_creation.duplicate_gate.success.{}
 |glossa.card_creation.failure|glossa.card_creation.failure.{http_status,invalid_response,request_error,service_error}
 |glossa.card_creation.failure.http_status|glossa.card_creation.failure.http_status.{}
 |glossa.card_creation.failure.invalid_response|glossa.card_creation.failure.invalid_response.{}
 |glossa.card_creation.failure.request_error|glossa.card_creation.failure.request_error.{}
 |glossa.card_creation.failure.service_error|glossa.card_creation.failure.service_error.{}
-|glossa.card_creation.note_request|glossa.card_creation.note_request.{fields,http_call,payload,tags,timeout,timeout_cleanup}
+|glossa.card_creation.note_request|glossa.card_creation.note_request.{content_feedback,empty_result,feedback_badge,feedback_display,fields,http_call,ids,payload,response_payload,tags,timeout,timeout_cleanup}
+|glossa.card_creation.note_request.content_feedback|glossa.card_creation.note_request.content_feedback.{}
+|glossa.card_creation.note_request.empty_result|glossa.card_creation.note_request.empty_result.{}
+|glossa.card_creation.note_request.feedback_badge|glossa.card_creation.note_request.feedback_badge.{}
+|glossa.card_creation.note_request.feedback_display|glossa.card_creation.note_request.feedback_display.{}
 |glossa.card_creation.note_request.fields|glossa.card_creation.note_request.fields.{}
 |glossa.card_creation.note_request.http_call|glossa.card_creation.note_request.http_call.{}
+|glossa.card_creation.note_request.ids|glossa.card_creation.note_request.ids.{}
 |glossa.card_creation.note_request.payload|glossa.card_creation.note_request.payload.{}
+|glossa.card_creation.note_request.response_payload|glossa.card_creation.note_request.response_payload.{}
 |glossa.card_creation.note_request.tags|glossa.card_creation.note_request.tags.{}
-|glossa.card_creation.note_request.timeout|glossa.card_creation.note_request.timeout.{}
+|glossa.card_creation.note_request.timeout|glossa.card_creation.note_request.timeout.{anki_action,anki_catalog,options_check,setting}
+|glossa.card_creation.note_request.timeout.anki_action|glossa.card_creation.note_request.timeout.anki_action.{}
+|glossa.card_creation.note_request.timeout.anki_catalog|glossa.card_creation.note_request.timeout.anki_catalog.{}
+|glossa.card_creation.note_request.timeout.options_check|glossa.card_creation.note_request.timeout.options_check.{}
+|glossa.card_creation.note_request.timeout.setting|glossa.card_creation.note_request.timeout.setting.{}
 |glossa.card_creation.note_request.timeout_cleanup|glossa.card_creation.note_request.timeout_cleanup.{}
 |glossa.extension_contracts|glossa.extension_contracts.{message_envelopes,payload_consistency,request_effects,restart_continuity}
 |glossa.extension_contracts.message_envelopes|glossa.extension_contracts.message_envelopes.{}
-|glossa.extension_contracts.payload_consistency|glossa.extension_contracts.payload_consistency.{}
+|glossa.extension_contracts.payload_consistency|glossa.extension_contracts.payload_consistency.{duplicate_response}
+|glossa.extension_contracts.payload_consistency.duplicate_response|glossa.extension_contracts.payload_consistency.duplicate_response.{}
 |glossa.extension_contracts.request_effects|glossa.extension_contracts.request_effects.{}
 |glossa.extension_contracts.restart_continuity|glossa.extension_contracts.restart_continuity.{}
 |glossa.extension_storage|glossa.extension_storage.{typed_access}
-|glossa.extension_storage.typed_access|glossa.extension_storage.typed_access.{}
+|glossa.extension_storage.typed_access|glossa.extension_storage.typed_access.{key_value_delete,lexicon_delete,lexicon_delete_impl}
+|glossa.extension_storage.typed_access.key_value_delete|glossa.extension_storage.typed_access.key_value_delete.{}
+|glossa.extension_storage.typed_access.lexicon_delete|glossa.extension_storage.typed_access.lexicon_delete.{}
+|glossa.extension_storage.typed_access.lexicon_delete_impl|glossa.extension_storage.typed_access.lexicon_delete_impl.{}
 |glossa.failure_reporting|glossa.failure_reporting.{trace_privacy,user_copy}
 |glossa.failure_reporting.trace_privacy|glossa.failure_reporting.trace_privacy.{}
 |glossa.failure_reporting.user_copy|glossa.failure_reporting.user_copy.{}
@@ -112,13 +162,19 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.activation|glossa.page_translation.activation.{}
 |glossa.page_translation.candidate_scan|glossa.page_translation.candidate_scan.{}
 |glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{}
-|glossa.page_translation.lookup_order|glossa.page_translation.lookup_order.{}
+|glossa.page_translation.lookup_order|glossa.page_translation.lookup_order.{chunk_error_trace}
+|glossa.page_translation.lookup_order.chunk_error_trace|glossa.page_translation.lookup_order.chunk_error_trace.{}
 |glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
-|glossa.settings_save|glossa.settings_save.{}
+|glossa.settings_save|glossa.settings_save.{timeout_seconds}
+|glossa.settings_save.timeout_seconds|glossa.settings_save.timeout_seconds.{}
 |glossa.shortcuts|glossa.shortcuts.{}
 |glossa.translation_start_popup|glossa.translation_start_popup.{}
-|glossa.word_memory|glossa.word_memory.{known_word_filter,learning_lifecycle}
+|glossa.word_memory|glossa.word_memory.{known_management,known_word_filter,learning_lifecycle}
+|glossa.word_memory.known_management|glossa.word_memory.known_management.{add_known,store_listing,store_read}
+|glossa.word_memory.known_management.add_known|glossa.word_memory.known_management.add_known.{}
+|glossa.word_memory.known_management.store_listing|glossa.word_memory.known_management.store_listing.{}
+|glossa.word_memory.known_management.store_read|glossa.word_memory.known_management.store_read.{}
 |glossa.word_memory.known_word_filter|glossa.word_memory.known_word_filter.{}
 |glossa.word_memory.learning_lifecycle|glossa.word_memory.learning_lifecycle.{}
 |requirements|requirements.{agent_index,analysis_consistency,change_anchoring,cli,comment_binding,comment_syntax,comment_tree,diagnostic_output,source_snapshot,test_config}

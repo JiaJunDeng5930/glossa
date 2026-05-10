@@ -18,6 +18,7 @@ import type {
   SettingsGetPayload,
   SettingsGetResponsePayload,
   UserWordClickPayload,
+  WordCardDuplicatePayload,
   WordClickedOkPayload
 } from "./types";
 import { isErrorPayload } from "./errors";
@@ -32,6 +33,7 @@ type ContentPayloadByType = {
 type BackgroundPayloadByType = {
   "settings.response": SettingsGetResponsePayload;
   "word.clicked.ok": WordClickedOkPayload;
+  "word.card.duplicate": WordCardDuplicatePayload;
   error: ErrorPayload;
 };
 
@@ -117,6 +119,7 @@ export function validateBackgroundResponse(value: unknown, request: ContentToBac
   if (
     envelope.type !== "settings.response"
     && envelope.type !== "word.clicked.ok"
+    && envelope.type !== "word.card.duplicate"
     && envelope.type !== "error"
   ) {
     throw new Error("Unknown response type");
