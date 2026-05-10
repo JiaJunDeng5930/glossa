@@ -192,7 +192,7 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open("glossa", 2);
     request.onupgradeneeded = () => {
       const db = request.result;
-      for (const store of ["lexicon", "glossCache", "cardCache"] satisfies StoreName[]) {
+      for (const store of ["lexicon", "glossCache", "cardCache", "cardedWords"] satisfies StoreName[]) {
         if (!db.objectStoreNames.contains(store)) {
           db.createObjectStore(store);
         }

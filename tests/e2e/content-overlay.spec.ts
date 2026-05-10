@@ -547,6 +547,53 @@ test("content bundle cancels duplicate card prompts after their timeout", async 
   expect(await page.evaluate(() => (Reflect.get(window, "__duplicateMessages") as unknown[]).length)).toBe(1);
 });
 
+// @verifies glossa.card_creation.duplicate_gate.prompt_supersede
+// @verifies glossa.card_creation.duplicate_gate.prompt_supersede_state
+test("content bundle cancels the active duplicate prompt when a new one opens", async ({ page }) => {
+  await page.setContent("<main><p><span id=\"first\">archive</span> <span id=\"second\">submit</span></p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    const messages: unknown[] = [];
+    Reflect.set(window, "__duplicateMessages", messages);
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script"; payload?: { token?: { surface?: string } } }, callback?: (response: unknown) => void) => {
+      if (message.type !== "word.clicked") {
+        return undefined;
+      }
+      messages.push(message);
+      const surface = message.payload?.token?.surface ?? "word";
+      const response = {
+        type: "word.card.duplicate",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { lang: "en", lemma: surface.toLocaleLowerCase("en-US"), surface, promptMs: 5_000 }
+      };
+      callback?.(response);
+      return Promise.resolve(response);
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#first").click();
+  await page.keyboard.up("Alt");
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+
+  await page.keyboard.down("Alt");
+  await page.locator("#second").click();
+  await page.keyboard.up("Alt");
+
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toContainText("submit");
+  expect(await page.evaluate(() => document.querySelectorAll("[data-glossa-feedback=\"card-pending\"]").length)).toBe(1);
+  expect(await page.evaluate(() => (Reflect.get(window, "__duplicateMessages") as unknown[]).length)).toBe(2);
+});
+
 // @verifies glossa.card_creation.failure.request_error
 test("content bundle keeps waiting for slow card creation Anki errors", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");

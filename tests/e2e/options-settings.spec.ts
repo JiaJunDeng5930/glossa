@@ -318,3 +318,51 @@ test("options page disables Anki selectors until refresh reaches AnkiConnect", a
   await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Glossa");
   await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
 });
+
+// @verifies glossa.card_creation.duplicate_gate.record_store_upgrade
+test("options page creates the carded-word store on a fresh IndexedDB", async ({ page }) => {
+  const html = await readFile(resolve("dist/options/options.html"), "utf8");
+  await page.route("https://options-fresh-db.test/", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));
+  await page.goto("https://options-fresh-db.test/");
+  await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "").replace("<script type=\"module\" src=\"../options.js\"></script>", ""));
+  await page.addStyleTag({ path: resolve("dist/assets/options.css") });
+  await page.evaluate(() => {
+    const store: Record<string, unknown> = {};
+    Reflect.set(globalThis, "chrome", {
+      runtime: { lastError: undefined },
+      storage: {
+        local: {
+          get(key: string, callback: (result: Record<string, unknown>) => void) {
+            callback({ [key]: store[key] });
+          },
+          set(value: Record<string, unknown>, callback?: () => void) {
+            Object.assign(store, value);
+            callback?.();
+          }
+        }
+      }
+    });
+  });
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const deleteRequest = indexedDB.deleteDatabase("glossa");
+      deleteRequest.onsuccess = () => resolve();
+      deleteRequest.onerror = () => reject(deleteRequest.error);
+      deleteRequest.onblocked = () => resolve();
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
+
+  await expect.poll(() => page.evaluate(async () => {
+    return await new Promise<boolean>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const hasStore = db.objectStoreNames.contains("cardedWords");
+        db.close();
+        resolve(hasStore);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  })).toBe(true);
+});

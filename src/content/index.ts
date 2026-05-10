@@ -15,6 +15,8 @@ const WORD_CLICK_TIMEOUT_MS = 60_000;
 const SCAN_CHUNK_MAX_TOKENS = 64;
 const SCAN_CHUNK_MAX_MS = 16;
 const MAX_UNACKED_SCAN_CHUNKS = 4;
+// @behavior glossa.card_creation.duplicate_gate.prompt_supersede_state Duplicate-card prompt resolver state tracks the active prompt promise per document.
+const duplicatePromptResolvers = new WeakMap<Document, (confirmed: boolean) => void>();
 
 interface ChunkAck {
   chunkId: string;
@@ -733,6 +735,8 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
 // @behavior glossa.card_creation.duplicate_gate.prompt The duplicate-card prompt resolves true only from the confirmation control and otherwise resolves false.
 function promptDuplicateCardCreation(doc: Document, input: { surface: string; timeoutMs: number }): Promise<boolean> {
   const existing = doc.querySelector("[data-glossa-duplicate-card-prompt]");
+  // @behavior glossa.card_creation.duplicate_gate.prompt_supersede Starting a duplicate-card prompt resolves the previous prompt as cancellation before replacing its DOM.
+  duplicatePromptResolvers.get(doc)?.(false);
   existing?.remove();
   return new Promise((resolve) => {
     const prompt = doc.createElement("div");
@@ -783,13 +787,23 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       ].join(";");
     }
     prompt.append(text, confirm, cancel);
+    let settled = false;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const finish = (confirmed: boolean): void => {
-      globalThis.clearTimeout(timer);
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer !== undefined) {
+        globalThis.clearTimeout(timer);
+      }
+      duplicatePromptResolvers.delete(doc);
       prompt.remove();
       resolve(confirmed);
     };
     // @behavior glossa.card_creation.duplicate_gate.prompt_timeout Duplicate-card prompt timeout resolves as cancellation.
-    const timer = globalThis.setTimeout(() => finish(false), input.timeoutMs);
+    timer = globalThis.setTimeout(() => finish(false), input.timeoutMs);
+    duplicatePromptResolvers.set(doc, finish);
     confirm.addEventListener("click", () => finish(true), { once: true });
     cancel.addEventListener("click", () => finish(false), { once: true });
     (doc.body ?? doc.documentElement).append(prompt);
