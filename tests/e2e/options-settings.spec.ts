@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 // @verifies glossa.word_memory.known_management.add_known
 // @verifies glossa.word_memory.known_management.store_listing
 // @verifies glossa.word_memory.known_management.store_read
+// @verifies glossa.word_memory.known_management.preserve_card_history
 // @verifies glossa.extension_storage.typed_access.key_value_delete
 // @verifies glossa.extension_storage.typed_access.lexicon_delete
 // @verifies glossa.extension_storage.typed_access.lexicon_delete_impl
@@ -96,6 +97,17 @@ test("options page captures shortcuts, previews style changes and saves prompts"
           clickCount: 0,
           ankiNoteIds: []
         }, "en:archive");
+        tx.objectStore("lexicon").put({
+          key: "en:legacy",
+          lemma: "legacy",
+          surface: "legacy",
+          lang: "en",
+          state: "known",
+          shownCount: 1,
+          clickCount: 1,
+          lastClickedAt: 777,
+          ankiNoteIds: [99]
+        }, "en:legacy");
         tx.oncomplete = () => {
           db.close();
           resolve();
@@ -145,6 +157,25 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#known-words-list")).toContainText("archive");
   await page.locator(".known-word-row", { hasText: "archive" }).getByRole("button", { name: "移除" }).click();
   await expect(page.locator("#known-words-list")).not.toContainText("archive");
+  await expect(page.locator("#known-words-list")).toContainText("legacy");
+  await page.locator(".known-word-row", { hasText: "legacy" }).getByRole("button", { name: "移除" }).click();
+  await expect(page.locator("#known-words-list")).not.toContainText("legacy");
+  expect(await page.evaluate(async () => {
+    return await new Promise<unknown>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("cardedWords", "readonly");
+        const getRequest = tx.objectStore("cardedWords").get("en:legacy");
+        getRequest.onsuccess = () => {
+          db.close();
+          resolve(getRequest.result);
+        };
+        getRequest.onerror = () => reject(getRequest.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  })).toMatchObject({ key: "en:legacy", lemma: "legacy", createdAt: 777 });
   await page.locator("#known-word-input").fill("calibrate");
   await page.locator("#add-known-word").click();
   await expect(page.locator("#known-words-list")).toContainText("calibrate");

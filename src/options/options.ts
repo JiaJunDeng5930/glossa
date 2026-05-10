@@ -288,11 +288,26 @@ function renderKnownWords(records: VocabularyRecord[]): void {
     remove.type = "button";
     remove.textContent = "移除";
     remove.addEventListener("click", () => {
-      void extensionStorage.lexicon.delete(vocabularyKey(record.lang, record.lemma)).then(refreshKnownWords);
+      void removeKnownWord(record);
     });
     row.append(word, remove);
     return row;
   }));
+}
+
+// @behavior glossa.word_memory.known_management.preserve_card_history Removing a known word preserves existing Anki note history in the carded-word store.
+async function removeKnownWord(record: VocabularyRecord): Promise<void> {
+  const key = vocabularyKey(record.lang, record.lemma);
+  if (record.ankiNoteIds.length > 0) {
+    await extensionStorage.cardedWords.put(key, {
+      key,
+      lang: record.lang,
+      lemma: record.lemma,
+      createdAt: record.lastClickedAt ?? record.lastShownAt ?? Date.now()
+    });
+  }
+  await extensionStorage.lexicon.delete(key);
+  await refreshKnownWords();
 }
 
 function populateKnownWordLists(): void {

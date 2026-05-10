@@ -175,8 +175,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.shortcuts|glossa.shortcuts.{}
 |glossa.translation_start_popup|glossa.translation_start_popup.{}
 |glossa.word_memory|glossa.word_memory.{known_management,known_word_filter,learning_lifecycle}
-|glossa.word_memory.known_management|glossa.word_memory.known_management.{add_known,store_listing,store_read}
+|glossa.word_memory.known_management|glossa.word_memory.known_management.{add_known,preserve_card_history,store_listing,store_read}
 |glossa.word_memory.known_management.add_known|glossa.word_memory.known_management.add_known.{}
+|glossa.word_memory.known_management.preserve_card_history|glossa.word_memory.known_management.preserve_card_history.{}
 |glossa.word_memory.known_management.store_listing|glossa.word_memory.known_management.store_listing.{}
 |glossa.word_memory.known_management.store_read|glossa.word_memory.known_management.store_read.{}
 |glossa.word_memory.known_word_filter|glossa.word_memory.known_word_filter.{}
