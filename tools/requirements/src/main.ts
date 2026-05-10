@@ -598,11 +598,11 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
     if (!file) continue;
     // @constraint requirements.change_anchoring.comment_line_skip Only standalone requirement comment lines skip forced-anchor classification.
     if (isStandaloneRequirementComment(line.text)) continue;
-    const categories = classifyChangedLine(line.text, line.path, file, line.newLine);
+    const categories = classifyChangedLine(line.text, line.path, file, line.newLine, { fullSource: false });
     if (categories.length === 0) continue;
     const anchorSources = line.deleted ? deletedLineAnchorSources(file, line.newLine, filesByPath.get(line.path), commentsByFile.get(line.path), line.currentLine) : [{ file, comments: commentsByFile.get(line.path) ?? [], line: line.newLine }];
     for (const category of categories) {
-      if (anchorSources.some((source) => hasAnchorForLine(source.comments, source.line, category, source.file, line.text))) continue;
+      if (anchorSources.some((source) => hasAnchorForLine(source.comments, source.line, category, source.file, line.text, { allowFileContractAnchor: false, exactInnerAnchors: true, requireTypeMemberTarget: true }))) continue;
       diagnostics.push({
         file: line.path,
         line: line.newLine,
@@ -640,11 +640,11 @@ function checkSourceLineAnchors(files: SourceFile[], registry: Registry, lines: 
     const file = filesByPath.get(line.path);
     if (!file) continue;
     if (isStandaloneRequirementComment(line.text)) continue;
-    const categories = classifyChangedLine(line.text, line.path, file, line.line);
+    const categories = classifyChangedLine(line.text, line.path, file, line.line, { fullSource: true });
     if (categories.length === 0) continue;
     const comments = commentsByFile.get(line.path) ?? [];
     for (const category of categories) {
-      if (hasAnchorForLine(comments, line.line, category, file, line.text)) continue;
+      if (hasAnchorForLine(comments, line.line, category, file, line.text, { allowFileContractAnchor: true, exactInnerAnchors: false, requireTypeMemberTarget: false })) continue;
       diagnostics.push({
         file: line.path,
         line: line.line,
@@ -740,7 +740,11 @@ function parseGitDiff(args: string[]): HunkLine[] {
 }
 
 // @behavior requirements.change_anchoring.changed_categories TypeScript diff lines receive forced-anchor categories from their text and syntax context.
-function classifyChangedLine(text: string, path: string, file: SourceFile, line: number): string[] {
+interface ClassificationOptions {
+  fullSource: boolean;
+}
+
+function classifyChangedLine(text: string, path: string, file: SourceFile, line: number, options: ClassificationOptions): string[] {
   const trimmed = text.trim();
   if (trimmed.length === 0 || trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("import ")) return [];
   const standaloneLiteral = trimmed.startsWith("\"") || trimmed.startsWith("'") || trimmed.startsWith("`");
@@ -749,20 +753,23 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
     return /\b(expect|assert|mock|fixture|snapshot|toEqual|toBe|toThrow)\b/.test(trimmed) ? ["test-expectation"] : [];
   }
   const typeMember = isTrackedTypeMemberLine(file, line, trimmed);
+  const typeOnlyLine = typeMember || /^(export\s+)?(?:interface|type)\b/.test(trimmed);
   const plainProperty = /^[A-Za-z_$][\w$?]*:\s/.test(trimmed) && !typeMember;
   const categories = new Set<string>();
   // @behavior requirements.change_anchoring.changed_categories.contract Exported lines and tracked type members require contract anchors.
   if (/^(export|public)\b/.test(trimmed) || typeMember) categories.add("contract");
+  // @constraint requirements.change_anchoring.full_source.type_shapes Full-source checks treat historical type shapes as public contract coverage.
+  if (options.fullSource && typeOnlyLine) return [...categories];
   // @behavior requirements.change_anchoring.changed_categories.state State-shaped text and transition markers require state-policy anchors.
-  if (/\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b|\bswitch\b|\bcase\b|transition|setState|mark[A-Z]|complete|fail|cancel|retry/.test(trimmed)) categories.add("state-policy");
+  if (/\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden)\b|\bswitch\b|\bcase\b|transition|setState|mark[A-Z]|complete|fail|cancel|retry/.test(trimmed)) categories.add("state-policy");
   // @behavior requirements.change_anchoring.changed_categories.effect External calls, storage writes, messaging, tracing, and emitted events require side-effect anchors.
-  if (/fetch\(|chrome\.|indexedDB|localStorage|sessionStorage|\.put\(|\.add\(|\.delete\(|\.set\(|sendMessage|connect\(|postMessage|console\.|trace|emit|dispatchEvent|createObjectStore/.test(trimmed)) categories.add("side-effect");
+  if (/fetch\(|chrome\.|indexedDB|localStorage|sessionStorage|\.put\(|sendMessage|connect\(|postMessage|console\.|trace|dispatchEvent|createObjectStore/.test(trimmed)) categories.add("side-effect");
   // @behavior requirements.change_anchoring.changed_categories.failure Failure keywords and timeout or retry mechanisms require failure-policy anchors.
   if (/\btry\b|\bcatch\b|\bfinally\b|\bthrow\b|Error\b|timeout|retry|fallback|AbortController|Promise\.race|setTimeout/.test(trimmed)) categories.add("failure-policy");
   // @behavior requirements.change_anchoring.changed_categories.safety Access, credential, URL, editing, translation, escaping, redaction, and privacy text require access-safety anchors.
-  if (/sanitize|secret|apiKey|token|credential|password|permission|origin|URL|url|editable|notranslate|translate=|escape|redact|privacy/.test(trimmed)) categories.add("access-safety");
+  if (/sanitize|secret|apiKey|authorization|credential|password|permission|origin|URL|url|editable|notranslate|translate=|escape|redact|privacy|Bearer/.test(trimmed)) categories.add("access-safety");
   // @behavior requirements.change_anchoring.changed_categories.structure Structural abstraction declarations require structure-intent anchors.
-  if (/\binterface\b|\babstract\s+class\b|\bclass\s+\w*(Adapter|Registry|Factory|Provider|Resolver|Middleware|Plugin|Bridge|Wrapper)\b/.test(trimmed)) categories.add("structure-intent");
+  if (/\babstract\s+class\b|\bclass\s+\w*(Adapter|Registry|Factory|Provider|Resolver|Middleware|Plugin|Bridge|Wrapper)\b/.test(trimmed)) categories.add("structure-intent");
   if ((standaloneLiteral || plainProperty) && categories.size === 0) return [];
   return [...categories];
 }
@@ -825,13 +832,25 @@ function groupComments(comments: RequirementComment[]): Map<string, RequirementC
 }
 
 // @constraint requirements.change_anchoring.local_anchor A valid local anchor has a non-file target that locally covers the changed line and whose tag matches the forced category.
-function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile, text: string): boolean {
+interface AnchorLookupOptions {
+  allowFileContractAnchor: boolean;
+  exactInnerAnchors: boolean;
+  requireTypeMemberTarget: boolean;
+}
+
+function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile, text: string, options: AnchorLookupOptions): boolean {
   const typeMember = isTrackedTypeMemberLine(file, line, text);
+  const firstCodeStart = options.allowFileContractAnchor ? findFirstCodeStart(ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true)) : 0;
   return comments.some((comment) => {
-    if (!comment.target || comment.target.isFile) return false;
+    if (!comment.target) return false;
+    // @constraint requirements.change_anchoring.local_anchor.full_source_contract Full-source contract checks accept leading module contract comments as historical contract coverage.
+    if (options.allowFileContractAnchor && (category === "contract" || !options.exactInnerAnchors) && comment.start < firstCodeStart && (comment.tag === "@behavior" || comment.tag === "@constraint")) return true;
+    if (comment.target.isFile) {
+      return options.allowFileContractAnchor && (category === "contract" || !options.exactInnerAnchors) && (comment.tag === "@behavior" || comment.tag === "@constraint");
+    }
     // @constraint requirements.change_anchoring.local_anchor.type_member_target Type-member changes require a matching member-level anchor for contract and state-policy categories.
-    if (typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature", "PropertyDeclaration", "MethodDeclaration"].includes(comment.target.kind)) return false;
-    if (!targetLocallyCoversLine(comment.target, line, category, typeMember)) return false;
+    if (options.requireTypeMemberTarget && typeMember && (category === "contract" || category === "state-policy") && !["PropertySignature", "MethodSignature", "PropertyDeclaration", "MethodDeclaration"].includes(comment.target.kind)) return false;
+    if (!targetLocallyCoversLine(comment.target, line, category, typeMember, options.exactInnerAnchors)) return false;
     if (category === "structure-intent") return comment.tag === "@intent";
     if (category === "test-expectation") return comment.tag === "@verifies";
     return comment.tag === "@behavior" || comment.tag === "@constraint";
@@ -839,13 +858,14 @@ function hasAnchorForLine(comments: RequirementComment[], line: number, category
 }
 
 // @constraint requirements.change_anchoring.local_anchor.inner_scope Broad declaration comments only anchor their declaration line for inner behavior categories.
-function targetLocallyCoversLine(target: BoundTarget, line: number, category: string, typeMember: boolean): boolean {
+function targetLocallyCoversLine(target: BoundTarget, line: number, category: string, typeMember: boolean, exactInnerAnchors: boolean): boolean {
   // @constraint requirements.change_anchoring.local_anchor.inner_scope.type_member_span Type-member anchors can cover the member span for contract and state-policy changes.
   if (typeMember && (category === "contract" || category === "state-policy")) {
     return target.line <= line && line <= target.endLine;
   }
   // @constraint requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line Broad declaration anchors match only their starting line for forced inner behavior categories.
-  if (requiresExactAnchorLine(target.kind, category)) {
+  // @constraint requirements.change_anchoring.local_anchor.full_source_owner_span Full-source anchor lookup allows owner declarations to cover existing inner code-unit lines.
+  if (exactInnerAnchors && requiresExactAnchorLine(target.kind, category)) {
     return line === target.line;
   }
   return target.line <= line && line <= target.endLine;

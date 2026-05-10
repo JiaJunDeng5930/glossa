@@ -173,6 +173,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   });
 });
 
+// @verifies glossa.settings_save
 test("options page disables Anki selectors until refresh reaches AnkiConnect", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
   await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "").replace("<script type=\"module\" src=\"../options.js\"></script>", ""));

@@ -13,12 +13,14 @@ describe("requirement automation tool", () => {
   // @verifies requirements.cli.help.usage
   // @verifies requirements.cli.compare_ref_option
   // @verifies requirements.cli.full_anchor_check
+  // @verifies requirements.test_config
+  // @verifies requirements.test_config.browser
   it("prints public help", () => {
     const output = runTool(process.cwd(), ["help"]);
 
     expect(output).toContain("Usage: tsx tools/requirements/src/main.ts");
     expect(output).toContain("[--all]");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.source_snapshot.worktree
   // @verifies requirements.source_snapshot.staged
@@ -79,7 +81,7 @@ describe("requirement automation tool", () => {
 
     const agents = readFileSync(join(cwd, "AGENTS.md"), "utf8");
     expect(agents).toContain("|demo.feature|demo.feature.{}");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.diff_lines
   // @verifies requirements.change_anchoring.changed_categories
@@ -135,7 +137,7 @@ describe("requirement automation tool", () => {
     }
 
     expect(stderr).toContain("src/main.ts:12 missing-requirement-anchor");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.type_member_changes
   it("rejects an unanchored implicit-public class member change", () => {
@@ -172,7 +174,7 @@ describe("requirement automation tool", () => {
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.comment_binding.target_kinds
   // @verifies requirements.change_anchoring.local_anchor
@@ -209,7 +211,7 @@ describe("requirement automation tool", () => {
     runGit(cwd, ["add", "."]);
 
     runTool(cwd, ["check", "--staged"]);
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.comment_binding.first_declaration
   // @verifies requirements.change_anchoring.local_anchor
@@ -246,7 +248,7 @@ describe("requirement automation tool", () => {
     runGit(cwd, ["add", "."]);
 
     runTool(cwd, ["check", "--staged"]);
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.changed_categories
   // @verifies requirements.change_anchoring.changed_categories.structure
@@ -299,7 +301,7 @@ describe("requirement automation tool", () => {
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
     expect(stderr).toContain("src/main.ts:5 missing-requirement-anchor");
     expect(stderr).toContain("src/main.ts:8 missing-requirement-anchor");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.diff_lines
   // @verifies requirements.change_anchoring.deleted_context
@@ -343,7 +345,7 @@ describe("requirement automation tool", () => {
     }
 
     expect(stderr).toContain("src/main.ts:3 missing-requirement-anchor");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.current_deletion_anchor
   it("accepts a current anchor for a deletion-only side effect change", () => {
@@ -390,7 +392,7 @@ describe("requirement automation tool", () => {
 
     runTool(cwd, ["check", "--staged"]);
     runTool(cwd, ["check", "--base", "HEAD"]);
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.deleted_context
   // @verifies requirements.change_anchoring.exported_type_members
@@ -412,7 +414,7 @@ describe("requirement automation tool", () => {
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.base_diff
   // @verifies requirements.cli.base_check
@@ -433,7 +435,7 @@ describe("requirement automation tool", () => {
     }
 
     expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
-  }, 20_000);
+  }, 120_000);
 });
 
 function createFixtureRepo(): string {

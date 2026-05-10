@@ -45,7 +45,7 @@ The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no sha
 - `npm run verify`: full local gate.
 - `npm run req:check:all`: strict full-source requirement anchor audit for every TypeScript code unit in the selected worktree snapshot.
 
-The pre-commit hook runs staged requirement checks, typecheck, unit tests, and build. CI runs requirement checks and `npm run verify` with Chromium installed.
+The pre-commit hook runs staged and full-source requirement checks, typecheck, unit tests, and build. CI runs base requirement checks and `npm run verify` with Chromium installed; `verify` includes the full-source requirement check.
 
 For Chrome extension debugability work, run `.skills/chrome-extension-debugability/scripts/audit_chrome_extension_debugability.py .` as a source triage pass and run it on `dist/` after `npm run build` when checking the unpacked extension. The root audit reports `background.js` as unreadable because the service worker is a build artifact; inspect `src/background/index.ts` and `dist/background.js` together.
 
@@ -121,7 +121,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.word_memory|glossa.word_memory.{known_word_filter,learning_lifecycle}
 |glossa.word_memory.known_word_filter|glossa.word_memory.known_word_filter.{}
 |glossa.word_memory.learning_lifecycle|glossa.word_memory.learning_lifecycle.{}
-|requirements|requirements.{agent_index,analysis_consistency,change_anchoring,cli,comment_binding,comment_syntax,comment_tree,diagnostic_output,source_snapshot}
+|requirements|requirements.{agent_index,analysis_consistency,change_anchoring,cli,comment_binding,comment_syntax,comment_tree,diagnostic_output,source_snapshot,test_config}
 |requirements.agent_index|requirements.agent_index.{default_body,default_insertion,deterministic_rows,freshness,marker_bounds,parent_rows}
 |requirements.agent_index.default_body|requirements.agent_index.default_body.{}
 |requirements.agent_index.default_insertion|requirements.agent_index.default_insertion.{}
@@ -165,11 +165,14 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.change_anchoring.exported_type_members|requirements.change_anchoring.exported_type_members.{}
 |requirements.change_anchoring.file_local_lookup|requirements.change_anchoring.file_local_lookup.{bucket}
 |requirements.change_anchoring.file_local_lookup.bucket|requirements.change_anchoring.file_local_lookup.bucket.{}
-|requirements.change_anchoring.full_source|requirements.change_anchoring.full_source.{lines,required_tags}
+|requirements.change_anchoring.full_source|requirements.change_anchoring.full_source.{lines,required_tags,type_shapes}
 |requirements.change_anchoring.full_source.lines|requirements.change_anchoring.full_source.lines.{dedupe}
 |requirements.change_anchoring.full_source.lines.dedupe|requirements.change_anchoring.full_source.lines.dedupe.{}
 |requirements.change_anchoring.full_source.required_tags|requirements.change_anchoring.full_source.required_tags.{}
-|requirements.change_anchoring.local_anchor|requirements.change_anchoring.local_anchor.{inner_scope,type_member_target}
+|requirements.change_anchoring.full_source.type_shapes|requirements.change_anchoring.full_source.type_shapes.{}
+|requirements.change_anchoring.local_anchor|requirements.change_anchoring.local_anchor.{full_source_contract,full_source_owner_span,inner_scope,type_member_target}
+|requirements.change_anchoring.local_anchor.full_source_contract|requirements.change_anchoring.local_anchor.full_source_contract.{}
+|requirements.change_anchoring.local_anchor.full_source_owner_span|requirements.change_anchoring.local_anchor.full_source_owner_span.{}
 |requirements.change_anchoring.local_anchor.inner_scope|requirements.change_anchoring.local_anchor.inner_scope.{broad_declaration_line,exact_target_kinds,structure_test_span,type_alias_span,type_member_span}
 |requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line|requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line.{}
 |requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds|requirements.change_anchoring.local_anchor.inner_scope.exact_target_kinds.{declaration_list}
@@ -231,4 +234,6 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.source_snapshot.staged.missing_blobs|requirements.source_snapshot.staged.missing_blobs.{}
 |requirements.source_snapshot.staged_dispatch|requirements.source_snapshot.staged_dispatch.{}
 |requirements.source_snapshot.worktree|requirements.source_snapshot.worktree.{}
+|requirements.test_config|requirements.test_config.{browser}
+|requirements.test_config.browser|requirements.test_config.browser.{}
 <!-- END AGENTS_MD_REQUIREMENT_INDEX -->

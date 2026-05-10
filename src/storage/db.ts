@@ -1,5 +1,5 @@
 // @intent glossa.extension_storage Settings, vocabulary records, and gloss cache entries stay inside extension-owned storage.
-// @intent glossa.extension_storage.typed_access Settings, lexicon, and cache storage use one typed asynchronous access contract.
+// @constraint glossa.extension_storage.typed_access Settings, lexicon, and cache storage use one typed asynchronous access contract.
 import type { AnkiCardOutput, GlossaSettings, GlossItem, VocabularyRecord } from "../shared/types";
 import { DEFAULT_SETTINGS } from "../shared/types";
 

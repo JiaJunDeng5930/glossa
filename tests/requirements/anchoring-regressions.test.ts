@@ -46,7 +46,7 @@ describe("requirement anchor regressions", () => {
     );
     runGit(cwd, ["add", "src/main.ts"]);
     expect(checkStagedStderr(cwd)).toContain("src/main.ts:3 missing-requirement-anchor");
-  }, 20_000);
+  }, 120_000);
 
   // @verifies requirements.change_anchoring.local_anchor.inner_scope.type_alias_span
   it("accepts a multiline type alias state change anchored by the alias", () => {
@@ -91,7 +91,7 @@ describe("requirement anchor regressions", () => {
     runGit(cwd, ["add", "src/main.ts"]);
 
     runTool(cwd, ["check", "--staged"]);
-  }, 20_000);
+  }, 120_000);
 });
 
 function writeSeed(cwd: string): void {

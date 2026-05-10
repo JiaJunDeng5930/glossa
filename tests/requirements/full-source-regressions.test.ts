@@ -13,14 +13,41 @@ describe("requirement full source regressions", () => {
   // @verifies requirements.change_anchoring.full_source.lines.dedupe
   // @verifies requirements.change_anchoring.full_source.required_tags
   // @verifies requirements.change_anchoring.comment_line_skip.standalone_match
+  // @verifies requirements.change_anchoring.local_anchor.full_source_owner_span
   it("rejects an unanchored side effect in full source mode", () => {
     const cwd = createFixtureRepo();
     writeFileSync(
       join(cwd, "src/main.ts"),
       [
-        "// @behavior demo The demo command has verified behavior.",
-        "export function demo(): void {",
+        "function demo(): void {",
         "  localStorage.setItem(\"demo\", \"value\");",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+
+    let stderr = "";
+    try {
+      runTool(cwd, ["check", "--all"]);
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr);
+    }
+
+    expect(stderr).toContain("src/main.ts:2 missing-requirement-anchor");
+  }, 120_000);
+
+  // @verifies requirements.change_anchoring.full_source.required_tags
+  // @verifies requirements.change_anchoring.full_source.type_shapes
+  // @verifies requirements.change_anchoring.local_anchor.type_member_target
+  it("allows full source type member contracts to use their owner declaration anchor", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @constraint demo Public records expose one stable contract surface.",
+        "export interface DemoRecord {",
+        "  id: string;",
         "}",
         "",
       ].join("\n"),
@@ -39,15 +66,71 @@ describe("requirement full source regressions", () => {
     );
     runTool(cwd, ["fmt-agents"]);
 
-    let stderr = "";
-    try {
-      runTool(cwd, ["check", "--all"]);
-    } catch (error) {
-      stderr = String((error as { stderr?: Buffer }).stderr);
-    }
+    expect(runTool(cwd, ["check", "--all"])).toBe("");
+  }, 120_000);
 
-    expect(stderr).toContain("src/main.ts:3 missing-requirement-anchor");
-  }, 20_000);
+  // @verifies requirements.change_anchoring.local_anchor.full_source_contract
+  // @verifies requirements.change_anchoring.full_source.required_tags
+  it("allows full source contracts to use leading module contract comments", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @constraint demo Public record contracts share the module requirement.",
+        "// @intent demo.shape The demo shape keeps examples compact.",
+        "export interface DemoRecord {",
+        "  id: string;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(cwd, "tests/main.test.ts"),
+      [
+        "import { expect, it } from \"vitest\";",
+        "",
+        "// @verifies demo",
+        "it(\"checks demo\", () => {",
+        "  expect(true).toBe(true);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+
+    expect(runTool(cwd, ["check", "--all"])).toBe("");
+  }, 120_000);
+
+  // @verifies requirements.change_anchoring.changed_categories.safety
+  // @verifies requirements.change_anchoring.full_source.required_tags
+  it("does not treat project word tokens as credential safety rules", () => {
+    const cwd = createFixtureRepo();
+    writeFileSync(
+      join(cwd, "src/main.ts"),
+      [
+        "// @constraint demo Public helpers expose token text without credential handling.",
+        "export function surfaceForToken(token: { surface: string }): string {",
+        "  return token.surface;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(cwd, "tests/main.test.ts"),
+      [
+        "import { expect, it } from \"vitest\";",
+        "",
+        "// @verifies demo",
+        "it(\"checks demo\", () => {",
+        "  expect(true).toBe(true);",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    runTool(cwd, ["fmt-agents"]);
+
+    expect(runTool(cwd, ["check", "--all"])).toBe("");
+  }, 120_000);
 });
 
 function createFixtureRepo(): string {

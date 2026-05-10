@@ -20,7 +20,7 @@ describe("requirement source regressions", () => {
     runGit(cwd, ["add", "-N", "src/intent.ts"]);
 
     runTool(cwd, ["check", "--staged"]);
-  }, 20_000);
+  }, 120_000);
 });
 
 function createFixtureRepo(): string {

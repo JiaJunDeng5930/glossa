@@ -6,6 +6,7 @@ import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, type AnkiCardOutput, type GlossItem, type VocabularyRecord } from "../../src/shared/types";
 
 // @verifies glossa.extension_contracts.request_effects
+// @verifies glossa.extension_storage.typed_access
 describe("background message handler", () => {
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
     const storage = createMemoryStorage();

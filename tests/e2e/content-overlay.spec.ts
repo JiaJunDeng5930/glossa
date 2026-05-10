@@ -41,6 +41,7 @@ test("content bundle waits for manual activation before requesting glosses", asy
   expect(await sentMessageTypes(page)).toContain("gloss.scan");
 });
 
+// @verifies glossa.page_translation.activation
 test("content bundle toggles page translation with the configured shortcut", async ({ page }) => {
   await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
   await installChromeRuntime(page, {
@@ -92,6 +93,7 @@ test("content bundle toggles page translation with the configured shortcut", asy
   expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan").length).toBe(scanCount + 1);
 });
 
+// @verifies glossa.page_translation.activation
 test("content bundle drops pending shortcut glosses after translation is toggled off", async ({ page }) => {
   await page.setContent("<main><p>Pending archive appears here.</p></main>");
   await installChromeRuntime(page, {
@@ -134,6 +136,8 @@ test("content bundle drops pending shortcut glosses after translation is toggled
   await expect(page.locator("p")).toHaveText("Pending archive appears here.");
 });
 
+// @verifies glossa.page_translation.shortcut_selection
+// @verifies glossa.card_creation.note_request
 test("content bundle renders inline glosses and captures shortcut word selection", async ({ page }) => {
   const messages: unknown[] = [];
   await page.setContent(`
@@ -203,6 +207,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
   });
 });
 
+// @verifies glossa.card_creation.note_request
 test("content bundle marks an existing gloss after confirmed card creation", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Press the submit button.</p></main>");
   await installChromeRuntime(page, {
@@ -244,6 +249,8 @@ test("content bundle marks an existing gloss after confirmed card creation", asy
   });
 });
 
+// @verifies glossa.card_creation.failure.request_error
+// @verifies glossa.failure_reporting.user_copy
 test("content bundle marks card failures with the shared badge renderer", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
   await installChromeRuntime(page, {
@@ -330,6 +337,7 @@ test("content bundle marks card failures with the shared badge renderer", async 
   });
 });
 
+// @verifies glossa.failure_reporting.user_copy
 test("content bundle exposes user-readable gloss failure text", async ({ page }) => {
   await page.setContent("<main><p>Unusual archive appears here.</p></main>");
   await installChromeRuntime(page, {
@@ -364,6 +372,7 @@ test("content bundle exposes user-readable gloss failure text", async ({ page })
   });
 });
 
+// @verifies glossa.card_creation.note_request
 test("content bundle shows card loading feedback before creation finishes", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
   await installChromeRuntime(page, {
@@ -418,6 +427,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
   });
 });
 
+// @verifies glossa.card_creation.failure.request_error
 test("content bundle keeps waiting for slow card creation Anki errors", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
   await installChromeRuntime(page, {
@@ -466,6 +476,7 @@ test("content bundle keeps waiting for slow card creation Anki errors", async ({
   }, undefined, { timeout: 10_000 });
 });
 
+// @verifies glossa.page_translation.candidate_scan
 test("content bundle scans text added after boot", async ({ page }) => {
   await page.setContent("<main id=\"app\"></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -493,6 +504,7 @@ test("content bundle scans text added after boot", async ({ page }) => {
   });
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle replaces pending gloss spinners with ready labels", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Pending archive appears here.</p></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -527,6 +539,7 @@ test("content bundle replaces pending gloss spinners with ready labels", async (
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "等待");
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle resolves pending glosses after external page mutations", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Pending archive appears here.</p><p id=\"dynamic\"></p></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -566,6 +579,7 @@ test("content bundle resolves pending glosses after external page mutations", as
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "等待");
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle drops pending glosses after their source text is replaced", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Pending archive appears here.</p></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -602,6 +616,7 @@ test("content bundle drops pending glosses after their source text is replaced",
   expect(await page.locator("[data-glossa-token-label]", { hasText: "等待" }).count()).toBe(0);
 });
 
+// @verifies glossa.page_translation.lookup_order
 test("content bundle leaves hidden tokens as original page text", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Ignored archive appears here.</p></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -628,6 +643,7 @@ test("content bundle leaves hidden tokens as original page text", async ({ page 
   await expect(page.locator("#target")).toHaveText("Ignored archive appears here.");
 });
 
+// @verifies glossa.extension_contracts.restart_continuity
 test("content bundle stops quietly when gloss messaging sees an invalidated extension context", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -645,6 +661,7 @@ test("content bundle stops quietly when gloss messaging sees an invalidated exte
   expect(pageErrors).toEqual([]);
 });
 
+// @verifies glossa.extension_contracts.restart_continuity
 test("content bundle handles invalidated extension context during word click", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -676,6 +693,7 @@ test("content bundle handles invalidated extension context during word click", a
   expect(pageErrors).toEqual([]);
 });
 
+// @verifies glossa.page_translation.token_geometry
 test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Obscure archive archive terms appear here.</p></main>");
   await installChromeRuntime(page, {
@@ -760,6 +778,7 @@ test("content bundle lays out inline glosses without label or source overlap", a
   expect(overlaps(first.surface, second.surface)).toBe(false);
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle drops async glosses after the source paragraph changes", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Obscure archive appears here.</p></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -797,6 +816,7 @@ test("content bundle drops async glosses after the source paragraph changes", as
   expect(await page.locator("[data-glossa-token-label]", { hasText: "晦涩" }).count()).toBe(0);
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle preserves existing glosses while mutation rescans wait for responses", async ({ page }) => {
   await page.setContent("<main><p id=\"stable\">Obscure archive appears here.</p><p id=\"dynamic\"></p></main>");
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -841,6 +861,7 @@ test("content bundle preserves existing glosses while mutation rescans wait for 
   });
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle defers chunk outcomes until a large text-node scan finishes", async ({ page }) => {
   const words = largeWordList(150);
   const target = words[140]!;
@@ -881,6 +902,7 @@ test("content bundle defers chunk outcomes until a large text-node scan finishes
   expect(scannedTokenCount).toBe(words.length);
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle replays queued ready outcomes after scan invalidation", async ({ page }) => {
   const words = largeWordList(150);
   const target = words[0]!;
@@ -919,6 +941,7 @@ test("content bundle replays queued ready outcomes after scan invalidation", asy
   await expect(page.locator("#mutating")).toHaveText("after");
 });
 
+// @verifies glossa.page_translation.inline_rendering
 test("content bundle aborts chunk scans after a deferred gloss error", async ({ page }) => {
   const words = largeWordList(150);
   await page.setContent(`<main><p>${words.join(" ")}.</p></main>`);
