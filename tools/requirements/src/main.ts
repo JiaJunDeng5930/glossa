@@ -67,9 +67,16 @@ interface HunkLine {
   deleted: boolean;
 }
 
+// @intent requirements.analysis_consistency.source_lines Full-anchor checks reuse path, location, and text facts for every source code-unit line.
+interface SourceLine {
+  path: string;
+  line: number;
+  text: string;
+}
+
 const TAGS = ["@behavior", "@constraint", "@intent", "@verifies"] as const;
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
-const GENERATED_DIRS = new Set([".git", "node_modules", "dist", "coverage", "playwright-report", "test-results"]);
+const GENERATED_DIRS = new Set([".git", "node_modules", "dist", "coverage", "playwright-report", "test-results", "worktree-glossa"]);
 const INDEX_START = "<!-- BEGIN AGENTS_MD_REQUIREMENT_INDEX -->";
 const INDEX_END = "<!-- END AGENTS_MD_REQUIREMENT_INDEX -->";
 const ID_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
@@ -84,6 +91,7 @@ function main(): void {
   }
 
   const staged = args.includes("--staged");
+  const fullAnchors = args.includes("--all");
   const base = parseOptionValue(args, "--base");
   // @behavior requirements.cli.snapshot_mode The staged flag selects the source snapshot mode used by command execution.
   const mode: SnapshotMode = staged ? "staged" : "worktree";
@@ -107,6 +115,10 @@ function main(): void {
   const diagnostics = [...registry.diagnostics];
   // @behavior requirements.cli.index_check Check commands include AGENTS index freshness diagnostics for the selected snapshot mode.
   diagnostics.push(...checkAgentsIndex(registry, mode));
+  // @behavior requirements.cli.full_anchor_check The all flag adds full-source local anchor diagnostics to the current check.
+  if (fullAnchors) {
+    diagnostics.push(...checkAllSourceAnchors(files, registry));
+  }
   // @behavior requirements.cli.base_check A base ref adds base-diff anchor diagnostics to the current check.
   if (base) {
     diagnostics.push(...checkBaseDiffAnchors(files, registry, base));
@@ -137,7 +149,7 @@ function parseOptionValue(args: string[], name: string): string | undefined {
 // @behavior requirements.cli.help Help output lists the public commands and comparison options used by scripts and hooks.
 function printHelp(): void {
   // @behavior requirements.cli.help.usage Help output prints the public usage line on stdout.
-  console.log("Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged] [--base <git-ref>]");
+  console.log("Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged] [--all] [--base <git-ref>]");
 }
 
 // @behavior requirements.source_snapshot Requirement validation reads the selected source snapshot from worktree files or Git index blobs.
@@ -181,7 +193,7 @@ function loadStagedSnapshot(): SourceFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-// @constraint requirements.source_snapshot.source_scope Generated output, vendored dependencies, declaration files, and skill files stay outside requirement validation.
+// @constraint requirements.source_snapshot.source_scope Generated output, nested worktrees, vendored dependencies, declaration files, and skill files stay outside requirement validation.
 function isSourcePath(path: string): boolean {
   const normalized = normalizePath(path);
   const parts = normalized.split("/");
@@ -566,6 +578,11 @@ function checkStagedDiffAnchors(files: SourceFile[], registry: Registry): Diagno
   return checkDiffAnchors(files, registry, parseGitDiff(["diff", "--cached", "--unified=0", "--", "*.ts", "*.tsx", "*.mts", "*.cts"]), "HEAD");
 }
 
+// @behavior requirements.change_anchoring.full_source All source code-unit lines in the selected snapshot receive forced-anchor diagnostics.
+function checkAllSourceAnchors(files: SourceFile[], registry: Registry): Diagnostic[] {
+  return checkSourceLineAnchors(files, registry, collectSourceLines(files));
+}
+
 // @behavior requirements.change_anchoring.base_diff Pull-request changes receive forced-anchor diagnostics against the configured base ref.
 function checkBaseDiffAnchors(files: SourceFile[], registry: Registry, base: string): Diagnostic[] {
   return checkDiffAnchors(files, registry, parseGitDiff(["diff", "--unified=0", base, "--", "*.ts", "*.tsx", "*.mts", "*.cts"]), base);
@@ -580,7 +597,7 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
     const file = line.deleted ? loadOldSourceFile(oldRef, line.oldPath) ?? filesByPath.get(line.path) : filesByPath.get(line.path) ?? loadOldSourceFile(oldRef, line.oldPath);
     if (!file) continue;
     // @constraint requirements.change_anchoring.comment_line_skip Only standalone requirement comment lines skip forced-anchor classification.
-    if (/^\s*(?:\/\/|\/\*)\s*@(behavior|constraint|intent|verifies)\s+/.test(line.text)) continue;
+    if (isStandaloneRequirementComment(line.text)) continue;
     const categories = classifyChangedLine(line.text, line.path, file, line.newLine);
     if (categories.length === 0) continue;
     const anchorSources = line.deleted ? deletedLineAnchorSources(file, line.newLine, filesByPath.get(line.path), commentsByFile.get(line.path), line.currentLine) : [{ file, comments: commentsByFile.get(line.path) ?? [], line: line.newLine }];
@@ -595,6 +612,53 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
     }
   }
   return diagnostics;
+}
+
+// @behavior requirements.change_anchoring.full_source.lines Full-source anchor checks retain one-based source code-unit line numbers and line text.
+function collectSourceLines(files: SourceFile[]): SourceLine[] {
+  const lines: SourceLine[] = [];
+  for (const file of files) {
+    const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
+    const textLines = file.text.split(/\r?\n/);
+    const seen = new Set<number>();
+    for (const target of collectBindableNodes(source)) {
+      if (seen.has(target.line)) continue;
+      // @behavior requirements.change_anchoring.full_source.lines.dedupe Multiple bindable nodes starting on the same source line collapse to one full-source audit line.
+      seen.add(target.line);
+      lines.push({ path: file.path, line: target.line, text: textLines[target.line - 1] ?? "" });
+    }
+  }
+  return lines;
+}
+
+// @behavior requirements.change_anchoring.full_source.required_tags Full-source code-unit lines in forced-anchor categories fail without a matching local requirement tag.
+function checkSourceLineAnchors(files: SourceFile[], registry: Registry, lines: SourceLine[]): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const commentsByFile = groupComments(registry.comments);
+  for (const line of lines) {
+    const file = filesByPath.get(line.path);
+    if (!file) continue;
+    if (isStandaloneRequirementComment(line.text)) continue;
+    const categories = classifyChangedLine(line.text, line.path, file, line.line);
+    if (categories.length === 0) continue;
+    const comments = commentsByFile.get(line.path) ?? [];
+    for (const category of categories) {
+      if (hasAnchorForLine(comments, line.line, category, file, line.text)) continue;
+      diagnostics.push({
+        file: line.path,
+        line: line.line,
+        rule: missingAnchorRule(category),
+        message: `${category} source line requires a local requirement anchor`,
+      });
+    }
+  }
+  return diagnostics;
+}
+
+// @constraint requirements.change_anchoring.comment_line_skip.standalone_match Standalone requirement comment detection is shared by diff and full-source anchor checks.
+function isStandaloneRequirementComment(text: string): boolean {
+  return /^\s*(?:\/\/|\/\*)\s*@(behavior|constraint|intent|verifies)\s+/.test(text);
 }
 
 // @behavior requirements.change_anchoring.current_deletion_anchor Deleted-line checks accept current-source anchors that document the surviving owner.

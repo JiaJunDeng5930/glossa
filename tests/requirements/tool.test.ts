@@ -12,10 +12,12 @@ describe("requirement automation tool", () => {
   // @verifies requirements.cli.help
   // @verifies requirements.cli.help.usage
   // @verifies requirements.cli.compare_ref_option
+  // @verifies requirements.cli.full_anchor_check
   it("prints public help", () => {
     const output = runTool(process.cwd(), ["help"]);
 
     expect(output).toContain("Usage: tsx tools/requirements/src/main.ts");
+    expect(output).toContain("[--all]");
   }, 20_000);
 
   // @verifies requirements.source_snapshot.worktree

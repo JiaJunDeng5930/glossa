@@ -43,8 +43,9 @@ The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no sha
 - `npm run build`: bundle `content.js`, `background.js`, `options.js`, and `popup.js` into `dist/`.
 - `npm run test:e2e`: Playwright browser check against the built content bundle.
 - `npm run verify`: full local gate.
+- `npm run req:check:all`: strict full-source requirement anchor audit for every TypeScript code unit in the selected worktree snapshot.
 
-The pre-commit hook runs typecheck, unit tests, and build. CI runs `npm run verify` with Chromium installed.
+The pre-commit hook runs staged requirement checks, typecheck, unit tests, and build. CI runs requirement checks and `npm run verify` with Chromium installed.
 
 For Chrome extension debugability work, run `.skills/chrome-extension-debugability/scripts/audit_chrome_extension_debugability.py .` as a source triage pass and run it on `dist/` after `npm run build` when checking the unpacked extension. The root audit reports `background.js` as unreadable because the service worker is a build artifact; inspect `src/background/index.ts` and `dist/background.js` together.
 
@@ -130,7 +131,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.agent_index.freshness.snapshot_read|requirements.agent_index.freshness.snapshot_read.{}
 |requirements.agent_index.marker_bounds|requirements.agent_index.marker_bounds.{}
 |requirements.agent_index.parent_rows|requirements.agent_index.parent_rows.{}
-|requirements.analysis_consistency|requirements.analysis_consistency.{comment_facts,cross_file_scope,diagnostic_shape,diff_lines,source_text,target_kind_names,target_spans}
+|requirements.analysis_consistency|requirements.analysis_consistency.{comment_facts,cross_file_scope,diagnostic_shape,diff_lines,source_lines,source_text,target_kind_names,target_spans}
 |requirements.analysis_consistency.comment_facts|requirements.analysis_consistency.comment_facts.{}
 |requirements.analysis_consistency.cross_file_scope|requirements.analysis_consistency.cross_file_scope.{}
 |requirements.analysis_consistency.diagnostic_shape|requirements.analysis_consistency.diagnostic_shape.{}
@@ -138,10 +139,11 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.analysis_consistency.diff_lines.current_line|requirements.analysis_consistency.diff_lines.current_line.{}
 |requirements.analysis_consistency.diff_lines.deleted|requirements.analysis_consistency.diff_lines.deleted.{}
 |requirements.analysis_consistency.diff_lines.old_path|requirements.analysis_consistency.diff_lines.old_path.{}
+|requirements.analysis_consistency.source_lines|requirements.analysis_consistency.source_lines.{}
 |requirements.analysis_consistency.source_text|requirements.analysis_consistency.source_text.{}
 |requirements.analysis_consistency.target_kind_names|requirements.analysis_consistency.target_kind_names.{}
 |requirements.analysis_consistency.target_spans|requirements.analysis_consistency.target_spans.{}
-|requirements.change_anchoring|requirements.change_anchoring.{base_diff,changed_categories,comment_line_skip,current_deletion_anchor,deleted_context,diff_lines,export_modifier,exported_type_members,file_local_lookup,local_anchor,previous_deletion_anchor,required_tags,rule_names,type_member_changes}
+|requirements.change_anchoring|requirements.change_anchoring.{base_diff,changed_categories,comment_line_skip,current_deletion_anchor,deleted_context,diff_lines,export_modifier,exported_type_members,file_local_lookup,full_source,local_anchor,previous_deletion_anchor,required_tags,rule_names,type_member_changes}
 |requirements.change_anchoring.base_diff|requirements.change_anchoring.base_diff.{}
 |requirements.change_anchoring.changed_categories|requirements.change_anchoring.changed_categories.{contract,effect,failure,safety,state,structure}
 |requirements.change_anchoring.changed_categories.contract|requirements.change_anchoring.changed_categories.contract.{}
@@ -150,7 +152,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.change_anchoring.changed_categories.safety|requirements.change_anchoring.changed_categories.safety.{}
 |requirements.change_anchoring.changed_categories.state|requirements.change_anchoring.changed_categories.state.{}
 |requirements.change_anchoring.changed_categories.structure|requirements.change_anchoring.changed_categories.structure.{}
-|requirements.change_anchoring.comment_line_skip|requirements.change_anchoring.comment_line_skip.{}
+|requirements.change_anchoring.comment_line_skip|requirements.change_anchoring.comment_line_skip.{standalone_match}
+|requirements.change_anchoring.comment_line_skip.standalone_match|requirements.change_anchoring.comment_line_skip.standalone_match.{}
 |requirements.change_anchoring.current_deletion_anchor|requirements.change_anchoring.current_deletion_anchor.{}
 |requirements.change_anchoring.deleted_context|requirements.change_anchoring.deleted_context.{missing_old_blob}
 |requirements.change_anchoring.deleted_context.missing_old_blob|requirements.change_anchoring.deleted_context.missing_old_blob.{}
@@ -162,6 +165,10 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.change_anchoring.exported_type_members|requirements.change_anchoring.exported_type_members.{}
 |requirements.change_anchoring.file_local_lookup|requirements.change_anchoring.file_local_lookup.{bucket}
 |requirements.change_anchoring.file_local_lookup.bucket|requirements.change_anchoring.file_local_lookup.bucket.{}
+|requirements.change_anchoring.full_source|requirements.change_anchoring.full_source.{lines,required_tags}
+|requirements.change_anchoring.full_source.lines|requirements.change_anchoring.full_source.lines.{dedupe}
+|requirements.change_anchoring.full_source.lines.dedupe|requirements.change_anchoring.full_source.lines.dedupe.{}
+|requirements.change_anchoring.full_source.required_tags|requirements.change_anchoring.full_source.required_tags.{}
 |requirements.change_anchoring.local_anchor|requirements.change_anchoring.local_anchor.{inner_scope,type_member_target}
 |requirements.change_anchoring.local_anchor.inner_scope|requirements.change_anchoring.local_anchor.inner_scope.{broad_declaration_line,exact_target_kinds,structure_test_span,type_alias_span,type_member_span}
 |requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line|requirements.change_anchoring.local_anchor.inner_scope.broad_declaration_line.{}
@@ -176,10 +183,11 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.change_anchoring.rule_names|requirements.change_anchoring.rule_names.{}
 |requirements.change_anchoring.type_member_changes|requirements.change_anchoring.type_member_changes.{span_match}
 |requirements.change_anchoring.type_member_changes.span_match|requirements.change_anchoring.type_member_changes.span_match.{}
-|requirements.cli|requirements.cli.{base_check,compare_ref_option,dispatch,help,index_check,snapshot_load,snapshot_mode,staged_check}
+|requirements.cli|requirements.cli.{base_check,compare_ref_option,dispatch,full_anchor_check,help,index_check,snapshot_load,snapshot_mode,staged_check}
 |requirements.cli.base_check|requirements.cli.base_check.{}
 |requirements.cli.compare_ref_option|requirements.cli.compare_ref_option.{}
 |requirements.cli.dispatch|requirements.cli.dispatch.{}
+|requirements.cli.full_anchor_check|requirements.cli.full_anchor_check.{}
 |requirements.cli.help|requirements.cli.help.{usage}
 |requirements.cli.help.usage|requirements.cli.help.usage.{}
 |requirements.cli.index_check|requirements.cli.index_check.{}
