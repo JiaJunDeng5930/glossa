@@ -100,6 +100,39 @@ describe("background message handler", () => {
     expect(await storage.lexicon.get("en:submit")).toBeUndefined();
   });
 
+  // @verifies glossa.card_creation.duplicate_gate.existing_note_history
+  it("returns duplicate-card confirmation when existing vocabulary already has Anki note ids", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    await storage.lexicon.put({
+      key: "en:submit",
+      lang: "en",
+      lemma: "submit",
+      surface: "submit",
+      state: "learning_active",
+      shownCount: 1,
+      clickCount: 1,
+      ankiNoteIds: [99]
+    });
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = { gloss: vi.fn(), glossFrame: vi.fn(), ankiCard: vi.fn() };
+    const anki = { createNote: vi.fn() };
+
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const response = await handler(message);
+
+    expect(response).toMatchObject({
+      type: "word.card.duplicate",
+      payload: { lang: "en", lemma: "submit", surface: "submit", promptMs: 5_000 }
+    });
+    expect(ai.ankiCard).not.toHaveBeenCalled();
+    expect(anki.createNote).not.toHaveBeenCalled();
+  });
+
   // @verifies glossa.card_creation.duplicate_gate
   // @verifies glossa.card_creation.duplicate_gate.message_confirmed
   it("creates another note for a carded word after explicit confirmation", async () => {

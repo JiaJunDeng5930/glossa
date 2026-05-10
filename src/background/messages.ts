@@ -55,8 +55,10 @@ async function handleWordClicked(
 ): Promise<{ kind: "created"; payload: WordClickedOkPayload } | { kind: "duplicate"; payload: WordCardDuplicatePayload }> {
   const settings = await deps.storage.settings.get();
   const wordKey = vocabularyKey("en", payload.token.lemma);
+  const existing = await deps.storage.lexicon.get(wordKey);
   // @behavior glossa.card_creation.duplicate_gate Card creation for a word already recorded as carded returns a duplicate confirmation prompt before AI or Anki work unless the user explicitly confirms.
-  if (payload.allowDuplicateCard !== true && await deps.storage.cardedWords.get(wordKey)) {
+  // @behavior glossa.card_creation.duplicate_gate.existing_note_history Existing vocabulary note ids count as prior successful card creation for upgraded users.
+  if (payload.allowDuplicateCard !== true && (await deps.storage.cardedWords.get(wordKey) || (existing?.ankiNoteIds.length ?? 0) > 0)) {
     return {
       kind: "duplicate",
       payload: {
@@ -68,7 +70,6 @@ async function handleWordClicked(
     };
   }
   // @behavior glossa.card_creation.duplicate_gate.learning_state Confirmed card creation keeps the clicked word in the learning vocabulary lifecycle.
-  const existing = await deps.storage.lexicon.get(wordKey);
   const clicked = markRecordClicked(
     existing ?? createCandidateRecord(payload.token.lemma, payload.token.surface, "en", now),
     now,

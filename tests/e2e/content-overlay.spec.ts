@@ -594,6 +594,50 @@ test("content bundle cancels the active duplicate prompt when a new one opens", 
   expect(await page.evaluate(() => (Reflect.get(window, "__duplicateMessages") as unknown[]).length)).toBe(2);
 });
 
+// @verifies glossa.card_creation.duplicate_gate.prompt_cleanup
+test("content bundle cancels duplicate prompts when translation is disabled", async ({ page }) => {
+  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    const messages: unknown[] = [];
+    Reflect.set(window, "__duplicateMessages", messages);
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) => {
+      if (message.type !== "word.clicked") {
+        return undefined;
+      }
+      messages.push(message);
+      const response = {
+        type: "word.card.duplicate",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { lang: "en", lemma: "archive", surface: "archive", promptMs: 5_000 }
+      };
+      callback?.(response);
+      return Promise.resolve(response);
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.keyboard.down("Alt");
+  await page.locator("#target").click();
+  await page.keyboard.up("Alt");
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+
+  await page.keyboard.press("Alt+G");
+
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0);
+  expect(await page.evaluate(() => document.querySelectorAll("[data-glossa-feedback=\"card-pending\"]").length)).toBe(0);
+  expect(await page.evaluate(() => (Reflect.get(window, "__duplicateMessages") as unknown[]).length)).toBe(1);
+});
+
 // @verifies glossa.card_creation.failure.request_error
 test("content bundle keeps waiting for slow card creation Anki errors", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");

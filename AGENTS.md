@@ -94,10 +94,11 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.cache_identity.text_hash|glossa.cache_identity.text_hash.{}
 |glossa.card_creation|glossa.card_creation.{anki_client,duplicate_gate,failure,note_request}
 |glossa.card_creation.anki_client|glossa.card_creation.anki_client.{}
-|glossa.card_creation.duplicate_gate|glossa.card_creation.duplicate_gate.{content_cancel,content_confirm,content_prompt,feedback_clear,feedback_dataset_state,feedback_skip,feedback_state,learning_state,message_confirmed,message_lang,message_lemma,message_prompt_ms,message_surface,message_type,prompt,prompt_controls,prompt_dom,prompt_setting,prompt_supersede,prompt_supersede_state,prompt_timeout,record_created_at,record_key,record_lang,record_lemma,record_store,record_store_upgrade,response,success}
+|glossa.card_creation.duplicate_gate|glossa.card_creation.duplicate_gate.{content_cancel,content_confirm,content_prompt,existing_note_history,feedback_clear,feedback_dataset_state,feedback_skip,feedback_state,learning_state,message_confirmed,message_lang,message_lemma,message_prompt_ms,message_surface,message_type,prompt,prompt_cleanup,prompt_controls,prompt_dom,prompt_setting,prompt_supersede,prompt_supersede_state,prompt_timeout,record_created_at,record_key,record_lang,record_lemma,record_store,record_store_upgrade,response,success}
 |glossa.card_creation.duplicate_gate.content_cancel|glossa.card_creation.duplicate_gate.content_cancel.{}
 |glossa.card_creation.duplicate_gate.content_confirm|glossa.card_creation.duplicate_gate.content_confirm.{}
 |glossa.card_creation.duplicate_gate.content_prompt|glossa.card_creation.duplicate_gate.content_prompt.{}
+|glossa.card_creation.duplicate_gate.existing_note_history|glossa.card_creation.duplicate_gate.existing_note_history.{}
 |glossa.card_creation.duplicate_gate.feedback_clear|glossa.card_creation.duplicate_gate.feedback_clear.{}
 |glossa.card_creation.duplicate_gate.feedback_dataset_state|glossa.card_creation.duplicate_gate.feedback_dataset_state.{}
 |glossa.card_creation.duplicate_gate.feedback_skip|glossa.card_creation.duplicate_gate.feedback_skip.{}
@@ -110,6 +111,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.card_creation.duplicate_gate.message_surface|glossa.card_creation.duplicate_gate.message_surface.{}
 |glossa.card_creation.duplicate_gate.message_type|glossa.card_creation.duplicate_gate.message_type.{}
 |glossa.card_creation.duplicate_gate.prompt|glossa.card_creation.duplicate_gate.prompt.{}
+|glossa.card_creation.duplicate_gate.prompt_cleanup|glossa.card_creation.duplicate_gate.prompt_cleanup.{}
 |glossa.card_creation.duplicate_gate.prompt_controls|glossa.card_creation.duplicate_gate.prompt_controls.{}
 |glossa.card_creation.duplicate_gate.prompt_dom|glossa.card_creation.duplicate_gate.prompt_dom.{}
 |glossa.card_creation.duplicate_gate.prompt_setting|glossa.card_creation.duplicate_gate.prompt_setting.{}

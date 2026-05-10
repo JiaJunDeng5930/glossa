@@ -67,6 +67,7 @@ async function boot(): Promise<void> {
       return;
     }
     stopped = true;
+    cancelDuplicateCardPrompt(document);
     if (scanTimer) {
       globalThis.clearTimeout(scanTimer);
       scanTimer = undefined;
@@ -102,6 +103,7 @@ async function boot(): Promise<void> {
       pageUrl = routeUrl;
       scanVersion += 1;
       closeAllGlossSessions();
+      cancelDuplicateCardPrompt(document);
       overlay.clear();
       translationEnabled = options.manualActivation === true || autoTranslateEnabled;
     }
@@ -506,6 +508,7 @@ async function boot(): Promise<void> {
     }
     scanVersion += 1;
     closeAllGlossSessions();
+    cancelDuplicateCardPrompt(document);
     overlay.clear();
     trace({
       component: "content-script",
@@ -734,10 +737,8 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
 
 // @behavior glossa.card_creation.duplicate_gate.prompt The duplicate-card prompt resolves true only from the confirmation control and otherwise resolves false.
 function promptDuplicateCardCreation(doc: Document, input: { surface: string; timeoutMs: number }): Promise<boolean> {
-  const existing = doc.querySelector("[data-glossa-duplicate-card-prompt]");
   // @behavior glossa.card_creation.duplicate_gate.prompt_supersede Starting a duplicate-card prompt resolves the previous prompt as cancellation before replacing its DOM.
-  duplicatePromptResolvers.get(doc)?.(false);
-  existing?.remove();
+  cancelDuplicateCardPrompt(doc);
   return new Promise((resolve) => {
     const prompt = doc.createElement("div");
     // @constraint glossa.card_creation.duplicate_gate.prompt_dom The duplicate-card prompt is extension-owned page UI anchored at the top right of the viewport.
@@ -808,6 +809,16 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     cancel.addEventListener("click", () => finish(false), { once: true });
     (doc.body ?? doc.documentElement).append(prompt);
   });
+}
+
+// @behavior glossa.card_creation.duplicate_gate.prompt_cleanup Duplicate-card prompt cleanup resolves the active prompt as cancellation and removes prompt DOM.
+function cancelDuplicateCardPrompt(doc: Document): void {
+  const resolver = duplicatePromptResolvers.get(doc);
+  if (resolver) {
+    resolver(false);
+    return;
+  }
+  doc.querySelector("[data-glossa-duplicate-card-prompt]")?.remove();
 }
 
 function isExtensionContextInvalidated(error: unknown): boolean {
