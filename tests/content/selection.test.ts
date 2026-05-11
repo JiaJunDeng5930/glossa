@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSelectionController } from "../../src/content/selection";
 
 // @verifies glossa.page_translation.shortcut_selection
 describe("selection controller", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, "caretPositionFromPoint");
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  });
+
   it("enters selection mode while the shortcut is held and captures word clicks", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;
@@ -11,6 +16,7 @@ describe("selection controller", () => {
     const onButtonClick = vi.fn();
     const onSelectionModeChange = vi.fn();
     button.addEventListener("click", onButtonClick);
+    installCaretPosition(button.firstChild as Text, 2);
 
     const controller = createSelectionController({
       document,
@@ -74,6 +80,7 @@ describe("selection controller", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;
     const onWordSelected = vi.fn();
+    installCaretPosition(button.firstChild as Text, 2);
 
     const controller = createSelectionController({
       document,
@@ -87,6 +94,47 @@ describe("selection controller", () => {
     button.dispatchEvent(new KeyboardEvent("keyup", { key: "k", bubbles: true }));
 
     expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ surface: "Save" }));
+
+    controller.detach();
+  });
+
+  it("ignores plain-text clicks that resolve outside an English word", () => {
+    document.body.innerHTML = `<p id="target">Save  draft</p>`;
+    const target = document.querySelector<HTMLParagraphElement>("#target")!;
+    const onWordSelected = vi.fn();
+    installCaretPosition(target.firstChild as Text, 5);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected
+    });
+    controller.attach();
+
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(onWordSelected).not.toHaveBeenCalled();
+
+    controller.detach();
+  });
+
+  it("ignores plain-text clicks when the browser cannot resolve a text point", () => {
+    document.body.innerHTML = `<p id="target">Save draft</p>`;
+    const target = document.querySelector<HTMLParagraphElement>("#target")!;
+    const onWordSelected = vi.fn();
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected
+    });
+    controller.attach();
+
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(onWordSelected).not.toHaveBeenCalled();
 
     controller.detach();
   });
@@ -120,6 +168,7 @@ describe("selection controller", () => {
     const button = document.querySelector<HTMLButtonElement>("#save")!;
     const error = new Error("selection failed");
     const onError = vi.fn();
+    installCaretPosition(button.firstChild as Text, 2);
 
     const controller = createSelectionController({
       document,
@@ -140,3 +189,14 @@ describe("selection controller", () => {
     controller.detach();
   });
 });
+
+function installCaretPosition(node: Text, offset: number): void {
+  Object.defineProperty(document, "caretPositionFromPoint", {
+    configurable: true,
+    value: vi.fn(() => ({ offsetNode: node, offset }))
+  });
+  Object.defineProperty(document, "caretRangeFromPoint", {
+    configurable: true,
+    value: undefined
+  });
+}

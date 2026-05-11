@@ -189,7 +189,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
   });
   await page.keyboard.down("Alt");
   await expect(page.locator("#glossa-overlay")).toHaveAttribute("data-glossa-selecting", "true");
-  await page.locator("#save").click();
+  await clickWord(page, "#save", "Save");
   await page.keyboard.up("Alt");
   await expect(page.locator("#glossa-overlay")).not.toHaveAttribute("data-glossa-selecting", "true");
 
@@ -298,7 +298,7 @@ test("content bundle marks card failures with the shared badge renderer", async 
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
 
   await page.waitForFunction(() => {
@@ -405,7 +405,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
 
   await page.waitForFunction(() => {
@@ -480,7 +480,7 @@ test("content bundle asks before creating another card for a carded word", async
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
@@ -492,7 +492,7 @@ test("content bundle asks before creating another card for a carded word", async
   })).toEqual([false]);
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "archive");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
   await page.getByRole("button", { name: "继续制卡" }).click();
   await page.keyboard.up("Alt");
@@ -540,7 +540,7 @@ test("content bundle cancels duplicate card prompts after their timeout", async 
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
@@ -582,12 +582,12 @@ test("content bundle cancels the active duplicate prompt when a new one opens", 
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.keyboard.down("Alt");
-  await page.locator("#first").click();
+  await clickWord(page, "#first", "archive");
   await page.keyboard.up("Alt");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
 
   await page.keyboard.down("Alt");
-  await page.locator("#second").click();
+  await clickWord(page, "#second", "submit");
   await page.keyboard.up("Alt");
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toContainText("submit");
@@ -628,7 +628,7 @@ test("content bundle cancels duplicate prompts when translation is disabled", as
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
 
@@ -672,7 +672,7 @@ test("content bundle keeps waiting for slow card creation Anki errors", async ({
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
 
   await page.waitForFunction(() => {
@@ -898,7 +898,7 @@ test("content bundle handles invalidated extension context during word click", a
   });
 
   await page.keyboard.down("Alt");
-  await page.locator("#target").click();
+  await clickWord(page, "#target", "Submit");
   await page.keyboard.up("Alt");
   await page.waitForTimeout(300);
 
@@ -1233,6 +1233,36 @@ async function sentMessageTypes(page: Page): Promise<string[]> {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
     return sent.map((message) => message.type);
   });
+}
+
+async function clickWord(page: Page, selector: string, word: string): Promise<void> {
+  const point = await page.locator(selector).evaluate((element, targetWord) => {
+    const document = element.ownerDocument;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const expected = targetWord.toLocaleLowerCase("en-US");
+    let current: Node | null = walker.nextNode();
+    while (current) {
+      const text = current.nodeValue ?? "";
+      const index = text.toLocaleLowerCase("en-US").indexOf(expected);
+      if (index >= 0) {
+        const range = document.createRange();
+        range.setStart(current, index);
+        range.setEnd(current, index + targetWord.length);
+        const rect = Array.from(range.getClientRects()).find((item) => item.width > 0 && item.height > 0)
+          ?? range.getBoundingClientRect();
+        range.detach();
+        if (rect.width > 0 && rect.height > 0) {
+          return {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+          };
+        }
+      }
+      current = walker.nextNode();
+    }
+    throw new Error(`expected visible word ${targetWord}`);
+  }, word);
+  await page.mouse.click(point.x, point.y);
 }
 
 async function pressTranslationShortcut(page: Page): Promise<void> {

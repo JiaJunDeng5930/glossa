@@ -1,4 +1,4 @@
-// @behavior glossa.page_translation.shortcut_selection Holding the configured shortcut while clicking a word sends a DOM-grounded token candidate to the background.
+// @behavior glossa.page_translation.shortcut_selection Holding the configured shortcut while clicking an English page word selects that clicked word and its surrounding text for card creation.
 import { normalizeLemma } from "../core/state";
 import { isShortcutRelease, matchesShortcut } from "../shared/shortcut";
 import type { TokenCandidate } from "../shared/types";
@@ -165,15 +165,13 @@ function selectionFromRenderedToken(element: HTMLElement): WordSelection | undef
 function textPointFromClick(element: Element, event: MouseEvent): { node: Text; offset: number; sentence: string } | undefined {
   const doc = element.ownerDocument;
   const fromPoint = textPointFromCoordinates(doc, event.clientX, event.clientY);
-  const node = fromPoint?.node && element.contains(fromPoint.node) ? fromPoint.node : firstTextNode(element);
-  if (!node) {
+  if (!fromPoint?.node || !element.contains(fromPoint.node)) {
     return undefined;
   }
-  const offset = fromPoint?.node === node ? fromPoint.offset : 0;
   return {
-    node,
-    offset,
-    sentence: element.textContent?.trim() || node.nodeValue?.trim() || ""
+    node: fromPoint.node,
+    offset: fromPoint.offset,
+    sentence: element.textContent?.trim() || fromPoint.node.nodeValue?.trim() || ""
   };
 }
 
@@ -193,16 +191,6 @@ function textPointFromCoordinates(doc: Document, x: number, y: number): { node: 
   return undefined;
 }
 
-function firstTextNode(element: Element): Text | undefined {
-  const doc = element.ownerDocument;
-  const walker = doc.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      return /[A-Za-z]/.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-    }
-  });
-  return walker.nextNode() as Text | null ?? undefined;
-}
-
 function wordAtOffset(text: string, offset: number): RegExpMatchArray | undefined {
   for (const match of text.matchAll(/[A-Za-z][A-Za-z'-]*/g)) {
     const start = match.index ?? 0;
@@ -211,5 +199,5 @@ function wordAtOffset(text: string, offset: number): RegExpMatchArray | undefine
       return match as RegExpExecArray;
     }
   }
-  return /[A-Za-z][A-Za-z'-]*/.exec(text) ?? undefined;
+  return undefined;
 }
