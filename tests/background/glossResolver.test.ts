@@ -174,6 +174,43 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(await storage.glossCache.get(key)).toBeUndefined();
   });
 
+  // @verifies glossa.settings_save.clear_gloss_cache.memory_replay
+  it("suppresses in-flight AI failures after clearing", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    let rejectAi!: (error: Error) => void;
+    const aiResponse = new Promise<{ items: GlossItem[] }>((_, reject) => {
+      rejectAi = reject;
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(() => aiResponse),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 1,
+      aiFrameMaxMs: 1_000
+    });
+    const sentence = "A novel archive appears.";
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const scan = resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: (event) => events.push(event) });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+    await storage.glossCache.clear();
+    resolver.clearMemory();
+    rejectAi(new Error("backend unavailable"));
+    await scan;
+
+    expect(events).toEqual([{ tokenId: "t-first", status: "pending" }]);
+  });
+
   it("groups cache misses into a size-triggered AI frame", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();

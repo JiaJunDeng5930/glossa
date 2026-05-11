@@ -572,6 +572,10 @@ async function executeFrame(
       service: "ai"
     });
     for (const miss of frame.misses) {
+      if (miss.cacheEpoch !== deps.getCacheEpoch()) {
+        resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: cacheClearedPayload() });
+        continue;
+      }
       resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: payload });
       if (miss.sink.isActive?.() !== false) {
         miss.emit({ tokenId: miss.token.id, status: "error", message: payload.message, error: payload });

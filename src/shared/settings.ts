@@ -23,23 +23,24 @@ export type StoredGlossaSettings = Partial<Omit<GlossaSettings, "appearance" | "
 
 // @behavior glossa.settings_save.default_overrides.merge Saved settings merge with the current defaults at read time so default updates reach unchanged fields.
 export function mergeStoredSettings(value: StoredGlossaSettings | undefined): GlossaSettings {
-  const provider = value?.ai?.provider ?? DEFAULT_SETTINGS.ai.provider;
-  const endpoint = value?.ai && "endpoint" in value.ai ? value.ai.endpoint : defaultEndpointForProvider(provider);
+  const stored = normalizeStoredSettings(value);
+  const provider = stored?.ai?.provider ?? DEFAULT_SETTINGS.ai.provider;
+  const endpoint = stored?.ai && "endpoint" in stored.ai ? stored.ai.endpoint : defaultEndpointForProvider(provider);
   return {
     ...DEFAULT_SETTINGS,
-    ...value,
-    translateShortcutKey: value?.translateShortcutKey ?? DEFAULT_SETTINGS.translateShortcutKey,
-    autoTranslateEnabled: value?.autoTranslateEnabled ?? DEFAULT_SETTINGS.autoTranslateEnabled,
-    knownWordList: isKnownWordList(value?.knownWordList) ? value.knownWordList : DEFAULT_SETTINGS.knownWordList,
-    appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
-    prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
+    ...stored,
+    translateShortcutKey: stored?.translateShortcutKey ?? DEFAULT_SETTINGS.translateShortcutKey,
+    autoTranslateEnabled: stored?.autoTranslateEnabled ?? DEFAULT_SETTINGS.autoTranslateEnabled,
+    knownWordList: isKnownWordList(stored?.knownWordList) ? stored.knownWordList : DEFAULT_SETTINGS.knownWordList,
+    appearance: { ...DEFAULT_SETTINGS.appearance, ...stored?.appearance },
+    prompts: { ...DEFAULT_SETTINGS.prompts, ...stored?.prompts },
     ai: {
       ...DEFAULT_SETTINGS.ai,
-      ...value?.ai,
+      ...stored?.ai,
       provider,
       endpoint: endpoint || defaultEndpointForProvider(provider)
     },
-    anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
+    anki: { ...DEFAULT_SETTINGS.anki, ...stored?.anki }
   };
 }
 
@@ -117,6 +118,25 @@ function assignIfChanged<T extends keyof StoredGlossaSettings>(
 
 function hasKeys(value: object): boolean {
   return Object.keys(value).length > 0;
+}
+
+// @behavior glossa.settings_save.default_overrides.legacy_full Legacy full settings snapshots are reduced to default-diff overrides before merging with current defaults.
+function normalizeStoredSettings(value: StoredGlossaSettings | undefined): StoredGlossaSettings | undefined {
+  if (isLegacyFullSettings(value)) {
+    return settingsOverrides(value);
+  }
+  return value;
+}
+
+function isLegacyFullSettings(value: StoredGlossaSettings | undefined): value is GlossaSettings {
+  return Boolean(value?.appearance && value.prompts && value.ai && value.anki &&
+    "shortcutKey" in value &&
+    "translateShortcutKey" in value &&
+    "autoTranslateEnabled" in value &&
+    "learningWindowDays" in value &&
+    "knownWordList" in value &&
+    "promptVersion" in value &&
+    "modelVersion" in value);
 }
 
 function isKnownWordList(value: unknown): value is KnownWordListId {
