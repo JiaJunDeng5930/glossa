@@ -3,6 +3,16 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 // @verifies glossa.settings_save
+// @verifies glossa.settings_save.default_overrides
+// @verifies glossa.settings_save.default_overrides.merge
+// @verifies glossa.settings_save.default_overrides.provider_endpoint_defaults
+// @verifies glossa.settings_save.default_overrides.stored_shape
+// @verifies glossa.settings_save.default_overrides.stored_shape.ai
+// @verifies glossa.settings_save.default_overrides.stored_shape.anki
+// @verifies glossa.settings_save.default_overrides.stored_shape.appearance
+// @verifies glossa.settings_save.default_overrides.stored_shape.prompts
+// @verifies glossa.settings_save.default_overrides.write_filter
+// @verifies glossa.settings_save.clear_gloss_cache
 // @verifies glossa.settings_save.timeout_seconds
 // @verifies glossa.word_memory.known_management
 // @verifies glossa.word_memory.known_management.add_known
@@ -11,6 +21,7 @@ import { resolve } from "node:path";
 // @verifies glossa.word_memory.known_management.preserve_card_history_add
 // @verifies glossa.word_memory.known_management.preserve_card_history_remove
 // @verifies glossa.extension_storage.typed_access.key_value_delete
+// @verifies glossa.extension_storage.typed_access.key_value_clear
 // @verifies glossa.extension_storage.typed_access.lexicon_delete
 // @verifies glossa.extension_storage.typed_access.lexicon_delete_impl
 // @verifies glossa.card_creation.duplicate_gate.record_store_upgrade
@@ -87,7 +98,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       };
       request.onsuccess = () => {
         const db = request.result;
-        const tx = db.transaction("lexicon", "readwrite");
+        const tx = db.transaction(["lexicon", "glossCache"], "readwrite");
         tx.objectStore("lexicon").put({
           key: "en:archive",
           lemma: "archive",
@@ -109,6 +120,12 @@ test("options page captures shortcuts, previews style changes and saves prompts"
           lastClickedAt: 777,
           ankiNoteIds: [99]
         }, "en:legacy");
+        tx.objectStore("glossCache").put({
+          tokenId: "cached-token",
+          targetText: "cached",
+          display: "缓存",
+          phrase: "cached"
+        }, "gloss:cached");
         tx.oncomplete = () => {
           db.close();
           resolve();
@@ -155,6 +172,12 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("input[name=duplicatePromptSeconds]").fill("7");
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
+  await page.getByRole("button", { name: "重置释义提示词" }).click();
+  await expect(page.locator("textarea[name=glossPrompt]")).toHaveValue("只把每个陌生英文单词或短语在当前语境中的意思翻译成简体中文。返回适合显示在原词上方的简短行内标签。");
+  await page.getByRole("button", { name: "重置 Anki 卡片提示词" }).click();
+  await expect(page.locator("textarea[name=ankiPrompt]")).toHaveValue("为点击的英文单词制作 Anki 卡片。正面写目标词汇在对应含义下的例句，并加粗目标词汇；背面写这个词汇在当前语境中的简体中文翻译。");
+  await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
+  await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
   await expect(page.locator("#known-words-list")).toContainText("archive");
   await page.locator(".known-word-row", { hasText: "archive" }).getByRole("button", { name: "移除" }).click();
   await expect(page.locator("#known-words-list")).not.toContainText("archive");
@@ -198,6 +221,24 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("#known-word-input").fill("calibrate");
   await page.locator("#add-known-word").click();
   await expect(page.locator("#known-words-list")).toContainText("calibrate");
+  await page.locator("#clear-gloss-cache").click();
+  await expect(page.locator("#status")).toHaveText("翻译缓存已清空");
+  expect(await page.evaluate(async () => {
+    return await new Promise<number>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("glossCache", "readonly");
+        const countRequest = tx.objectStore("glossCache").count();
+        countRequest.onsuccess = () => {
+          db.close();
+          resolve(countRequest.result);
+        };
+        countRequest.onerror = () => reject(countRequest.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  })).toBe(0);
 
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
   await expect(page.locator("#translate-shortcut-capture")).toHaveText("Alt+G");
@@ -258,7 +299,6 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   const settings = await page.evaluate(() => (Reflect.get(window, "__glossaStore") as { settings: unknown }).settings);
   expect(settings).toMatchObject({
     shortcutKey: "Ctrl+Shift+K",
-    translateShortcutKey: "Alt+G",
     autoTranslateEnabled: true,
     knownWordList: "toefl",
     appearance: {
@@ -286,6 +326,13 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       duplicatePromptMs: 7000
     }
   });
+  const storedSettings = settings as Record<string, unknown>;
+  expect(storedSettings).not.toHaveProperty("translateShortcutKey");
+  expect(storedSettings).not.toHaveProperty("learningWindowDays");
+  expect(storedSettings).not.toHaveProperty("promptVersion");
+  expect(storedSettings).not.toHaveProperty("modelVersion");
+  expect(storedSettings.ai as Record<string, unknown>).not.toHaveProperty("endpoint");
+  expect(storedSettings.anki as Record<string, unknown>).not.toHaveProperty("endpoint");
   expect(await page.evaluate(async () => {
     return await new Promise<unknown>((resolve, reject) => {
       const request = indexedDB.open("glossa", 2);

@@ -1,7 +1,7 @@
 // @intent glossa.extension_storage Settings, vocabulary records, gloss cache entries, card cache entries, and carded-word records stay inside extension-owned storage.
 // @constraint glossa.extension_storage.typed_access Settings, lexicon, cache, and carded-word storage use one typed asynchronous access contract.
 import type { AnkiCardOutput, CardedWordRecord, GlossaSettings, GlossItem, VocabularyRecord, VocabularyState } from "../shared/types";
-import { DEFAULT_SETTINGS } from "../shared/types";
+import { mergeStoredSettings, type StoredGlossaSettings } from "../shared/settings";
 
 export interface KeyValueStore<T> {
   get(key: string): Promise<T | undefined>;
@@ -9,6 +9,8 @@ export interface KeyValueStore<T> {
   put(key: string, value: T): Promise<void>;
   // @constraint glossa.extension_storage.typed_access.key_value_delete Key-value stores expose deletion through the typed storage contract.
   delete(key: string): Promise<void>;
+  // @constraint glossa.extension_storage.typed_access.key_value_clear Key-value stores expose full-store clearing through the typed storage contract.
+  clear(): Promise<void>;
 }
 
 export interface LexiconStore {
@@ -51,41 +53,13 @@ export function createExtensionStorage(): ExtensionStorage {
 function createChromeSettingsStore(): SettingsStore {
   return {
     async get() {
-      const runtimeSettings = await readChromeLocal<Partial<GlossaSettings>>("settings");
-      return mergeSettings(runtimeSettings);
+      const runtimeSettings = await readChromeLocal<StoredGlossaSettings>("settings");
+      return mergeStoredSettings(runtimeSettings);
     },
     async set(value) {
       await writeChromeLocal("settings", value);
     }
   };
-}
-
-function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettings {
-  const ai = { ...DEFAULT_SETTINGS.ai, ...value?.ai };
-  return {
-    ...DEFAULT_SETTINGS,
-    ...value,
-    translateShortcutKey: value?.translateShortcutKey ?? DEFAULT_SETTINGS.translateShortcutKey,
-    autoTranslateEnabled: value?.autoTranslateEnabled ?? DEFAULT_SETTINGS.autoTranslateEnabled,
-    knownWordList: value?.knownWordList ?? DEFAULT_SETTINGS.knownWordList,
-    appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
-    prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
-    ai: { ...ai, endpoint: ai.endpoint || defaultEndpointForProvider(ai.provider) },
-    anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
-  };
-}
-
-function defaultEndpointForProvider(provider: GlossaSettings["ai"]["provider"]): string {
-  if (provider === "openai-chat-completions") {
-    return "https://api.openai.com/v1/chat/completions";
-  }
-  if (provider === "openai-completions") {
-    return "https://api.openai.com/v1/completions";
-  }
-  if (provider === "glossa-backend") {
-    return "http://127.0.0.1:8787";
-  }
-  return DEFAULT_SETTINGS.ai.endpoint;
 }
 
 function readChromeLocal<T>(key: string): Promise<T | undefined> {
@@ -154,6 +128,12 @@ function createIndexedStore<T>(name: StoreName): KeyValueStore<T> {
       const db = await openDatabase();
       const tx = db.transaction(name, "readwrite");
       tx.objectStore(name).delete(key);
+      await transactionDone(tx);
+    },
+    async clear() {
+      const db = await openDatabase();
+      const tx = db.transaction(name, "readwrite");
+      tx.objectStore(name).clear();
       await transactionDone(tx);
     }
   };

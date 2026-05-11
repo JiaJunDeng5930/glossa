@@ -228,15 +228,33 @@
         <section class="settings-card" aria-labelledby="prompt-heading">
           <h2 id="prompt-heading">提示词</h2>
           <label>
-            释义提示词
+            <span class="field-heading">
+              <span>释义提示词</span>
+              <button id="reset-gloss-prompt" class="icon-button compact-icon-button" type="button" aria-label="重置释义提示词" title="重置释义提示词">
+                <svg class="test-icon reset-icon" aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>
+                </svg>
+              </button>
+            </span>
             <span class="field-help">控制 AI 如何生成页面行内释义。</span>
             <textarea name="glossPrompt" rows="5"></textarea>
           </label>
           <label>
-            Anki 卡片提示词
+            <span class="field-heading">
+              <span>Anki 卡片提示词</span>
+              <button id="reset-anki-prompt" class="icon-button compact-icon-button" type="button" aria-label="重置 Anki 卡片提示词" title="重置 Anki 卡片提示词">
+                <svg class="test-icon reset-icon" aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>
+                </svg>
+              </button>
+            </span>
             <span class="field-help">控制 AI 如何生成 Anki 卡片正反面。</span>
             <textarea name="ankiPrompt" rows="5"></textarea>
           </label>
+        </section>
+        <section class="settings-card" aria-labelledby="cache-heading">
+          <h2 id="cache-heading">缓存</h2>
+          <button id="clear-gloss-cache" class="secondary danger-action" type="button">清空翻译缓存</button>
         </section>
         <div class="actions">
           <button class="primary-action" type="submit">保存</button>

@@ -695,6 +695,9 @@ function createMemoryStorage(): ExtensionStorage {
       },
       async delete(key) {
         glossCache.delete(key);
+      },
+      async clear() {
+        glossCache.clear();
       }
     },
     cardCache: {
@@ -709,6 +712,9 @@ function createMemoryStorage(): ExtensionStorage {
       },
       async delete(key) {
         cardCache.delete(key);
+      },
+      async clear() {
+        cardCache.clear();
       }
     },
     cardedWords: {
@@ -723,6 +729,9 @@ function createMemoryStorage(): ExtensionStorage {
       },
       async delete(key) {
         cardedWords.delete(key);
+      },
+      async clear() {
+        cardedWords.clear();
       }
     }
   };

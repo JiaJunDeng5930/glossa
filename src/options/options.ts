@@ -2,6 +2,7 @@
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey } from "../core/state";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
+import { defaultEndpointForProvider, mergeStoredSettings, settingsOverrides, type StoredGlossaSettings } from "../shared/settings";
 import { formatShortcutFromEvent } from "../shared/shortcut";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type ErrorService, type GlossaSettings, type KnownWordListId, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
@@ -22,6 +23,9 @@ const ankiModelNameSelect = form.elements.namedItem("ankiModelName") as HTMLSele
 const testAiButton = document.querySelector<HTMLButtonElement>("#test-ai")!;
 const testAnkiButton = document.querySelector<HTMLButtonElement>("#test-anki")!;
 const refreshAnkiButton = document.querySelector<HTMLButtonElement>("#refresh-anki")!;
+const resetGlossPromptButton = document.querySelector<HTMLButtonElement>("#reset-gloss-prompt")!;
+const resetAnkiPromptButton = document.querySelector<HTMLButtonElement>("#reset-anki-prompt")!;
+const clearGlossCacheButton = document.querySelector<HTMLButtonElement>("#clear-gloss-cache")!;
 const knownWordInput = document.querySelector<HTMLInputElement>("#known-word-input")!;
 const addKnownWordButton = document.querySelector<HTMLButtonElement>("#add-known-word")!;
 const knownWordsList = document.querySelector<HTMLElement>("#known-words-list")!;
@@ -46,6 +50,19 @@ testAnkiButton.addEventListener("click", () => {
 
 refreshAnkiButton.addEventListener("click", () => {
   void refreshAnkiOptions(readFormSettings(), { reportStatus: true });
+});
+
+resetGlossPromptButton.addEventListener("click", () => {
+  setInput("glossPrompt", DEFAULT_SETTINGS.prompts.gloss);
+  updatePreview(readFormSettings());
+});
+
+resetAnkiPromptButton.addEventListener("click", () => {
+  setInput("ankiPrompt", DEFAULT_SETTINGS.prompts.ankiCard);
+});
+
+clearGlossCacheButton.addEventListener("click", () => {
+  void clearGlossCache();
 });
 
 addKnownWordButton.addEventListener("click", () => {
@@ -93,7 +110,7 @@ document.addEventListener("keyup", (event) => {
 form.addEventListener("input", () => updatePreview(readFormSettings()));
 
 async function loadSettings(): Promise<void> {
-  const settings = await chromeLocalGet<GlossaSettings>("settings").then((value) => mergeSettings(value));
+  const settings = await chromeLocalGet<StoredGlossaSettings>("settings").then((value) => mergeStoredSettings(value));
   setInput("shortcutKey", settings.shortcutKey);
   shortcutCapture.textContent = settings.shortcutKey;
   setInput("translateShortcutKey", settings.translateShortcutKey);
@@ -128,7 +145,7 @@ async function loadSettings(): Promise<void> {
 }
 
 async function saveSettings(settings: GlossaSettings): Promise<void> {
-  await chromeLocalSet("settings", settings);
+  await chromeLocalSet("settings", settingsOverrides(settings));
 }
 
 function readFormSettings(): GlossaSettings {
@@ -157,7 +174,7 @@ function readFormSettings(): GlossaSettings {
     },
     ai: {
       provider,
-      endpoint: readInput("aiEndpoint").trim() || DEFAULT_SETTINGS.ai.endpoint,
+      endpoint: readInput("aiEndpoint").trim() || defaultEndpointForProvider(provider),
       reasoningEffort: readInput("reasoningEffort") as GlossaSettings["ai"]["reasoningEffort"],
       requestTimeoutMs: secondsToMs(readInput("aiRequestTimeoutSeconds"), DEFAULT_SETTINGS.ai.requestTimeoutMs),
       ...(apiKey ? { apiKey } : {})
@@ -210,21 +227,6 @@ async function testAnki(settings: GlossaSettings): Promise<void> {
   if (!catalog.modelNames.includes(settings.anki.modelName)) {
     throw createDiagnosticError("service-error", "Anki model was not found", { service: "anki" });
   }
-}
-
-function mergeSettings(value: Partial<GlossaSettings> | undefined): GlossaSettings {
-  const ai = { ...DEFAULT_SETTINGS.ai, ...value?.ai };
-  return {
-    ...DEFAULT_SETTINGS,
-    ...value,
-    translateShortcutKey: value?.translateShortcutKey ?? DEFAULT_SETTINGS.translateShortcutKey,
-    autoTranslateEnabled: value?.autoTranslateEnabled ?? DEFAULT_SETTINGS.autoTranslateEnabled,
-    knownWordList: isKnownWordList(value?.knownWordList) ? value.knownWordList : DEFAULT_SETTINGS.knownWordList,
-    appearance: { ...DEFAULT_SETTINGS.appearance, ...value?.appearance },
-    prompts: { ...DEFAULT_SETTINGS.prompts, ...value?.prompts },
-    ai: { ...ai, endpoint: ai.endpoint || defaultEndpointForProvider(ai.provider) },
-    anki: { ...DEFAULT_SETTINGS.anki, ...value?.anki }
-  };
 }
 
 function readInput(name: string): string {
@@ -322,6 +324,13 @@ async function removeKnownWord(record: VocabularyRecord): Promise<void> {
   await refreshKnownWords();
 }
 
+async function clearGlossCache(): Promise<void> {
+  setStatus("");
+  // @behavior glossa.settings_save.clear_gloss_cache The options page clears cached translation labels while leaving vocabulary state unchanged.
+  await extensionStorage.glossCache.clear();
+  setStatus("翻译缓存已清空");
+}
+
 function populateKnownWordLists(): void {
   knownWordListSelect.replaceChildren(...KNOWN_WORD_LISTS.map((list) => {
     const option = document.createElement("option");
@@ -375,19 +384,6 @@ interface AnkiActionResponse<T> {
 function setTestState(button: HTMLButtonElement, state: TestState): void {
   button.dataset.state = state;
   button.disabled = state === "loading";
-}
-
-function defaultEndpointForProvider(provider: AiSettings["provider"]): string {
-  if (provider === "openai-chat-completions") {
-    return "https://api.openai.com/v1/chat/completions";
-  }
-  if (provider === "openai-completions") {
-    return "https://api.openai.com/v1/completions";
-  }
-  if (provider === "glossa-backend") {
-    return "http://127.0.0.1:8787";
-  }
-  return DEFAULT_SETTINGS.ai.endpoint;
 }
 
 async function refreshAnkiOptions(settings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
