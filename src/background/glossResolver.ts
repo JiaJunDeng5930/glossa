@@ -18,6 +18,7 @@ import { GLOSS_TARGET_LANG } from "../shared/types";
 export interface GlossResolver {
   resolve(pageUrl: string, sentences: SentenceCandidate[], settings: GlossaSettings, now: number, sink: GlossResolverSink): Promise<void>;
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
+  clearMemory(): void;
 }
 
 export interface GlossResolverSession {
@@ -278,6 +279,10 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   };
 
   return {
+    // @behavior glossa.settings_save.clear_gloss_cache.memory_replay Clearing the translation cache clears the resolver replay memory for the current service-worker lifetime.
+    clearMemory() {
+      memoryCache.clear();
+    },
     createSession,
     async resolve(pageUrl, sentences, settings, now, sink) {
       const session = createSession(pageUrl, settings, now, sink);

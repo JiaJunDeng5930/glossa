@@ -160,6 +160,9 @@ export interface SettingsGetResponsePayload {
   settings: GlossaSettings;
 }
 
+export type GlossCacheClearPayload = Record<string, never>;
+export type GlossCacheClearedPayload = Record<string, never>;
+
 export interface ErrorPayload {
   reason: ErrorReason;
   message: string;
@@ -183,14 +186,19 @@ export type WordClickedOkMessage = MessageEnvelope<"word.clicked.ok", "service-w
 export type WordCardDuplicateMessage = MessageEnvelope<"word.card.duplicate", "service-worker", "content-script", WordCardDuplicatePayload>;
 export type SettingsGetMessage = MessageEnvelope<"settings.get", "content-script", "service-worker", SettingsGetPayload>;
 export type SettingsGetResponseMessage = MessageEnvelope<"settings.response", "service-worker", "content-script", SettingsGetResponsePayload>;
+export type GlossCacheClearMessage = MessageEnvelope<"gloss.cache.clear", "options", "service-worker", GlossCacheClearPayload>;
+export type GlossCacheClearedMessage = MessageEnvelope<"gloss.cache.cleared", "service-worker", "options", GlossCacheClearedPayload>;
 export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
+export type OptionsErrorMessage = MessageEnvelope<"error", "service-worker", "options", ErrorPayload>;
 
 export type GlossPortInboundMessage = GlossScanMessage | GlossScanStartMessage | GlossScanChunkMessage | GlossScanEndMessage;
 export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage | GlossChunkAckMessage;
 
 export type ContentToBackgroundMessage = UserWordClickMessage | SettingsGetMessage;
+export type OptionsToBackgroundMessage = GlossCacheClearMessage;
+export type RuntimeToBackgroundMessage = ContentToBackgroundMessage | OptionsToBackgroundMessage;
 // @constraint glossa.extension_contracts.payload_consistency.duplicate_response Background responses include duplicate-card prompts alongside success, settings, and error envelopes.
-export type BackgroundResponseMessage = WordClickedOkMessage | WordCardDuplicateMessage | SettingsGetResponseMessage | ErrorMessage;
+export type BackgroundResponseMessage = WordClickedOkMessage | WordCardDuplicateMessage | SettingsGetResponseMessage | GlossCacheClearedMessage | ErrorMessage | OptionsErrorMessage;
 
 export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";

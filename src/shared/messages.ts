@@ -3,6 +3,8 @@ import type {
   BackgroundResponseMessage,
   ContentToBackgroundMessage,
   ErrorPayload,
+  GlossCacheClearPayload,
+  GlossCacheClearedPayload,
   GlossChunkAckPayload,
   GlossDonePayload,
   GlossScanChunkPayload,
@@ -15,6 +17,8 @@ import type {
   GlossTokenPayload,
   MessageEnvelope,
   MessageSource,
+  OptionsToBackgroundMessage,
+  RuntimeToBackgroundMessage,
   SettingsGetPayload,
   SettingsGetResponsePayload,
   UserWordClickPayload,
@@ -30,10 +34,15 @@ type ContentPayloadByType = {
   "word.clicked": UserWordClickPayload;
 };
 
+type OptionsPayloadByType = {
+  "gloss.cache.clear": GlossCacheClearPayload;
+};
+
 type BackgroundPayloadByType = {
   "settings.response": SettingsGetResponsePayload;
   "word.clicked.ok": WordClickedOkPayload;
   "word.card.duplicate": WordCardDuplicatePayload;
+  "gloss.cache.cleared": GlossCacheClearedPayload;
   error: ErrorPayload;
 };
 
@@ -55,8 +64,15 @@ export function createContentMessage<TType extends keyof ContentPayloadByType>(
   return createEnvelope(type, "content-script", "service-worker", payload) as unknown as Extract<ContentToBackgroundMessage, { type: TType }>;
 }
 
+export function createOptionsMessage<TType extends keyof OptionsPayloadByType>(
+  type: TType,
+  payload: OptionsPayloadByType[TType]
+): Extract<OptionsToBackgroundMessage, { type: TType }> {
+  return createEnvelope(type, "options", "service-worker", payload) as unknown as Extract<OptionsToBackgroundMessage, { type: TType }>;
+}
+
 export function createBackgroundResponse<TType extends keyof BackgroundPayloadByType>(
-  request: Pick<ContentToBackgroundMessage, "requestId" | "source">,
+  request: Pick<RuntimeToBackgroundMessage, "requestId" | "source">,
   type: TType,
   payload: BackgroundPayloadByType[TType]
 ): Extract<BackgroundResponseMessage, { type: TType }> {
@@ -69,6 +85,17 @@ export function createBackgroundResponse<TType extends keyof BackgroundPayloadBy
     createdAt: Date.now(),
     payload
   } as Extract<BackgroundResponseMessage, { type: TType }>;
+}
+
+export function validateRuntimeMessage(value: unknown): RuntimeToBackgroundMessage {
+  const envelope = validateEnvelope(value);
+  if (envelope.source === "content-script") {
+    return validateContentMessage(envelope);
+  }
+  if (envelope.source === "options") {
+    return validateOptionsMessage(envelope);
+  }
+  throw new Error("Unexpected message route");
 }
 
 export function createGlossPortMessage<TType extends keyof GlossPortPayloadByType>(
@@ -105,7 +132,22 @@ export function validateContentMessage(value: unknown): ContentToBackgroundMessa
   throw new Error("Unknown message type");
 }
 
-export function validateBackgroundResponse(value: unknown, request: ContentToBackgroundMessage): BackgroundResponseMessage {
+export function validateOptionsMessage(value: unknown): OptionsToBackgroundMessage {
+  const envelope = validateEnvelope(value);
+  if (envelope.version !== MESSAGE_VERSION) {
+    throw new Error("Unsupported message version");
+  }
+  if (envelope.source !== "options" || envelope.target !== "service-worker") {
+    throw new Error("Unexpected message route");
+  }
+  if (envelope.type === "gloss.cache.clear") {
+    requirePlainPayload(envelope.payload);
+    return envelope as OptionsToBackgroundMessage;
+  }
+  throw new Error("Unknown message type");
+}
+
+export function validateBackgroundResponse(value: unknown, request: RuntimeToBackgroundMessage): BackgroundResponseMessage {
   const envelope = validateEnvelope(value);
   if (envelope.version !== MESSAGE_VERSION) {
     throw new Error("Unsupported response version");
@@ -120,6 +162,7 @@ export function validateBackgroundResponse(value: unknown, request: ContentToBac
     envelope.type !== "settings.response"
     && envelope.type !== "word.clicked.ok"
     && envelope.type !== "word.card.duplicate"
+    && envelope.type !== "gloss.cache.cleared"
     && envelope.type !== "error"
   ) {
     throw new Error("Unknown response type");
@@ -229,7 +272,7 @@ export function validateGlossPortOutbound(value: unknown, scanId?: string): Glos
   throw new Error("Unknown gloss port message type");
 }
 
-export function messageTimeoutError(message: Pick<ContentToBackgroundMessage, "type" | "requestId">): Error {
+export function messageTimeoutError(message: Pick<RuntimeToBackgroundMessage, "type" | "requestId">): Error {
   return new Error(`Message timeout for ${message.type} (${message.requestId})`);
 }
 

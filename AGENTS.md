@@ -188,7 +188,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.shortcut_selection.duplicate_prompt_controls|glossa.page_translation.shortcut_selection.duplicate_prompt_controls.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
 |glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,timeout_seconds}
-|glossa.settings_save.clear_gloss_cache|glossa.settings_save.clear_gloss_cache.{}
+|glossa.settings_save.clear_gloss_cache|glossa.settings_save.clear_gloss_cache.{background_request,memory_replay}
+|glossa.settings_save.clear_gloss_cache.background_request|glossa.settings_save.clear_gloss_cache.background_request.{}
+|glossa.settings_save.clear_gloss_cache.memory_replay|glossa.settings_save.clear_gloss_cache.memory_replay.{}
 |glossa.settings_save.default_overrides|glossa.settings_save.default_overrides.{merge,provider_endpoint_defaults,stored_shape,write_filter}
 |glossa.settings_save.default_overrides.merge|glossa.settings_save.default_overrides.merge.{}
 |glossa.settings_save.default_overrides.provider_endpoint_defaults|glossa.settings_save.default_overrides.provider_endpoint_defaults.{}

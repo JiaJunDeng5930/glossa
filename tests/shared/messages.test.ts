@@ -5,10 +5,12 @@ import {
   createBackgroundResponse,
   createContentMessage,
   createGlossPortMessage,
+  createOptionsMessage,
   validateBackgroundResponse,
   validateContentMessage,
   validateGlossPortInbound,
-  validateGlossPortOutbound
+  validateGlossPortOutbound,
+  validateRuntimeMessage
 } from "../../src/shared/messages";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
@@ -22,6 +24,20 @@ describe("extension message envelopes", () => {
       version: 1,
       requestId: message.requestId,
       source: "content-script",
+      target: "service-worker",
+      payload: {}
+    });
+  });
+
+  // @verifies glossa.settings_save.clear_gloss_cache.background_request
+  it("creates and validates options-to-background cache clear messages", () => {
+    const message = createOptionsMessage("gloss.cache.clear", {});
+
+    expect(validateRuntimeMessage(message)).toMatchObject({
+      type: "gloss.cache.clear",
+      version: 1,
+      requestId: message.requestId,
+      source: "options",
       target: "service-worker",
       payload: {}
     });
@@ -59,6 +75,19 @@ describe("extension message envelopes", () => {
       source: "service-worker",
       target: "content-script",
       payload: expect.objectContaining({ settings: expect.objectContaining({ shortcutKey: "Alt" }) })
+    });
+  });
+
+  it("preserves the request id on cache clear responses", () => {
+    const request = createOptionsMessage("gloss.cache.clear", {});
+    const response = createBackgroundResponse(request, "gloss.cache.cleared", {});
+
+    expect(validateBackgroundResponse(response, request)).toMatchObject({
+      type: "gloss.cache.cleared",
+      requestId: request.requestId,
+      source: "service-worker",
+      target: "options",
+      payload: {}
     });
   });
 

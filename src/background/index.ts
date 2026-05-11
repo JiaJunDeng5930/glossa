@@ -5,7 +5,7 @@ import { createGlossResolver } from "./glossResolver";
 import { createBackgroundMessageHandler } from "./messages";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
-import { createGlossPortMessage, MESSAGE_VERSION, validateContentMessage, validateGlossPortInbound } from "../shared/messages";
+import { createBackgroundResponse, createGlossPortMessage, MESSAGE_VERSION, validateGlossPortInbound, validateRuntimeMessage } from "../shared/messages";
 import { createExtensionStorage } from "../storage/db";
 import type { ErrorMessage } from "../shared/types";
 
@@ -21,7 +21,7 @@ const handleMessage = createBackgroundMessageHandler({
 
 chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse) => {
   void (async () => {
-    const message = validateContentMessage(rawMessage);
+    const message = validateRuntimeMessage(rawMessage);
     trace({
       component: "service-worker",
       operation: message.type,
@@ -33,6 +33,13 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
       url: sender.url,
       result: "ok"
     });
+    if (message.type === "gloss.cache.clear") {
+      // @behavior glossa.settings_save.clear_gloss_cache.background_request The service worker clears durable and in-memory translation caches for options-page clear requests.
+      await storage.glossCache.clear();
+      glossResolver.clearMemory();
+      sendResponse(createBackgroundResponse(message, "gloss.cache.cleared", {}));
+      return;
+    }
     sendResponse(await handleMessage(message));
   })().catch((error) => {
     trace({

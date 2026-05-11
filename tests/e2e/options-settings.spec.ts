@@ -64,7 +64,39 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     });
     Reflect.set(window, "chrome", {
       runtime: {
-        lastError: undefined
+        lastError: undefined,
+        sendMessage(message: { type: string; requestId: string; source: string }, callback: (response: unknown) => void) {
+          if (message.type !== "gloss.cache.clear") {
+            callback({
+              type: "error",
+              version: 1,
+              requestId: message.requestId,
+              source: "service-worker",
+              target: message.source,
+              createdAt: Date.now(),
+              payload: { reason: "runtime", message: "unknown message", service: "runtime" }
+            });
+            return;
+          }
+          const request = indexedDB.open("glossa", 2);
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction("glossCache", "readwrite");
+            tx.objectStore("glossCache").clear();
+            tx.oncomplete = () => {
+              db.close();
+              callback({
+                type: "gloss.cache.cleared",
+                version: 1,
+                requestId: message.requestId,
+                source: "service-worker",
+                target: message.source,
+                createdAt: Date.now(),
+                payload: {}
+              });
+            };
+          };
+        }
       },
       storage: {
         local: {

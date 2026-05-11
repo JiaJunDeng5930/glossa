@@ -2,9 +2,10 @@
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey } from "../core/state";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
+import { createOptionsMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
 import { defaultEndpointForProvider, mergeStoredSettings, settingsOverrides, type StoredGlossaSettings } from "../shared/settings";
 import { formatShortcutFromEvent } from "../shared/shortcut";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type ErrorService, type GlossaSettings, type KnownWordListId, type VocabularyRecord } from "../shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type BackgroundResponseMessage, type ErrorService, type GlossaSettings, type KnownWordListId, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import { createExtensionStorage } from "../storage/db";
 
@@ -327,8 +328,42 @@ async function removeKnownWord(record: VocabularyRecord): Promise<void> {
 async function clearGlossCache(): Promise<void> {
   setStatus("");
   // @behavior glossa.settings_save.clear_gloss_cache The options page clears cached translation labels while leaving vocabulary state unchanged.
-  await extensionStorage.glossCache.clear();
+  await runtimeMessage(createOptionsMessage("gloss.cache.clear", {}));
   setStatus("翻译缓存已清空");
+}
+
+function runtimeMessage(message: OptionsToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
+  return new Promise((resolve, reject) => {
+    if (!globalThis.chrome?.runtime?.sendMessage) {
+      reject(new Error("chrome.runtime.sendMessage is unavailable"));
+      return;
+    }
+    const timeout = globalThis.setTimeout(() => {
+      reject(messageTimeoutError(message));
+    }, timeoutMs);
+    chrome.runtime.sendMessage(message, (rawResponse: unknown) => {
+      globalThis.clearTimeout(timeout);
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      try {
+        const response = validateBackgroundResponse(rawResponse, message);
+        if (response.type === "error") {
+          reject(diagnosticErrorFrom(response.payload, {
+            reason: "runtime",
+            message: "Background request failed",
+            service: "runtime"
+          }));
+          return;
+        }
+        resolve(response);
+      } catch (validationError) {
+        reject(validationError);
+      }
+    });
+  });
 }
 
 function populateKnownWordLists(): void {
