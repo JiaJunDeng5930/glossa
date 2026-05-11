@@ -35,8 +35,8 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
     });
     if (message.type === "gloss.cache.clear") {
       // @behavior glossa.settings_save.clear_gloss_cache.background_request The service worker clears durable and in-memory translation caches for options-page clear requests.
-      await storage.glossCache.clear();
       glossResolver.clearMemory();
+      await storage.glossCache.clear();
       sendResponse(createBackgroundResponse(message, "gloss.cache.cleared", {}));
       return;
     }
