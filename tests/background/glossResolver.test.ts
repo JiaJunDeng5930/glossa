@@ -262,6 +262,61 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
+  // @verifies glossa.settings_save.clear_gloss_cache.memory_replay
+  it("removes AI cache writes that finish after clearing begins", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    const originalPut = storage.glossCache.put.bind(storage.glossCache);
+    let putStarted!: () => void;
+    let releasePut!: () => void;
+    const putStartedPromise = new Promise<void>((resolve) => {
+      putStarted = resolve;
+    });
+    const releasePutPromise = new Promise<void>((resolve) => {
+      releasePut = resolve;
+    });
+    storage.glossCache.put = vi.fn(async (key, value) => {
+      putStarted();
+      await releasePutPromise;
+      await originalPut(key, value);
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async () => ({
+        items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 1,
+      aiFrameMaxMs: 1_000,
+      dbReadCoalesceMs: 0
+    });
+    const sentence = "A novel archive appears.";
+    const key = await cacheKey(settings, sentence, "novel", 2, 7);
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const scan = resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: (event) => events.push(event) });
+    await putStartedPromise;
+    await storage.glossCache.clear();
+    resolver.clearMemory();
+    releasePut();
+    await scan;
+
+    expect(events).toEqual([
+      { tokenId: "t-first", status: "pending" },
+      { tokenId: "t-first", status: "hidden" }
+    ]);
+    expect(await storage.glossCache.get(key)).toBeUndefined();
+  });
+
   it("groups cache misses into a size-triggered AI frame", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();

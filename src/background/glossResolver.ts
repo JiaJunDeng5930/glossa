@@ -554,6 +554,12 @@ async function executeFrame(
       const readyItem = rehydrateCachedGloss(item, miss.token);
       try {
         await deps.storage.glossCache.put(miss.dbCacheKey, readyItem);
+        if (miss.cacheEpoch !== deps.getCacheEpoch()) {
+          await deps.storage.glossCache.delete(miss.dbCacheKey);
+          resolveCacheClearedMiss(deps.inFlight, miss, cacheClearedPayload());
+          unresolved.delete(miss);
+          continue;
+        }
         deps.remember(miss.memoryKey, readyItem);
         if (miss.sink.isActive?.() !== false) {
           miss.trackWrite(() => persistShownRecord(deps.storage, miss.token, miss.now));
