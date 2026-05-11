@@ -48,6 +48,7 @@ interface Miss {
   dbCacheKey: string;
   inFlightKey: string;
   inFlight: InFlightGloss;
+  cacheEpoch: number;
   settings: GlossaSettings;
   now: number;
   sink: GlossResolverSink;
@@ -58,6 +59,8 @@ interface Miss {
 interface ReusedMiss {
   token: TokenCandidate;
   inFlight: InFlightGloss;
+  cacheEpoch: number;
+  getCacheEpoch(): number;
   now: number;
   sink: GlossResolverSink;
   emit(payload: Omit<GlossTokenPayload, "scanId">): void;
@@ -93,6 +96,7 @@ interface PendingRead<T> {
 
 interface AiFrame {
   key: string;
+  cacheEpoch: number;
   settings: GlossaSettings;
   misses: Miss[];
   createdAt: number;
@@ -108,6 +112,7 @@ const DEFAULT_AI_FRAME_MAX_MS = 50;
 export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
   const inFlight = new Map<string, InFlightGloss>();
+  let cacheEpoch = 0;
   const maxMemoryEntries = deps.maxMemoryEntries ?? DEFAULT_MAX_MEMORY_ENTRIES;
   const lookupLimit = pLimit(deps.lookupConcurrency ?? DEFAULT_LOOKUP_CONCURRENCY);
   const writeLimit = pLimit(1);
@@ -126,6 +131,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     storage: deps.storage,
     inFlight,
     remember,
+    getCacheEpoch: () => cacheEpoch,
     aiFrameMaxItems: deps.aiFrameMaxItems ?? DEFAULT_AI_FRAME_MAX_ITEMS,
     aiFrameMaxMs: deps.aiFrameMaxMs ?? DEFAULT_AI_FRAME_MAX_MS
   });
@@ -215,6 +221,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 lexiconReads,
                 glossCacheReads,
                 aiOutlet,
+                getCacheEpoch: () => cacheEpoch,
                 sink,
                 emit,
                 track,
@@ -279,9 +286,11 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   };
 
   return {
-    // @behavior glossa.settings_save.clear_gloss_cache.memory_replay Clearing the translation cache clears the resolver replay memory for the current service-worker lifetime.
+    // @behavior glossa.settings_save.clear_gloss_cache.memory_replay Clearing the translation cache clears resolver replay memory and invalidates pre-clear AI cache writes.
     clearMemory() {
+      cacheEpoch += 1;
       memoryCache.clear();
+      aiOutlet.cancelPending(cacheClearedPayload());
     },
     createSession,
     async resolve(pageUrl, sentences, settings, now, sink) {
@@ -305,6 +314,7 @@ async function resolveToken(input: {
   lexiconReads: ReadCoalescer<VocabularyRecord>;
   glossCacheReads: ReadCoalescer<GlossItem>;
   aiOutlet: ReturnType<typeof createAiOutlet>;
+  getCacheEpoch(): number;
   sink: GlossResolverSink;
   emit(payload: Omit<GlossTokenPayload, "scanId">): void;
   track(task: Promise<void>): void;
@@ -314,9 +324,13 @@ async function resolveToken(input: {
     if (input.sink.isActive?.() === false) {
       return;
     }
+    const cacheEpoch = input.getCacheEpoch();
     const cacheKey = await glossCacheKey(input.sentence, input.token);
     const memoryKey = transientMemoryKey(input.pageUrl, cacheKey);
     const memoryCached = input.recall(memoryKey);
+    if (cacheEpoch !== input.getCacheEpoch()) {
+      return;
+    }
     if (memoryCached) {
       const item = rehydrateCachedGloss(memoryCached, input.token);
       input.emit({ tokenId: input.token.id, status: "ready", item });
@@ -325,7 +339,7 @@ async function resolveToken(input: {
     }
 
     const record = await currentRecord(input.lexiconReads, input.deps.storage, input.token, input.now, input.trackWrite);
-    if (input.sink.isActive?.() === false) {
+    if (input.sink.isActive?.() === false || cacheEpoch !== input.getCacheEpoch()) {
       return;
     }
     if (record?.state === "known" || record?.state === "ignored") {
@@ -334,7 +348,7 @@ async function resolveToken(input: {
     }
 
     const cached = await input.glossCacheReads.get(cacheKey);
-    if (input.sink.isActive?.() === false) {
+    if (input.sink.isActive?.() === false || cacheEpoch !== input.getCacheEpoch()) {
       return;
     }
     if (cached) {
@@ -346,12 +360,14 @@ async function resolveToken(input: {
     }
 
     input.emit({ tokenId: input.token.id, status: "pending" });
-    const runtimeKey = aiInFlightKey(input.settings, cacheKey);
+    const runtimeKey = aiInFlightKey(input.settings, cacheKey, cacheEpoch);
     const active = input.inFlight.get(runtimeKey);
     if (active) {
       input.track(emitReusedMiss({
         token: input.token,
         inFlight: active,
+        cacheEpoch,
+        getCacheEpoch: input.getCacheEpoch,
         now: input.now,
         sink: input.sink,
         emit: input.emit,
@@ -369,6 +385,7 @@ async function resolveToken(input: {
       dbCacheKey: cacheKey,
       inFlightKey: runtimeKey,
       inFlight: pending,
+      cacheEpoch,
       settings: input.settings,
       now: input.now,
       sink: input.sink,
@@ -392,6 +409,7 @@ function createAiOutlet(input: {
   storage: ExtensionStorage;
   inFlight: Map<string, InFlightGloss>;
   remember(key: string, item: GlossItem): void;
+  getCacheEpoch(): number;
   aiFrameMaxItems: number;
   aiFrameMaxMs: number;
 }) {
@@ -400,12 +418,13 @@ function createAiOutlet(input: {
 
   const enqueue = (miss: Miss): void => {
     const key = aiFrameKey(miss.settings);
-    if (currentFrame && currentFrame.key !== key) {
+    if (currentFrame && (currentFrame.key !== key || currentFrame.cacheEpoch !== miss.cacheEpoch)) {
       flushFrame("settings-change");
     }
     if (!currentFrame) {
       currentFrame = {
         key,
+        cacheEpoch: miss.cacheEpoch,
         settings: miss.settings,
         misses: [],
         createdAt: nowMs(),
@@ -428,7 +447,19 @@ function createAiOutlet(input: {
     void serialAi(() => executeFrame(input, frame, trigger));
   };
 
-  return { enqueue, flushFrame };
+  const cancelPending = (payload: ErrorPayload): void => {
+    const frame = currentFrame;
+    if (!frame) {
+      return;
+    }
+    currentFrame = undefined;
+    globalThis.clearTimeout(frame.timer);
+    for (const miss of frame.misses) {
+      resolveInFlightMiss(input.inFlight, miss, { ok: false, error: payload });
+    }
+  };
+
+  return { enqueue, flushFrame, cancelPending };
 }
 
 async function executeFrame(
@@ -437,12 +468,30 @@ async function executeFrame(
     storage: ExtensionStorage;
     inFlight: Map<string, InFlightGloss>;
     remember(key: string, item: GlossItem): void;
+    getCacheEpoch(): number;
   },
   frame: AiFrame,
   trigger: string
 ): Promise<void> {
   const queueElapsed = elapsedMs(frame.createdAt);
   const requestStartedAt = nowMs();
+  if (frame.cacheEpoch !== deps.getCacheEpoch()) {
+    resolveStaleFrame(deps.inFlight, frame);
+    trace({
+      component: "service-worker",
+      operation: "service-worker.ai.frame",
+      result: "ok",
+      details: {
+        trigger,
+        items: frame.misses.length,
+        returned: 0,
+        queueMs: queueElapsed,
+        requestMs: 0,
+        writeMs: 0
+      }
+    });
+    return;
+  }
   try {
     const response = await deps.ai.glossFrame({
       settings: frame.settings,
@@ -456,6 +505,11 @@ async function executeFrame(
     for (const item of response.items) {
       const miss = frame.misses.find((candidate) => unresolved.has(candidate) && candidate.token.id === item.tokenId);
       if (!miss) {
+        continue;
+      }
+      if (miss.cacheEpoch !== deps.getCacheEpoch()) {
+        resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: cacheClearedPayload() });
+        unresolved.delete(miss);
         continue;
       }
       const readyItem = rehydrateCachedGloss(item, miss.token);
@@ -482,6 +536,10 @@ async function executeFrame(
     }
     for (const miss of frame.misses) {
       if (!unresolved.has(miss)) {
+        continue;
+      }
+      if (miss.cacheEpoch !== deps.getCacheEpoch()) {
+        resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: cacheClearedPayload() });
         continue;
       }
       const payload: ErrorPayload = {
@@ -640,7 +698,7 @@ async function emitReusedMiss(
     return;
   }
   const result = await miss.inFlight.promise;
-  if (miss.sink.isActive?.() === false) {
+  if (miss.sink.isActive?.() === false || miss.cacheEpoch !== miss.getCacheEpoch()) {
     return;
   }
   if (result.ok) {
@@ -702,8 +760,8 @@ function transientMemoryKey(pageUrl: string, cacheKey: string): string {
   return `${pageUrl}::${cacheKey}`;
 }
 
-function aiInFlightKey(settings: GlossaSettings, cacheKey: string): string {
-  return `${aiFrameKey(settings)}\n${cacheKey}`;
+function aiInFlightKey(settings: GlossaSettings, cacheKey: string, cacheEpoch: number): string {
+  return `${aiFrameKey(settings)}\n${cacheKey}\n${cacheEpoch}`;
 }
 
 // @constraint glossa.ai_requests.failure.timeout.live_grouping Concurrent gloss AI request grouping includes the configured AI timeout so overlapping scans use their own transport budgets.
@@ -735,4 +793,19 @@ function hashSmall(value: string): string {
     hash = Math.imul(hash, 0x01000193);
   }
   return (hash >>> 0).toString(16);
+}
+
+function resolveStaleFrame(inFlight: Map<string, InFlightGloss>, frame: AiFrame): void {
+  const payload = cacheClearedPayload();
+  for (const miss of frame.misses) {
+    resolveInFlightMiss(inFlight, miss, { ok: false, error: payload });
+  }
+}
+
+function cacheClearedPayload(): ErrorPayload {
+  return {
+    reason: "runtime",
+    message: "Gloss cache was cleared",
+    service: "runtime"
+  };
 }

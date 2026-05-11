@@ -62,42 +62,49 @@ test("options page captures shortcuts, previews style changes and saves prompts"
         headers: { "content-type": "application/json" }
       });
     });
-    Reflect.set(window, "chrome", {
-      runtime: {
-        lastError: undefined,
-        sendMessage(message: { type: string; requestId: string; source: string }, callback: (response: unknown) => void) {
-          if (message.type !== "gloss.cache.clear") {
+    const runtimeApi: { lastError: { message: string } | undefined; sendMessage(message: { type: string; requestId: string; source: string }, callback: (response: unknown) => void): void } = {
+      lastError: undefined,
+      sendMessage(message, callback) {
+        if (Reflect.get(window, "__glossaFailCacheClear")) {
+          runtimeApi.lastError = { message: "cache clear failed" };
+          callback(undefined);
+          runtimeApi.lastError = undefined;
+          return;
+        }
+        if (message.type !== "gloss.cache.clear") {
+          callback({
+            type: "error",
+            version: 1,
+            requestId: message.requestId,
+            source: "service-worker",
+            target: message.source,
+            createdAt: Date.now(),
+            payload: { reason: "runtime", message: "unknown message", service: "runtime" }
+          });
+          return;
+        }
+        const request = indexedDB.open("glossa", 2);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction("glossCache", "readwrite");
+          tx.objectStore("glossCache").clear();
+          tx.oncomplete = () => {
+            db.close();
             callback({
-              type: "error",
+              type: "gloss.cache.cleared",
               version: 1,
               requestId: message.requestId,
               source: "service-worker",
               target: message.source,
               createdAt: Date.now(),
-              payload: { reason: "runtime", message: "unknown message", service: "runtime" }
+              payload: {}
             });
-            return;
-          }
-          const request = indexedDB.open("glossa", 2);
-          request.onsuccess = () => {
-            const db = request.result;
-            const tx = db.transaction("glossCache", "readwrite");
-            tx.objectStore("glossCache").clear();
-            tx.oncomplete = () => {
-              db.close();
-              callback({
-                type: "gloss.cache.cleared",
-                version: 1,
-                requestId: message.requestId,
-                source: "service-worker",
-                target: message.source,
-                createdAt: Date.now(),
-                payload: {}
-              });
-            };
           };
-        }
-      },
+        };
+      }
+    };
+    Reflect.set(window, "chrome", {
+      runtime: runtimeApi,
       storage: {
         local: {
           get(key: string, callback: (result: Record<string, unknown>) => void) {
@@ -271,6 +278,10 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       request.onerror = () => reject(request.error);
     });
   })).toBe(0);
+  await page.evaluate(() => Reflect.set(window, "__glossaFailCacheClear", true));
+  await page.locator("#clear-gloss-cache").click();
+  await expect(page.locator("#status")).toHaveText("扩展运行时错误");
+  await page.evaluate(() => Reflect.set(window, "__glossaFailCacheClear", false));
 
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
   await expect(page.locator("#translate-shortcut-capture")).toHaveText("Alt+G");

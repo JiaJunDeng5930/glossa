@@ -133,6 +133,47 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
   });
 
+  // @verifies glossa.settings_save.clear_gloss_cache.memory_replay
+  it("blocks in-flight AI results from repopulating caches after clearing", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    let resolveAi!: (response: { items: GlossItem[] }) => void;
+    const aiResponse = new Promise<{ items: GlossItem[] }>((resolve) => {
+      resolveAi = resolve;
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(() => aiResponse),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 1,
+      aiFrameMaxMs: 1_000
+    });
+    const sentence = "A novel archive appears.";
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const key = await cacheKey(settings, sentence, "novel", 2, 7);
+
+    const scan = resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: (event) => events.push(event) });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+    await storage.glossCache.clear();
+    resolver.clearMemory();
+    resolveAi({
+      items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
+    });
+    await scan;
+
+    expect(events).toEqual([{ tokenId: "t-first", status: "pending" }]);
+    expect(await storage.glossCache.get(key)).toBeUndefined();
+  });
+
   it("groups cache misses into a size-triggered AI frame", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();

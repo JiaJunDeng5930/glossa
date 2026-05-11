@@ -328,8 +328,16 @@ async function removeKnownWord(record: VocabularyRecord): Promise<void> {
 async function clearGlossCache(): Promise<void> {
   setStatus("");
   // @behavior glossa.settings_save.clear_gloss_cache The options page clears cached translation labels while leaving vocabulary state unchanged.
-  await runtimeMessage(createOptionsMessage("gloss.cache.clear", {}));
-  setStatus("翻译缓存已清空");
+  try {
+    await runtimeMessage(createOptionsMessage("gloss.cache.clear", {}));
+    setStatus("翻译缓存已清空");
+  } catch (error) {
+    setStatus(userMessageForError(diagnosticErrorFrom(error, {
+      reason: "runtime",
+      message: "Gloss cache clear failed",
+      service: "runtime"
+    }).payload, "runtime"));
+  }
 }
 
 function runtimeMessage(message: OptionsToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
