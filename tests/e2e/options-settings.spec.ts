@@ -20,6 +20,7 @@ import { resolve } from "node:path";
 // @verifies glossa.word_memory.known_management.store_read
 // @verifies glossa.word_memory.known_management.preserve_card_history_add
 // @verifies glossa.word_memory.known_management.preserve_card_history_remove
+// @verifies glossa.word_memory.known_management.clear_known
 // @verifies glossa.extension_storage.typed_access.key_value_delete
 // @verifies glossa.extension_storage.typed_access.key_value_clear
 // @verifies glossa.extension_storage.typed_access.lexicon_delete
@@ -159,6 +160,17 @@ test("options page captures shortcuts, previews style changes and saves prompts"
           lastClickedAt: 777,
           ankiNoteIds: [99]
         }, "en:legacy");
+        tx.objectStore("lexicon").put({
+          key: "en:vector",
+          lemma: "vector",
+          surface: "vector",
+          lang: "en",
+          state: "known",
+          shownCount: 1,
+          clickCount: 1,
+          lastClickedAt: 888,
+          ankiNoteIds: [100]
+        }, "en:vector");
         tx.objectStore("glossCache").put({
           tokenId: "cached-token",
           targetText: "cached",
@@ -212,11 +224,17 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
   await page.getByRole("button", { name: "重置释义提示词" }).click();
-  await expect(page.locator("textarea[name=glossPrompt]")).toHaveValue("只把每个陌生英文单词或短语在当前语境中的意思翻译成简体中文。返回适合显示在原词上方的简短行内标签。");
+  await expect(page.locator("textarea[name=glossPrompt]")).toHaveValue("Translate each unfamiliar English word or phrase into Simplified Chinese for its current context. Return a short inline label that fits above the source word.");
   await page.getByRole("button", { name: "重置 Anki 卡片提示词" }).click();
-  await expect(page.locator("textarea[name=ankiPrompt]")).toHaveValue("为点击的英文单词制作 Anki 卡片。正面写目标词汇在对应含义下的例句，并加粗目标词汇；背面写这个词汇在当前语境中的简体中文翻译。");
+  await expect(page.locator("textarea[name=ankiPrompt]")).toHaveValue("Create Anki cards for the clicked English word. Put an example sentence for the target sense on the front and bold the target word. Put the Simplified Chinese translation for the current context on the back.");
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
+  await expect(page.locator("#known-words-summary")).toHaveText("共 3 个已掌握词汇。");
+  await page.locator("#open-known-words").click();
+  await expect(page.locator("#known-words-dialog")).toBeVisible();
+  await expect(page.locator("#known-words-nav button")).toHaveCount(26);
+  await page.locator("#known-words-nav button", { hasText: "L" }).click();
+  await expect(page.locator("#known-words-l")).toBeInViewport();
   await expect(page.locator("#known-words-list")).toContainText("archive");
   await page.locator(".known-word-row", { hasText: "archive" }).getByRole("button", { name: "移除" }).click();
   await expect(page.locator("#known-words-list")).not.toContainText("archive");
@@ -260,6 +278,27 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("#known-word-input").fill("calibrate");
   await page.locator("#add-known-word").click();
   await expect(page.locator("#known-words-list")).toContainText("calibrate");
+  await page.locator("#clear-known-words").click();
+  await expect(page.locator("#known-words-summary")).toHaveText("当前没有已掌握词汇。");
+  await expect(page.locator("#known-words-list")).not.toContainText("calibrate");
+  expect(await page.evaluate(async () => {
+    return await new Promise<unknown>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction(["lexicon", "cardedWords"], "readonly");
+        const calibrateRequest = tx.objectStore("lexicon").get("en:calibrate");
+        const vectorRequest = tx.objectStore("cardedWords").get("en:vector");
+        tx.oncomplete = () => {
+          db.close();
+          resolve({ calibrate: calibrateRequest.result, vector: vectorRequest.result });
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  })).toMatchObject({ vector: { key: "en:vector", lemma: "vector", createdAt: 888 } });
+  await page.locator("#close-known-words").click();
   await page.locator("#clear-gloss-cache").click();
   await expect(page.locator("#status")).toHaveText("翻译缓存已清空");
   expect(await page.evaluate(async () => {
@@ -382,16 +421,16 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       request.onsuccess = () => {
         const db = request.result;
         const tx = db.transaction("lexicon", "readonly");
-        const getRequest = tx.objectStore("lexicon").get("en:calibrate");
-        getRequest.onsuccess = () => {
+        const countRequest = tx.objectStore("lexicon").count();
+        countRequest.onsuccess = () => {
           db.close();
-          resolve(getRequest.result);
+          resolve(countRequest.result);
         };
-        getRequest.onerror = () => reject(getRequest.error);
+        countRequest.onerror = () => reject(countRequest.error);
       };
       request.onerror = () => reject(request.error);
     });
-  })).toMatchObject({ lemma: "calibrate", state: "known" });
+  })).toBe(0);
 });
 
 // @verifies glossa.settings_save

@@ -49,15 +49,8 @@
         </section>
         <section class="settings-card" aria-labelledby="known-words-heading">
           <h2 id="known-words-heading">已掌握词汇</h2>
-          <div class="known-word-tools">
-            <label>
-              添加词汇
-              <span class="field-help">加入后这个词会按 known 状态处理。</span>
-              <input id="known-word-input" name="knownWordInput" autocomplete="off">
-            </label>
-            <button id="add-known-word" class="secondary" type="button">添加</button>
-          </div>
-          <div id="known-words-list" class="known-words-list" role="list"></div>
+          <p id="known-words-summary" class="field-help">正在读取已掌握词汇。</p>
+          <button id="open-known-words" class="secondary" type="button">管理词汇</button>
         </section>
         <section class="settings-card" aria-labelledby="appearance-heading">
           <h2 id="appearance-heading">释义样式</h2>
@@ -261,6 +254,32 @@
         </div>
       </form>
       <output id="status" role="status"></output>
+      <dialog id="known-words-dialog" class="known-words-dialog" aria-labelledby="known-words-dialog-heading">
+        <div class="known-words-dialog-header">
+          <div>
+            <p class="dialog-kicker">Glossa</p>
+            <h2 id="known-words-dialog-heading">已掌握词汇</h2>
+          </div>
+          <button id="close-known-words" class="icon-button" type="button" aria-label="关闭已掌握词汇" title="关闭已掌握词汇">
+            <svg class="test-icon close-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="known-word-tools">
+          <label>
+            添加词汇
+            <span class="field-help">加入后这个词会按 known 状态处理。</span>
+            <input id="known-word-input" autocomplete="off">
+          </label>
+          <button id="add-known-word" class="secondary" type="button">添加</button>
+          <button id="clear-known-words" class="secondary danger-action" type="button">清空已掌握词汇</button>
+        </div>
+        <div class="known-words-browser">
+          <nav id="known-words-nav" class="known-words-nav" aria-label="已掌握词汇字母索引"></nav>
+          <div id="known-words-list" class="known-words-list" role="list"></div>
+        </div>
+      </dialog>
     </main>
     <script type="module" src="../options.js"></script>
   </body>

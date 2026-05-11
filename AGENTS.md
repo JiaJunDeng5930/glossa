@@ -34,7 +34,7 @@ Structured diagnostics use `src/shared/diagnostics.ts`. Trace events include com
 
 Runtime error payloads are diagnostic data: `reason`, `message`, optional `service`, and optional `status`. Background code reports diagnostic facts through message and port payloads. Frontend code maps those diagnostics to user-facing text through `src/shared/userMessages.ts`; inline page UI keeps the `×` badge and exposes the text through title and aria-label.
 
-Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip. Extra filter presets cover CET-4, CET-6, TOEFL, GRE, and COCA 20000. The options page also lists lexicon records whose state is `known` and lets the user add or remove those records manually.
+Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip. Extra filter presets cover CET-4, CET-6, TOEFL, GRE, and COCA 20000. The options page opens known lexicon records in a dialog grouped by first letter and lets the user add, remove, or clear those records manually.
 
 The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no shadows, and a single blue Save action. Connection test buttons are text buttons placed directly below Reasoning effort and Anki deck.
 
@@ -203,8 +203,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.shortcuts|glossa.shortcuts.{}
 |glossa.translation_start_popup|glossa.translation_start_popup.{}
 |glossa.word_memory|glossa.word_memory.{known_management,known_word_filter,learning_lifecycle}
-|glossa.word_memory.known_management|glossa.word_memory.known_management.{add_known,preserve_card_history_add,preserve_card_history_remove,store_listing,store_read}
+|glossa.word_memory.known_management|glossa.word_memory.known_management.{add_known,clear_known,preserve_card_history_add,preserve_card_history_remove,store_listing,store_read}
 |glossa.word_memory.known_management.add_known|glossa.word_memory.known_management.add_known.{}
+|glossa.word_memory.known_management.clear_known|glossa.word_memory.known_management.clear_known.{}
 |glossa.word_memory.known_management.preserve_card_history_add|glossa.word_memory.known_management.preserve_card_history_add.{}
 |glossa.word_memory.known_management.preserve_card_history_remove|glossa.word_memory.known_management.preserve_card_history_remove.{}
 |glossa.word_memory.known_management.store_listing|glossa.word_memory.known_management.store_listing.{}

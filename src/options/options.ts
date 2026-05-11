@@ -27,13 +27,21 @@ const refreshAnkiButton = document.querySelector<HTMLButtonElement>("#refresh-an
 const resetGlossPromptButton = document.querySelector<HTMLButtonElement>("#reset-gloss-prompt")!;
 const resetAnkiPromptButton = document.querySelector<HTMLButtonElement>("#reset-anki-prompt")!;
 const clearGlossCacheButton = document.querySelector<HTMLButtonElement>("#clear-gloss-cache")!;
+const openKnownWordsButton = document.querySelector<HTMLButtonElement>("#open-known-words")!;
+const closeKnownWordsButton = document.querySelector<HTMLButtonElement>("#close-known-words")!;
+const clearKnownWordsButton = document.querySelector<HTMLButtonElement>("#clear-known-words")!;
+const knownWordsDialog = document.querySelector<HTMLDialogElement>("#known-words-dialog")!;
+const knownWordsSummary = document.querySelector<HTMLElement>("#known-words-summary")!;
+const knownWordsNav = document.querySelector<HTMLElement>("#known-words-nav")!;
 const knownWordInput = document.querySelector<HTMLInputElement>("#known-word-input")!;
 const addKnownWordButton = document.querySelector<HTMLButtonElement>("#add-known-word")!;
 const knownWordsList = document.querySelector<HTMLElement>("#known-words-list")!;
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 let capturingShortcutName: "shortcutKey" | "translateShortcutKey" | undefined;
 let pendingShortcut = "";
 
 populateKnownWordLists();
+populateKnownWordsNav();
 void loadSettings();
 
 form.addEventListener("submit", (event) => {
@@ -66,8 +74,29 @@ clearGlossCacheButton.addEventListener("click", () => {
   void clearGlossCache();
 });
 
+openKnownWordsButton.addEventListener("click", () => {
+  knownWordsDialog.showModal();
+  void refreshKnownWords();
+});
+
+closeKnownWordsButton.addEventListener("click", () => {
+  knownWordsDialog.close();
+});
+
 addKnownWordButton.addEventListener("click", () => {
   void addKnownWord();
+});
+
+clearKnownWordsButton.addEventListener("click", () => {
+  void clearKnownWords();
+});
+
+knownWordsNav.addEventListener("click", (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>("button[data-letter]");
+  if (!button?.dataset.letter) {
+    return;
+  }
+  document.querySelector<HTMLElement>(`#known-words-${button.dataset.letter}`)?.scrollIntoView({ block: "start" });
 });
 
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
@@ -286,14 +315,35 @@ async function addKnownWord(): Promise<void> {
 }
 
 function renderKnownWords(records: VocabularyRecord[]): void {
+  knownWordsSummary.textContent = records.length > 0 ? `共 ${records.length} 个已掌握词汇。` : "当前没有已掌握词汇。";
+  clearKnownWordsButton.disabled = records.length === 0;
+  const groups = new Map<string, VocabularyRecord[]>();
+  for (const letter of ALPHABET) {
+    groups.set(letter, []);
+  }
+  for (const record of records) {
+    const initial = record.lemma.charAt(0).toLowerCase();
+    const letter = ALPHABET.includes(initial) ? initial : "z";
+    groups.get(letter)?.push(record);
+  }
+  knownWordsList.replaceChildren(...ALPHABET.map((letter) => renderKnownWordsSection(letter, groups.get(letter) ?? [])));
+}
+
+function renderKnownWordsSection(letter: string, records: VocabularyRecord[]): HTMLElement {
+  const section = document.createElement("section");
+  section.id = `known-words-${letter}`;
+  section.className = "known-words-section";
+  const heading = document.createElement("h3");
+  heading.textContent = letter.toUpperCase();
+  section.append(heading);
   if (records.length === 0) {
     const empty = document.createElement("p");
     empty.className = "field-help";
-    empty.textContent = "当前没有手动记录的 known 词汇。";
-    knownWordsList.replaceChildren(empty);
-    return;
+    empty.textContent = "暂无词汇";
+    section.append(empty);
+    return section;
   }
-  knownWordsList.replaceChildren(...records.map((record) => {
+  section.append(...records.map((record) => {
     const row = document.createElement("div");
     row.className = "known-word-row";
     row.setAttribute("role", "listitem");
@@ -308,10 +358,28 @@ function renderKnownWords(records: VocabularyRecord[]): void {
     row.append(word, remove);
     return row;
   }));
+  return section;
 }
 
 // @behavior glossa.word_memory.known_management.preserve_card_history_remove Removing a known word preserves existing Anki note history in the carded-word store.
 async function removeKnownWord(record: VocabularyRecord): Promise<void> {
+  const key = vocabularyKey(record.lang, record.lemma);
+  await preserveCardHistory(record);
+  await extensionStorage.lexicon.delete(key);
+  await refreshKnownWords();
+}
+
+// @behavior glossa.word_memory.known_management.clear_known Clearing known words deletes every known lexicon record while preserving existing Anki note history.
+async function clearKnownWords(): Promise<void> {
+  const records = await extensionStorage.lexicon.listByState("known");
+  await Promise.all(records.map(async (record) => {
+    await preserveCardHistory(record);
+    await extensionStorage.lexicon.delete(vocabularyKey(record.lang, record.lemma));
+  }));
+  await refreshKnownWords();
+}
+
+async function preserveCardHistory(record: VocabularyRecord): Promise<void> {
   const key = vocabularyKey(record.lang, record.lemma);
   if (record.ankiNoteIds.length > 0) {
     await extensionStorage.cardedWords.put(key, {
@@ -321,8 +389,6 @@ async function removeKnownWord(record: VocabularyRecord): Promise<void> {
       createdAt: record.lastClickedAt ?? record.lastShownAt ?? Date.now()
     });
   }
-  await extensionStorage.lexicon.delete(key);
-  await refreshKnownWords();
 }
 
 async function clearGlossCache(): Promise<void> {
@@ -380,6 +446,16 @@ function populateKnownWordLists(): void {
     option.value = list.id;
     option.textContent = list.label;
     return option;
+  }));
+}
+
+function populateKnownWordsNav(): void {
+  knownWordsNav.replaceChildren(...ALPHABET.map((letter) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.letter = letter;
+    button.textContent = letter.toUpperCase();
+    return button;
   }));
 }
 

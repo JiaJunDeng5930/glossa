@@ -281,8 +281,8 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
     fontSize: 11
   },
   prompts: {
-    gloss: "只把每个陌生英文单词或短语在当前语境中的意思翻译成简体中文。返回适合显示在原词上方的简短行内标签。",
-    ankiCard: "为点击的英文单词制作 Anki 卡片。正面写目标词汇在对应含义下的例句，并加粗目标词汇；背面写这个词汇在当前语境中的简体中文翻译。"
+    gloss: "Translate each unfamiliar English word or phrase into Simplified Chinese for its current context. Return a short inline label that fits above the source word.",
+    ankiCard: "Create Anki cards for the clicked English word. Put an example sentence for the target sense on the front and bold the target word. Put the Simplified Chinese translation for the current context on the back."
   },
   ai: {
     provider: "openai-responses",
