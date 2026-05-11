@@ -23,7 +23,7 @@ export type StoredGlossaSettings = Partial<Omit<GlossaSettings, "appearance" | "
 
 // @behavior glossa.settings_save.default_overrides.merge Saved settings merge with the current defaults at read time so default updates reach unchanged fields.
 export function mergeStoredSettings(value: StoredGlossaSettings | undefined): GlossaSettings {
-  const stored = normalizeStoredSettings(value);
+  const stored = value;
   const provider = stored?.ai?.provider ?? DEFAULT_SETTINGS.ai.provider;
   const endpoint = stored?.ai && "endpoint" in stored.ai ? stored.ai.endpoint : defaultEndpointForProvider(provider);
   return {
@@ -118,25 +118,6 @@ function assignIfChanged<T extends keyof StoredGlossaSettings>(
 
 function hasKeys(value: object): boolean {
   return Object.keys(value).length > 0;
-}
-
-// @behavior glossa.settings_save.default_overrides.legacy_full Legacy full settings snapshots are reduced to default-diff overrides before merging with current defaults.
-export function normalizeStoredSettings(value: StoredGlossaSettings | undefined): StoredGlossaSettings | undefined {
-  if (isLegacyFullSettings(value)) {
-    return settingsOverrides(value);
-  }
-  return value;
-}
-
-function isLegacyFullSettings(value: StoredGlossaSettings | undefined): value is GlossaSettings {
-  return Boolean(value?.appearance && value.prompts && value.ai && value.anki &&
-    "shortcutKey" in value &&
-    "translateShortcutKey" in value &&
-    "autoTranslateEnabled" in value &&
-    "learningWindowDays" in value &&
-    "knownWordList" in value &&
-    "promptVersion" in value &&
-    "modelVersion" in value);
 }
 
 function isKnownWordList(value: unknown): value is KnownWordListId {
