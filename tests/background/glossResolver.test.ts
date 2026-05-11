@@ -170,7 +170,10 @@ describe("gloss resolver lookup-first pipeline", () => {
     });
     await scan;
 
-    expect(events).toEqual([{ tokenId: "t-first", status: "pending" }]);
+    expect(events).toEqual([
+      { tokenId: "t-first", status: "pending" },
+      { tokenId: "t-first", status: "hidden" }
+    ]);
     expect(await storage.glossCache.get(key)).toBeUndefined();
   });
 
@@ -208,7 +211,10 @@ describe("gloss resolver lookup-first pipeline", () => {
     rejectAi(new Error("backend unavailable"));
     await scan;
 
-    expect(events).toEqual([{ tokenId: "t-first", status: "pending" }]);
+    expect(events).toEqual([
+      { tokenId: "t-first", status: "pending" },
+      { tokenId: "t-first", status: "hidden" }
+    ]);
   });
 
   // @verifies glossa.settings_save.clear_gloss_cache.memory_replay

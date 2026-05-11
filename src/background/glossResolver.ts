@@ -494,7 +494,7 @@ function createAiOutlet(input: {
     currentFrame = undefined;
     globalThis.clearTimeout(frame.timer);
     for (const miss of frame.misses) {
-      resolveInFlightMiss(input.inFlight, miss, { ok: false, error: payload });
+      resolveCacheClearedMiss(input.inFlight, miss, payload);
     }
   };
 
@@ -547,7 +547,7 @@ async function executeFrame(
         continue;
       }
       if (miss.cacheEpoch !== deps.getCacheEpoch()) {
-        resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: cacheClearedPayload() });
+        resolveCacheClearedMiss(deps.inFlight, miss, cacheClearedPayload());
         unresolved.delete(miss);
         continue;
       }
@@ -578,7 +578,7 @@ async function executeFrame(
         continue;
       }
       if (miss.cacheEpoch !== deps.getCacheEpoch()) {
-        resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: cacheClearedPayload() });
+        resolveCacheClearedMiss(deps.inFlight, miss, cacheClearedPayload());
         continue;
       }
       const payload: ErrorPayload = {
@@ -612,7 +612,7 @@ async function executeFrame(
     });
     for (const miss of frame.misses) {
       if (miss.cacheEpoch !== deps.getCacheEpoch()) {
-        resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: cacheClearedPayload() });
+        resolveCacheClearedMiss(deps.inFlight, miss, cacheClearedPayload());
         continue;
       }
       resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: payload });
@@ -741,7 +741,11 @@ async function emitReusedMiss(
     return;
   }
   const result = await miss.inFlight.promise;
-  if (miss.sink.isActive?.() === false || miss.cacheEpoch !== miss.getCacheEpoch()) {
+  if (miss.sink.isActive?.() === false) {
+    return;
+  }
+  if (miss.cacheEpoch !== miss.getCacheEpoch()) {
+    miss.emit({ tokenId: miss.token.id, status: "hidden" });
     return;
   }
   if (result.ok) {
@@ -841,7 +845,7 @@ function hashSmall(value: string): string {
 function resolveStaleFrame(inFlight: Map<string, InFlightGloss>, frame: AiFrame): void {
   const payload = cacheClearedPayload();
   for (const miss of frame.misses) {
-    resolveInFlightMiss(inFlight, miss, { ok: false, error: payload });
+    resolveCacheClearedMiss(inFlight, miss, payload);
   }
 }
 
@@ -851,4 +855,11 @@ function cacheClearedPayload(): ErrorPayload {
     message: "Gloss cache was cleared",
     service: "runtime"
   };
+}
+
+function resolveCacheClearedMiss(inFlight: Map<string, InFlightGloss>, miss: Miss, payload: ErrorPayload): void {
+  resolveInFlightMiss(inFlight, miss, { ok: false, error: payload });
+  if (miss.sink.isActive?.() !== false) {
+    miss.emit({ tokenId: miss.token.id, status: "hidden" });
+  }
 }
