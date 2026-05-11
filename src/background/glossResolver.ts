@@ -18,6 +18,7 @@ import { GLOSS_TARGET_LANG } from "../shared/types";
 export interface GlossResolver {
   resolve(pageUrl: string, sentences: SentenceCandidate[], settings: GlossaSettings, now: number, sink: GlossResolverSink): Promise<void>;
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
+  beginCacheClear(): () => void;
   clearMemory(): void;
 }
 
@@ -113,6 +114,9 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
   const inFlight = new Map<string, InFlightGloss>();
   let cacheEpoch = 0;
+  let activeCacheClears = 0;
+  let cacheClearBarrier: Promise<void> | undefined;
+  let resolveCacheClearBarrier: (() => void) | undefined;
   const maxMemoryEntries = deps.maxMemoryEntries ?? DEFAULT_MAX_MEMORY_ENTRIES;
   const lookupLimit = pLimit(deps.lookupConcurrency ?? DEFAULT_LOOKUP_CONCURRENCY);
   const writeLimit = pLimit(1);
@@ -155,6 +159,16 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     }
     remember(key, item);
     return item;
+  }
+
+  function clearVolatileCacheState(): void {
+    cacheEpoch += 1;
+    memoryCache.clear();
+    aiOutlet.cancelPending(cacheClearedPayload());
+  }
+
+  function waitForCacheClear(): Promise<void> {
+    return cacheClearBarrier ?? Promise.resolve();
   }
 
   const createSession = (pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession => {
@@ -222,6 +236,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 glossCacheReads,
                 aiOutlet,
                 getCacheEpoch: () => cacheEpoch,
+                waitForCacheClear,
                 sink,
                 emit,
                 track,
@@ -286,11 +301,32 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   };
 
   return {
+    beginCacheClear() {
+      clearVolatileCacheState();
+      activeCacheClears += 1;
+      if (!cacheClearBarrier) {
+        cacheClearBarrier = new Promise<void>((resolve) => {
+          resolveCacheClearBarrier = resolve;
+        });
+      }
+      let ended = false;
+      return () => {
+        if (ended) {
+          return;
+        }
+        ended = true;
+        clearVolatileCacheState();
+        activeCacheClears -= 1;
+        if (activeCacheClears === 0) {
+          resolveCacheClearBarrier?.();
+          cacheClearBarrier = undefined;
+          resolveCacheClearBarrier = undefined;
+        }
+      };
+    },
     // @behavior glossa.settings_save.clear_gloss_cache.memory_replay Clearing the translation cache clears resolver replay memory and invalidates pre-clear AI cache writes.
     clearMemory() {
-      cacheEpoch += 1;
-      memoryCache.clear();
-      aiOutlet.cancelPending(cacheClearedPayload());
+      clearVolatileCacheState();
     },
     createSession,
     async resolve(pageUrl, sentences, settings, now, sink) {
@@ -315,6 +351,7 @@ async function resolveToken(input: {
   glossCacheReads: ReadCoalescer<GlossItem>;
   aiOutlet: ReturnType<typeof createAiOutlet>;
   getCacheEpoch(): number;
+  waitForCacheClear(): Promise<void>;
   sink: GlossResolverSink;
   emit(payload: Omit<GlossTokenPayload, "scanId">): void;
   track(task: Promise<void>): void;
@@ -324,8 +361,10 @@ async function resolveToken(input: {
     if (input.sink.isActive?.() === false) {
       return;
     }
-    const cacheEpoch = input.getCacheEpoch();
+    let cacheEpoch = input.getCacheEpoch();
     const cacheKey = await glossCacheKey(input.sentence, input.token);
+    await input.waitForCacheClear();
+    cacheEpoch = input.getCacheEpoch();
     const memoryKey = transientMemoryKey(input.pageUrl, cacheKey);
     const memoryCached = input.recall(memoryKey);
     if (cacheEpoch !== input.getCacheEpoch()) {

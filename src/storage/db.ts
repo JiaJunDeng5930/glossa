@@ -1,7 +1,7 @@
 // @intent glossa.extension_storage Settings, vocabulary records, gloss cache entries, card cache entries, and carded-word records stay inside extension-owned storage.
 // @constraint glossa.extension_storage.typed_access Settings, lexicon, cache, and carded-word storage use one typed asynchronous access contract.
 import type { AnkiCardOutput, CardedWordRecord, GlossaSettings, GlossItem, VocabularyRecord, VocabularyState } from "../shared/types";
-import { mergeStoredSettings, type StoredGlossaSettings } from "../shared/settings";
+import { mergeStoredSettings, normalizeStoredSettings, settingsOverrides, type StoredGlossaSettings } from "../shared/settings";
 
 export interface KeyValueStore<T> {
   get(key: string): Promise<T | undefined>;
@@ -54,10 +54,15 @@ function createChromeSettingsStore(): SettingsStore {
   return {
     async get() {
       const runtimeSettings = await readChromeLocal<StoredGlossaSettings>("settings");
-      return mergeStoredSettings(runtimeSettings);
+      const normalized = normalizeStoredSettings(runtimeSettings);
+      if (runtimeSettings && normalized !== runtimeSettings) {
+        // @behavior glossa.settings_save.default_overrides.legacy_full.persist Persisting a normalized legacy settings snapshot prevents old defaults from becoming future overrides.
+        await writeChromeLocal("settings", normalized ?? {});
+      }
+      return mergeStoredSettings(normalized);
     },
     async set(value) {
-      await writeChromeLocal("settings", value);
+      await writeChromeLocal("settings", settingsOverrides(value));
     }
   };
 }

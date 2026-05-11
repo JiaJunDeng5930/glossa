@@ -211,6 +211,51 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(events).toEqual([{ tokenId: "t-first", status: "pending" }]);
   });
 
+  // @verifies glossa.settings_save.clear_gloss_cache.memory_replay
+  it("holds cache reads while durable cache clearing is active", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    const sentence = "A novel archive appears.";
+    await storage.glossCache.put(await cacheKey(settings, sentence, "novel", 2, 7), {
+      tokenId: "old",
+      targetText: "novel",
+      display: "旧缓存"
+    });
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async () => ({
+        items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({
+      storage,
+      ai,
+      aiFrameMaxItems: 1,
+      aiFrameMaxMs: 1_000,
+      dbReadCoalesceMs: 0
+    });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const finishClear = resolver.beginCacheClear();
+
+    const scan = resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: (event) => events.push(event) });
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
+    await storage.glossCache.clear();
+    expect(events).toEqual([]);
+    finishClear();
+    await scan;
+
+    expect(events).toEqual([
+      { tokenId: "t-first", status: "pending" },
+      { tokenId: "t-first", status: "ready", item: { tokenId: "t-first", targetText: "novel", display: "新词" } }
+    ]);
+  });
+
   it("groups cache misses into a size-triggered AI frame", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();

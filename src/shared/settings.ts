@@ -121,7 +121,7 @@ function hasKeys(value: object): boolean {
 }
 
 // @behavior glossa.settings_save.default_overrides.legacy_full Legacy full settings snapshots are reduced to default-diff overrides before merging with current defaults.
-function normalizeStoredSettings(value: StoredGlossaSettings | undefined): StoredGlossaSettings | undefined {
+export function normalizeStoredSettings(value: StoredGlossaSettings | undefined): StoredGlossaSettings | undefined {
   if (isLegacyFullSettings(value)) {
     return settingsOverrides(value);
   }

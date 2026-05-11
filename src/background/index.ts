@@ -7,7 +7,7 @@ import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createBackgroundResponse, createGlossPortMessage, MESSAGE_VERSION, validateGlossPortInbound, validateRuntimeMessage } from "../shared/messages";
 import { createExtensionStorage } from "../storage/db";
-import type { ErrorMessage } from "../shared/types";
+import type { ErrorMessage, MessageSource, OptionsErrorMessage } from "../shared/types";
 
 const storage = createExtensionStorage();
 const ai = createAiBackend();
@@ -35,9 +35,12 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
     });
     if (message.type === "gloss.cache.clear") {
       // @behavior glossa.settings_save.clear_gloss_cache.background_request The service worker clears durable and in-memory translation caches for options-page clear requests.
-      glossResolver.clearMemory();
-      await storage.glossCache.clear();
-      glossResolver.clearMemory();
+      const finishCacheClear = glossResolver.beginCacheClear();
+      try {
+        await storage.glossCache.clear();
+      } finally {
+        finishCacheClear();
+      }
       sendResponse(createBackgroundResponse(message, "gloss.cache.cleared", {}));
       return;
     }
@@ -193,13 +196,13 @@ function requestIdFrom(value: unknown): string | undefined {
   return undefined;
 }
 
-function createInvalidMessageResponse(value: unknown, error: unknown): ErrorMessage {
+function createInvalidMessageResponse(value: unknown, error: unknown): ErrorMessage | OptionsErrorMessage {
   return {
     type: "error",
     version: MESSAGE_VERSION,
     requestId: requestIdFrom(value) ?? "invalid-message",
     source: "service-worker",
-    target: "content-script",
+    target: responseTargetFrom(value),
     createdAt: Date.now(),
     payload: diagnosticPayloadFrom(error, {
       reason: "runtime",
@@ -207,6 +210,13 @@ function createInvalidMessageResponse(value: unknown, error: unknown): ErrorMess
       service: "runtime"
     })
   };
+}
+
+function responseTargetFrom(value: unknown): Exclude<MessageSource, "service-worker"> {
+  if (typeof value === "object" && value !== null && "source" in value && value.source === "options") {
+    return "options";
+  }
+  return "content-script";
 }
 
 function safePost(port: chrome.runtime.Port, message: unknown): void {
