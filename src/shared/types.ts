@@ -282,7 +282,7 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   },
   prompts: {
     gloss: "Translate each unfamiliar English word or phrase into Simplified Chinese for its current context. Return a short inline label that fits above the source word.",
-    ankiCard: "Create Anki cards for the clicked English word. Put an example sentence for the target sense on the front and bold the target word. Put the Simplified Chinese translation for the current context on the back."
+    ankiCard: "Create Anki cards for the clicked English word. Put an English example sentence for the target sense on the front and bold the target word. Put only the direct Simplified Chinese meaning for the current context on the back."
   },
   ai: {
     provider: "openai-responses",

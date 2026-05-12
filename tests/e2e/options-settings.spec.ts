@@ -226,7 +226,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.getByRole("button", { name: "重置释义提示词" }).click();
   await expect(page.locator("textarea[name=glossPrompt]")).toHaveValue("Translate each unfamiliar English word or phrase into Simplified Chinese for its current context. Return a short inline label that fits above the source word.");
   await page.getByRole("button", { name: "重置 Anki 卡片提示词" }).click();
-  await expect(page.locator("textarea[name=ankiPrompt]")).toHaveValue("Create Anki cards for the clicked English word. Put an example sentence for the target sense on the front and bold the target word. Put the Simplified Chinese translation for the current context on the back.");
+  await expect(page.locator("textarea[name=ankiPrompt]")).toHaveValue("Create Anki cards for the clicked English word. Put an English example sentence for the target sense on the front and bold the target word. Put only the direct Simplified Chinese meaning for the current context on the back.");
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("textarea[name=ankiPrompt]").fill("Create concise learning cards.");
   await expect(page.locator("#known-words-summary")).toHaveText("共 3 个已掌握词汇。");

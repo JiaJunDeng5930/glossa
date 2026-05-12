@@ -21,8 +21,8 @@ export function createAnkiClient(fetchImpl: typeof fetch = fetch): AnkiClient {
           Front: input.card.front,
           Back: input.card.back
         };
-        // @constraint glossa.card_creation.note_request.tags The Anki note tags include glossa and the clicked token lemma.
-        const tags = ["glossa", input.token.lemma];
+        // @constraint glossa.card_creation.note_request.tags The Anki note tags include the glossa source tag.
+        const tags = ["glossa"];
         // @constraint glossa.card_creation.note_request.payload The Anki note payload uses the configured deck and model with the prepared fields and tags.
         const body = {
           action: "addNote",

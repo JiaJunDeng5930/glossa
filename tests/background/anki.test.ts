@@ -29,7 +29,7 @@ describe("AnkiConnect adapter diagnostics", () => {
       deckName: "Glossa",
       modelName: "Basic",
       fields: { Front: "<b>Submit</b> the form.", Back: "提交" },
-      tags: ["glossa", "submit"]
+      tags: ["glossa"]
     });
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
     clearTimeoutSpy.mockRestore();
