@@ -4,7 +4,7 @@
 
 1. Build the stable gloss cache key from target language, sentence text, token text, and token span.
 2. Check the page-scoped in-memory gloss cache first. A hit returns a display item for the current token id without reading lexicon state. This keeps labels stable when the page mutates and the content script immediately rescans during the same service-worker lifetime.
-3. On memory miss, read the IndexedDB gloss cache. A fresh hit hydrates the memory cache, returns a display item for the current token id, and records the show event in lexicon state before `known` or `ignored` lexicon state can hide the token. Cache freshness uses the stored `createdAt` plus `settings.glossCacheTtlMs`.
+3. On memory miss, read the IndexedDB gloss cache. A fresh hit hydrates the memory cache, returns a display item for the current token id, and records the show event in lexicon state before `known` or `ignored` lexicon state can hide the token. Cache freshness uses the stored `createdAt` plus `settings.glossCacheTtlMs`; legacy rows without `createdAt` receive the current read time and are written back.
 4. When the persistent gloss cache misses or is stale, read the lexicon state from IndexedDB. `known` and `ignored` stop the pipeline before AI work.
 5. For remaining misses, emit `pending` and enqueue the owner miss for the AI outlet.
 

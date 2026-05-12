@@ -446,10 +446,17 @@ export function createMemoryStorage(): ExtensionStorage {
       },
       async getFresh(key, now, ttlMs) {
         const value = glossCache.get(key) as GlossCacheEntry | undefined;
-        return value && isFreshGlossCacheEntry(value, now, ttlMs) ? value : undefined;
+        if (!value) {
+          return undefined;
+        }
+        const entry = normalizeGlossCacheEntry(value, now);
+        if (entry !== value) {
+          glossCache.set(key, entry);
+        }
+        return isFreshGlossCacheEntry(entry, now, ttlMs) ? entry : undefined;
       },
       async getFreshMany(keys, now, ttlMs) {
-        return freshMany(readMany<GlossCacheEntry>(glossCache, keys), now, ttlMs);
+        return freshMany(glossCache, readMany<GlossCacheEntry>(glossCache, keys), now, ttlMs);
       },
       async put(key, value) {
         glossCache.set(key, value);
@@ -508,11 +515,15 @@ function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T
   return result;
 }
 
-function freshMany(values: Map<string, GlossCacheEntry>, now: number, ttlMs: number): Map<string, GlossCacheEntry> {
+function freshMany(store: Map<string, unknown>, values: Map<string, GlossCacheEntry>, now: number, ttlMs: number): Map<string, GlossCacheEntry> {
   const result = new Map<string, GlossCacheEntry>();
   for (const [key, value] of values) {
-    if (isFreshGlossCacheEntry(value, now, ttlMs)) {
-      result.set(key, value);
+    const entry = normalizeGlossCacheEntry(value, now);
+    if (entry !== value) {
+      store.set(key, entry);
+    }
+    if (isFreshGlossCacheEntry(entry, now, ttlMs)) {
+      result.set(key, entry);
     }
   }
   return result;
@@ -520,6 +531,10 @@ function freshMany(values: Map<string, GlossCacheEntry>, now: number, ttlMs: num
 
 function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: number): boolean {
   return now < value.createdAt + ttlMs;
+}
+
+function normalizeGlossCacheEntry(value: GlossCacheEntry, now: number): GlossCacheEntry {
+  return Number.isFinite(value.createdAt) ? value : { ...value, createdAt: now };
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {

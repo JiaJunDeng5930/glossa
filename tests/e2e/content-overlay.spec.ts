@@ -807,6 +807,64 @@ test("content bundle rescans newly visible text inside overflow scrollers", asyn
   expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).toContain("Obscure");
 });
 
+// @verifies glossa.page_translation.candidate_scan.overflow_scroll.shadow_root
+test("content bundle rescans newly visible text inside shadow-root overflow scrollers", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 480 });
+  await page.setContent("<main><article id=\"host\"></article></main>");
+  await page.locator("#host").evaluate((host) => {
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <section id="scroller" style="height: 160px; overflow: auto;">
+        <p id="visible">Quizzical archive appears here.</p>
+        <div style="height: 240px"></div>
+        <p id="inner">Obscure quarry appears inside.</p>
+      </section>
+    `;
+  });
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaSeenSurfaces", []);
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const tokens = message.payload.sentences.flatMap((sentence) => sentence.tokens);
+      const seen = Reflect.get(window, "__glossaSeenSurfaces") as string[];
+      seen.push(...tokens.map((token) => token.surface));
+      const quizzical = tokens.find((token) => token.surface.toLowerCase() === "quizzical");
+      const obscure = tokens.find((token) => token.surface.toLowerCase() === "obscure");
+      if (quizzical) {
+        emit(glossToken(message.payload.scanId, quizzical.id, "ready", { tokenId: quizzical.id, targetText: quizzical.surface, display: "奇特" }));
+      }
+      if (obscure) {
+        emit(glossToken(message.payload.scanId, obscure.id, "ready", { tokenId: obscure.id, targetText: obscure.surface, display: "晦涩" }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await page.waitForFunction(() => {
+    return document.querySelector("#host")?.shadowRoot?.querySelector("[data-glossa-token-label]")?.textContent === "奇特";
+  });
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).not.toContain("Obscure");
+
+  await page.locator("#host").evaluate((host) => {
+    const scroller = host.shadowRoot?.querySelector<HTMLElement>("#scroller");
+    if (!scroller) {
+      throw new Error("expected shadow scroller");
+    }
+    scroller.scrollTop = scroller.scrollHeight;
+    scroller.dispatchEvent(new Event("scroll"));
+  });
+  await page.waitForFunction(() => {
+    const labels = document.querySelector("#host")?.shadowRoot?.querySelectorAll("[data-glossa-token-label]") ?? [];
+    return Array.from(labels)
+      .some((label) => label.textContent === "晦涩");
+  });
+
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).toContain("Obscure");
+});
+
 // @verifies glossa.page_translation.inline_rendering
 test("content bundle replaces pending gloss spinners with ready labels", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Pending archive appears here.</p></main>");

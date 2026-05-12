@@ -653,12 +653,13 @@ async function boot(): Promise<void> {
     observeOpenShadowRoots(document.body);
     scheduleScan("mutation");
   });
-  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
-  observeOpenShadowRoots(document.body);
   const onScroll = (): void => scheduleScan("scroll");
+  const scrollObservedShadowRoots = new WeakSet<ShadowRoot>();
   // @behavior glossa.page_translation.candidate_scan.overflow_scroll Element scroll events reschedule viewport scans so newly visible overflow-container text becomes eligible.
   document.addEventListener("scroll", onScroll, { passive: true, capture: true });
   window.addEventListener("scroll", onScroll, { passive: true });
+  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+  observeOpenShadowRoots(document.body);
 
   function observeOpenShadowRoots(root: ParentNode): void {
     if (stopped) {
@@ -666,6 +667,11 @@ async function boot(): Promise<void> {
     }
     for (const element of Array.from(root.querySelectorAll("*"))) {
       if (element.shadowRoot) {
+        if (!scrollObservedShadowRoots.has(element.shadowRoot)) {
+          scrollObservedShadowRoots.add(element.shadowRoot);
+          // @behavior glossa.page_translation.candidate_scan.overflow_scroll.shadow_root Shadow-root scroll events reschedule viewport scans for newly visible Web Component content.
+          element.shadowRoot.addEventListener("scroll", onScroll, { passive: true, capture: true });
+        }
         observer?.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
         observeOpenShadowRoots(element.shadowRoot);
       }

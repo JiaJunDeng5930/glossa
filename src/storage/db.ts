@@ -154,18 +154,33 @@ function createGlossCacheStore(): GlossCacheStore {
     ...store,
     async getFresh(key, now, ttlMs) {
       const value = await store.get(key);
+      if (!value) {
+        return undefined;
+      }
+      const entry = normalizeGlossCacheEntry(value, now);
+      if (entry !== value) {
+        // @behavior glossa.cache_identity.gloss_cache_entry.legacy_created_at.single_read_backfill A single fresh read writes back a legacy gloss cache entry with request-time createdAt before returning it.
+        await store.put(key, entry);
+      }
       // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read.expiry A gloss cache entry past createdAt plus TTL is returned as a cache miss.
-      return value && isFreshGlossCacheEntry(value, now, ttlMs) ? value : undefined;
+      return isFreshGlossCacheEntry(entry, now, ttlMs) ? entry : undefined;
     },
     async getFreshMany(keys, now, ttlMs) {
       const values = await store.getMany(keys);
       const result = new Map<string, GlossCacheEntry>();
+      const backfills: Array<Promise<void>> = [];
       for (const [key, value] of values) {
+        const entry = normalizeGlossCacheEntry(value, now);
+        if (entry !== value) {
+          // @behavior glossa.cache_identity.gloss_cache_entry.legacy_created_at.batch_read_backfill A batched fresh read writes back each legacy gloss cache entry with request-time createdAt before returning it.
+          backfills.push(store.put(key, entry));
+        }
         // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read_many.expiry Batched gloss cache reads omit entries past createdAt plus TTL.
-        if (isFreshGlossCacheEntry(value, now, ttlMs)) {
-          result.set(key, value);
+        if (isFreshGlossCacheEntry(entry, now, ttlMs)) {
+          result.set(key, entry);
         }
       }
+      await Promise.all(backfills);
       return result;
     }
   };
@@ -173,6 +188,14 @@ function createGlossCacheStore(): GlossCacheStore {
 
 function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: number): boolean {
   return now < value.createdAt + ttlMs;
+}
+
+function normalizeGlossCacheEntry(value: GlossCacheEntry, now: number): GlossCacheEntry {
+  if (Number.isFinite(value.createdAt)) {
+    return value;
+  }
+  // @behavior glossa.cache_identity.gloss_cache_entry.legacy_created_at Legacy gloss cache entries without createdAt receive request time before TTL freshness is evaluated.
+  return { ...value, createdAt: now };
 }
 
 function createLexiconStore(): LexiconStore {

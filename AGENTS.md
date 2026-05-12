@@ -90,13 +90,16 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.cache_identity|glossa.cache_identity.{card_content_cache,gloss_cache_entry,request_parts,text_hash}
 |glossa.cache_identity.card_content_cache|glossa.cache_identity.card_content_cache.{store}
 |glossa.cache_identity.card_content_cache.store|glossa.cache_identity.card_content_cache.store.{}
-|glossa.cache_identity.gloss_cache_entry|glossa.cache_identity.gloss_cache_entry.{created_at,fresh_read,fresh_read_many,fresh_store,store}
+|glossa.cache_identity.gloss_cache_entry|glossa.cache_identity.gloss_cache_entry.{created_at,fresh_read,fresh_read_many,fresh_store,legacy_created_at,store}
 |glossa.cache_identity.gloss_cache_entry.created_at|glossa.cache_identity.gloss_cache_entry.created_at.{}
 |glossa.cache_identity.gloss_cache_entry.fresh_read|glossa.cache_identity.gloss_cache_entry.fresh_read.{expiry}
 |glossa.cache_identity.gloss_cache_entry.fresh_read.expiry|glossa.cache_identity.gloss_cache_entry.fresh_read.expiry.{}
 |glossa.cache_identity.gloss_cache_entry.fresh_read_many|glossa.cache_identity.gloss_cache_entry.fresh_read_many.{expiry}
 |glossa.cache_identity.gloss_cache_entry.fresh_read_many.expiry|glossa.cache_identity.gloss_cache_entry.fresh_read_many.expiry.{}
 |glossa.cache_identity.gloss_cache_entry.fresh_store|glossa.cache_identity.gloss_cache_entry.fresh_store.{}
+|glossa.cache_identity.gloss_cache_entry.legacy_created_at|glossa.cache_identity.gloss_cache_entry.legacy_created_at.{batch_read_backfill,single_read_backfill}
+|glossa.cache_identity.gloss_cache_entry.legacy_created_at.batch_read_backfill|glossa.cache_identity.gloss_cache_entry.legacy_created_at.batch_read_backfill.{}
+|glossa.cache_identity.gloss_cache_entry.legacy_created_at.single_read_backfill|glossa.cache_identity.gloss_cache_entry.legacy_created_at.single_read_backfill.{}
 |glossa.cache_identity.gloss_cache_entry.store|glossa.cache_identity.gloss_cache_entry.store.{}
 |glossa.cache_identity.request_parts|glossa.cache_identity.request_parts.{gloss_key_fields}
 |glossa.cache_identity.request_parts.gloss_key_fields|glossa.cache_identity.request_parts.gloss_key_fields.{}
@@ -192,7 +195,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.candidate_scan.overflow_clip|glossa.page_translation.candidate_scan.overflow_clip.{shadow_host,values}
 |glossa.page_translation.candidate_scan.overflow_clip.shadow_host|glossa.page_translation.candidate_scan.overflow_clip.shadow_host.{}
 |glossa.page_translation.candidate_scan.overflow_clip.values|glossa.page_translation.candidate_scan.overflow_clip.values.{}
-|glossa.page_translation.candidate_scan.overflow_scroll|glossa.page_translation.candidate_scan.overflow_scroll.{}
+|glossa.page_translation.candidate_scan.overflow_scroll|glossa.page_translation.candidate_scan.overflow_scroll.{shadow_root}
+|glossa.page_translation.candidate_scan.overflow_scroll.shadow_root|glossa.page_translation.candidate_scan.overflow_scroll.shadow_root.{}
 |glossa.page_translation.candidate_scan.viewport_option|glossa.page_translation.candidate_scan.viewport_option.{}
 |glossa.page_translation.candidate_scan.viewport_tokens|glossa.page_translation.candidate_scan.viewport_tokens.{}
 |glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{}
