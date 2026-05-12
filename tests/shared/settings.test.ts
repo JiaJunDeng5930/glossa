@@ -7,9 +7,10 @@ import { DEFAULT_SETTINGS } from "../../src/shared/types";
 // @verifies glossa.settings_save.default_overrides.write_filter
 describe("settings default overrides", () => {
   it("merges stored overrides with current defaults", () => {
-    const merged = mergeStoredSettings({ anki: { deck: "Research" } });
+    const merged = mergeStoredSettings({ anki: { deck: "Research" }, glossCacheTtlMs: 48 * 60 * 60 * 1_000 });
 
     expect(merged.anki.deck).toBe("Research");
+    expect(merged.glossCacheTtlMs).toBe(48 * 60 * 60 * 1_000);
     expect(merged.prompts.gloss).toBe(DEFAULT_SETTINGS.prompts.gloss);
   });
 

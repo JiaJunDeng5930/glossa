@@ -209,6 +209,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("select[name=knownWordList] option")).toHaveCount(7);
   await expect(page.locator("select[name=knownWordList]")).toContainText("托福 4510 词");
   await page.locator("select[name=knownWordList]").selectOption("toefl");
+  await page.locator("input[name=glossCacheTtlHours]").fill("48");
   await page.locator("input[name=autoTranslateEnabled]").check();
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
@@ -382,6 +383,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   expect(settings).toMatchObject({
     shortcutKey: "Ctrl+Shift+K",
     autoTranslateEnabled: true,
+    glossCacheTtlMs: 172800000,
     knownWordList: "toefl",
     appearance: {
       textColor: "#ff5500",

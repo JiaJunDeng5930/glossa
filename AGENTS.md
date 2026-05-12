@@ -16,19 +16,19 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 
 Vocabulary records use one table keyed by `lang:lemma`. `candidate` records become `known` after a displayed gloss. A clicked word becomes `learning_active`, receives an `expiresAt`, and stays eligible for display until expiry. Expired `learning_active` records transition to `known`. `ignored` records stay hidden.
 
-Settings contain `autoTranslateEnabled`, `translateShortcutKey`, `shortcutKey`, `appearance` for inline label colors, opacity, font family, and font size, plus `knownWordList`, `prompts.gloss`, and `prompts.ankiCard`. The extension is fixed to English source text and `zh-CN` gloss output through `GLOSS_TARGET_LANG`. AI settings include provider, endpoint, reasoning effort, API key, and request timeout. Anki settings contain endpoint, deck, model name, request timeout, and duplicate-card prompt duration; note creation writes `Front` and `Back`, so options only enables model names whose fields include both. Gloss cache identity uses target language, sentence text, token text, and token span. Card content cache identity uses language, target language, lemma, and Anki-card prompt version. Model names stay outside cache identity. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` uses `/gloss` with frame-shaped `items` for gloss batches and `/anki-card` for card creation.
+Settings contain `autoTranslateEnabled`, `translateShortcutKey`, `shortcutKey`, `glossCacheTtlMs`, `appearance` for inline label colors, opacity, font family, and font size, plus `knownWordList`, `prompts.gloss`, and `prompts.ankiCard`. The extension is fixed to English source text and `zh-CN` gloss output through `GLOSS_TARGET_LANG`. AI settings include provider, endpoint, reasoning effort, API key, and request timeout. Anki settings contain endpoint, deck, model name, request timeout, and duplicate-card prompt duration; note creation writes `Front` and `Back`, so options only enables model names whose fields include both. Gloss cache identity uses target language, sentence text, token text, and token span; stored gloss cache entries include `createdAt`, and entries stay fresh for `settings.glossCacheTtlMs`. Card content cache identity uses language, target language, lemma, and Anki-card prompt version. Model names stay outside cache identity. OpenAI providers are `openai-responses`, `openai-chat-completions`, and `openai-completions`; `glossa-backend` uses `/gloss` with frame-shaped `items` for gloss batches and `/anki-card` for card creation.
 
 Content translation has a page-local activation flag. It starts from `settings.autoTranslateEnabled`, turns on when the action popup sends `glossa.activateTranslation`, toggles when the page receives `settings.translateShortcutKey`, and resets to the setting value after a route URL change. Toggling off clears queued scans, closes gloss ports, unwraps rendered tokens, and keeps mutation and scroll rescans idle while the page is inactive.
 
 Runtime messages use `src/shared/messages.ts`. Settings and word-click messages use request/response envelopes with `type`, `version`, `requestId`, `source`, `target`, `createdAt`, and `payload`. Gloss lookup uses a `chrome.runtime.connect({ name: "gloss.session" })` port: content sends `gloss.scan.start`, streams `gloss.scan.chunk`, sends `gloss.scan.end`, receives `gloss.chunk.ack` for backpressure, then receives streamed `gloss.token` outcomes with `ready`, `pending`, `hidden`, or `error` before `gloss.done`. Content opens a fresh port for each scan and disconnects all gloss ports on route changes and teardown.
 
-Background gloss resolution is lookup-first and chunked: page memory replay, lexicon state, IndexedDB gloss cache, then framed AI. Memory and cache hits emit `ready` immediately and update shown state. `known` and `ignored` emit `hidden`. AI misses emit `pending`, enter an in-flight map keyed by durable gloss cache key plus active AI settings, then owner misses enter an AI frame buffer. Frames close at 32 misses or 50ms and execute through a global serial AI outlet with concurrency 1. Duplicate misses subscribe to the owner in-flight result and receive per-token `ready` or `error`.
+Background gloss resolution is lookup-first and chunked: page memory replay, fresh IndexedDB gloss cache, lexicon state, then framed AI. Memory and fresh cache hits emit `ready` immediately and update shown state. Stale or missing persistent cache entries continue to lexicon state, where `known` and `ignored` emit `hidden`. AI misses emit `pending`, enter an in-flight map keyed by durable gloss cache key plus active AI settings, then owner misses enter an AI frame buffer. Frames close at 32 misses or 50ms and execute through a global serial AI outlet with concurrency 1. Duplicate misses subscribe to the owner in-flight result and receive per-token `ready` or `error`.
 
 Card creation keeps a word-only `cardedWords` store keyed by `lang:lemma`. A normal Anki success writes that record after note creation returns at least one note id. When a clicked word already has a carded-word record, background returns `word.card.duplicate`; content shows a top-right confirmation for `settings.anki.duplicatePromptMs`, defaults to no on timeout or cancel, and resends `word.clicked` with `allowDuplicateCard` only after the user confirms.
 
 IndexedDB reads for lexicon and gloss cache pass through a DB read coalescer. It batches same-store key reads within an 8ms window and exposes aggregate trace events through `service-worker.db.read`. Visible lookup outcomes are emitted before shown-state writes complete.
 
-Content scanning starts from visible, non-editable, non-code text nodes, including open shadow roots and extension-injected frames, and produces DOM-grounded tokens with text-node offsets, source fingerprints, and scan versions. Non-Glossa DOM mutations invalidate the active scan version and schedule a new scan; pending wrappers may still accept stale-session outcomes when their stored surface, lemma, offsets, fingerprint, and local text context still match. `overlay.applyTokenOutcome(token, outcome, scanVersion)` handles current-session updates, and stale pending reconciliation handles slow results after ordinary DOM changes. Glosses render as inline `data-glossa-token` wrappers that keep the source word on the text baseline, reserve text-flow space, place the label above the source word, and align their vertical centerlines. Glossa-owned nodes carry `data-glossa-owned="1"`, `translate="no"`, and `notranslate` so future scans and mutation handling can identify them.
+Content scanning starts from viewport-visible, non-editable, non-code text ranges, including open shadow roots and extension-injected frames, and produces DOM-grounded tokens with text-node offsets, source fingerprints, and scan versions. Non-Glossa DOM mutations invalidate the active scan version and schedule a new scan; pending wrappers may still accept stale-session outcomes when their stored surface, lemma, offsets, fingerprint, and local text context still match. Scrolling schedules a viewport scan and leaves rendered wrappers in place when they move outside the viewport. `overlay.applyTokenOutcome(token, outcome, scanVersion)` handles current-session updates, and stale pending reconciliation handles slow results after ordinary DOM changes. Glosses render as inline `data-glossa-token` wrappers that keep the source word on the text baseline, reserve text-flow space, place the label above the source word, and align their vertical centerlines. Glossa-owned nodes carry `data-glossa-owned="1"`, `translate="no"`, and `notranslate` so future scans and mutation handling can identify them.
 
 Structured diagnostics use `src/shared/diagnostics.ts`. Trace events include component, operation, result, request id, sender tab/frame/document fields when Chrome provides them, and sanitized URLs. `sanitizeUrl` keeps only origin and path, so query strings and fragments stay out of logs. Performance traces include `content.scan.chunk`, `service-worker.lookup.chunk`, `service-worker.db.read`, `service-worker.ai.frame`, and `service-worker.scan.done`.
 
@@ -87,9 +87,12 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.ai_requests.openai.legacy_completions|glossa.ai_requests.openai.legacy_completions.{}
 |glossa.ai_requests.openai.responses|glossa.ai_requests.openai.responses.{}
 |glossa.ai_requests.reasoning_effort|glossa.ai_requests.reasoning_effort.{}
-|glossa.cache_identity|glossa.cache_identity.{card_content_cache,request_parts,text_hash}
+|glossa.cache_identity|glossa.cache_identity.{card_content_cache,gloss_cache_entry,request_parts,text_hash}
 |glossa.cache_identity.card_content_cache|glossa.cache_identity.card_content_cache.{store}
 |glossa.cache_identity.card_content_cache.store|glossa.cache_identity.card_content_cache.store.{}
+|glossa.cache_identity.gloss_cache_entry|glossa.cache_identity.gloss_cache_entry.{created_at,store}
+|glossa.cache_identity.gloss_cache_entry.created_at|glossa.cache_identity.gloss_cache_entry.created_at.{}
+|glossa.cache_identity.gloss_cache_entry.store|glossa.cache_identity.gloss_cache_entry.store.{}
 |glossa.cache_identity.request_parts|glossa.cache_identity.request_parts.{gloss_key_fields}
 |glossa.cache_identity.request_parts.gloss_key_fields|glossa.cache_identity.request_parts.gloss_key_fields.{}
 |glossa.cache_identity.text_hash|glossa.cache_identity.text_hash.{}
@@ -180,18 +183,25 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.failure_reporting.user_copy|glossa.failure_reporting.user_copy.{}
 |glossa.page_translation|glossa.page_translation.{activation,candidate_scan,inline_rendering,lookup_order,shortcut_selection,token_geometry}
 |glossa.page_translation.activation|glossa.page_translation.activation.{}
-|glossa.page_translation.candidate_scan|glossa.page_translation.candidate_scan.{}
+|glossa.page_translation.candidate_scan|glossa.page_translation.candidate_scan.{viewport_option,viewport_tokens}
+|glossa.page_translation.candidate_scan.viewport_option|glossa.page_translation.candidate_scan.viewport_option.{}
+|glossa.page_translation.candidate_scan.viewport_tokens|glossa.page_translation.candidate_scan.viewport_tokens.{}
 |glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{}
-|glossa.page_translation.lookup_order|glossa.page_translation.lookup_order.{chunk_error_trace}
+|glossa.page_translation.lookup_order|glossa.page_translation.lookup_order.{chunk_error_trace,fresh_cache_precedes_lexicon,gloss_cache_created_at,lexicon_hidden_after_cache}
 |glossa.page_translation.lookup_order.chunk_error_trace|glossa.page_translation.lookup_order.chunk_error_trace.{}
+|glossa.page_translation.lookup_order.fresh_cache_precedes_lexicon|glossa.page_translation.lookup_order.fresh_cache_precedes_lexicon.{}
+|glossa.page_translation.lookup_order.gloss_cache_created_at|glossa.page_translation.lookup_order.gloss_cache_created_at.{}
+|glossa.page_translation.lookup_order.lexicon_hidden_after_cache|glossa.page_translation.lookup_order.lexicon_hidden_after_cache.{}
 |glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{duplicate_prompt_controls}
 |glossa.page_translation.shortcut_selection.duplicate_prompt_controls|glossa.page_translation.shortcut_selection.duplicate_prompt_controls.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
-|glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,timeout_seconds}
+|glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,gloss_cache_ttl,timeout_seconds}
 |glossa.settings_save.clear_gloss_cache|glossa.settings_save.clear_gloss_cache.{background_request}
 |glossa.settings_save.clear_gloss_cache.background_request|glossa.settings_save.clear_gloss_cache.background_request.{}
-|glossa.settings_save.default_overrides|glossa.settings_save.default_overrides.{merge,provider_endpoint_defaults,stored_shape,write_filter}
+|glossa.settings_save.default_overrides|glossa.settings_save.default_overrides.{merge,positive_number,provider_endpoint_defaults,stored_shape,write_filter}
 |glossa.settings_save.default_overrides.merge|glossa.settings_save.default_overrides.merge.{}
+|glossa.settings_save.default_overrides.positive_number|glossa.settings_save.default_overrides.positive_number.{fallback}
+|glossa.settings_save.default_overrides.positive_number.fallback|glossa.settings_save.default_overrides.positive_number.fallback.{}
 |glossa.settings_save.default_overrides.provider_endpoint_defaults|glossa.settings_save.default_overrides.provider_endpoint_defaults.{}
 |glossa.settings_save.default_overrides.stored_shape|glossa.settings_save.default_overrides.stored_shape.{ai,anki,appearance,prompts}
 |glossa.settings_save.default_overrides.stored_shape.ai|glossa.settings_save.default_overrides.stored_shape.ai.{}
@@ -199,6 +209,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.settings_save.default_overrides.stored_shape.appearance|glossa.settings_save.default_overrides.stored_shape.appearance.{}
 |glossa.settings_save.default_overrides.stored_shape.prompts|glossa.settings_save.default_overrides.stored_shape.prompts.{}
 |glossa.settings_save.default_overrides.write_filter|glossa.settings_save.default_overrides.write_filter.{}
+|glossa.settings_save.gloss_cache_ttl|glossa.settings_save.gloss_cache_ttl.{hour_input}
+|glossa.settings_save.gloss_cache_ttl.hour_input|glossa.settings_save.gloss_cache_ttl.hour_input.{fallback}
+|glossa.settings_save.gloss_cache_ttl.hour_input.fallback|glossa.settings_save.gloss_cache_ttl.hour_input.fallback.{}
 |glossa.settings_save.timeout_seconds|glossa.settings_save.timeout_seconds.{}
 |glossa.shortcuts|glossa.shortcuts.{}
 |glossa.translation_start_popup|glossa.translation_start_popup.{}

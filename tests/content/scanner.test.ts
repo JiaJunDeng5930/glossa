@@ -93,6 +93,34 @@ describe("content scanner", () => {
     expect(result.tokens.map((token) => token.surface)).toEqual(["Shadow", "archive", "appears", "clearly"]);
   });
 
+  it("keeps renderable tokens only when their ranges intersect the viewport", () => {
+    document.body.innerHTML = "<main><p>Visible archive appears. Hidden quarry appears.</p></main>";
+    const originalGetClientRects = Range.prototype.getClientRects;
+    Range.prototype.getClientRects = function () {
+      const visible = this.toString().startsWith("Visible") || this.toString().startsWith("archive") || this.toString().startsWith("appears.");
+      return [{
+        width: 12,
+        height: 12,
+        top: visible ? 10 : 900,
+        bottom: visible ? 22 : 912,
+        left: 10,
+        right: 22
+      }] as unknown as DOMRectList;
+    };
+
+    try {
+      const result = scanDocumentText(document, new Set(), {
+        requireRenderableRange: true,
+        requireViewportRange: true
+      });
+
+      expect(result.tokens.map((token) => token.surface)).toEqual(["Visible", "archive"]);
+      expect(result.stats.rejectedByVisibility).toBeGreaterThan(0);
+    } finally {
+      Range.prototype.getClientRects = originalGetClientRects;
+    }
+  });
+
   it("streams scan chunks by token count inside large text nodes", async () => {
     document.body.innerHTML = `
       <main>

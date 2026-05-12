@@ -247,6 +247,11 @@
         </section>
         <section class="settings-card" aria-labelledby="cache-heading">
           <h2 id="cache-heading">缓存</h2>
+          <label>
+            翻译缓存有效小时数
+            <span class="field-help">缓存创建后在这段时间内优先用于页面释义。</span>
+            <input name="glossCacheTtlHours" type="number" min="1" step="1">
+          </label>
           <button id="clear-gloss-cache" class="secondary danger-action" type="button">清空翻译缓存</button>
         </section>
         <div class="actions">

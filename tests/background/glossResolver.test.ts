@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { buildGlossCacheKey } from "../../src/core/cache";
 import { createGlossResolver } from "../../src/background/glossResolver";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossItem, type GlossTokenPayload, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossCacheEntry, type GlossTokenPayload, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
 // @verifies glossa.page_translation.lookup_order
+// @verifies glossa.cache_identity.gloss_cache_entry
 // @verifies glossa.cache_identity.text_hash
 describe("gloss resolver lookup-first pipeline", () => {
   it("emits hidden, ready, pending and AI ready outcomes in lookup order", async () => {
@@ -18,7 +19,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     await storage.glossCache.put(await cacheKey(settings, "Known ignored cached novel words.", "cached", 14, 20), {
       tokenId: "old-cached",
       targetText: "cached",
-      display: "缓存"
+      display: "缓存",
+      createdAt: 50
     });
     const ai = {
       gloss: vi.fn(),
@@ -57,9 +59,48 @@ describe("gloss resolver lookup-first pipeline", () => {
     }));
     expect(await storage.lexicon.get("en:cached")).toMatchObject({ shownCount: 1, lastShownAt: 100 });
     expect(await storage.lexicon.get("en:novel")).toMatchObject({ state: "known", shownCount: 1 });
+    expect(await storage.glossCache.get(await cacheKey(settings, "Known ignored cached novel words.", "novel", 21, 26))).toMatchObject({ createdAt: 100 });
   });
 
-  it("replays page memory before shown state hides a rescan token", async () => {
+  it("uses fresh persisted gloss cache before lexicon state and ignores expired cache entries", async () => {
+    const storage = createMemoryStorage();
+    const settings = { ...testSettings(), glossCacheTtlMs: 100 };
+    await storage.settings.set(settings);
+    await storage.lexicon.put(record("fresh", "known"));
+    await storage.lexicon.put(record("stale", "known"));
+    await storage.glossCache.put(await cacheKey(settings, "Fresh stale words.", "fresh", 0, 5), {
+      tokenId: "old-fresh",
+      targetText: "fresh",
+      display: "新鲜",
+      createdAt: 150
+    });
+    await storage.glossCache.put(await cacheKey(settings, "Fresh stale words.", "stale", 6, 11), {
+      tokenId: "old-stale",
+      targetText: "stale",
+      display: "过期",
+      createdAt: 50
+    });
+    const ai = { gloss: vi.fn(), glossFrame: vi.fn(), ankiCard: vi.fn() };
+    const resolver = createGlossResolver({ storage, ai });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    await resolver.resolve("https://example.test/page", [{
+      id: "s1",
+      text: "Fresh stale words.",
+      tokens: [
+        { id: "t-fresh", sentenceId: "s1", surface: "Fresh", lemma: "fresh", startOffset: 0, endOffset: 5 },
+        { id: "t-stale", sentenceId: "s1", surface: "stale", lemma: "stale", startOffset: 6, endOffset: 11 }
+      ]
+    }], settings, 200, { emit: (event) => events.push(event) });
+
+    expect(events).toEqual([
+      { tokenId: "t-fresh", status: "ready", item: { tokenId: "t-fresh", targetText: "Fresh", display: "新鲜" } },
+      { tokenId: "t-stale", status: "hidden" }
+    ]);
+    expect(ai.glossFrame).not.toHaveBeenCalled();
+  });
+
+  it("replays page memory and fresh cache before shown state hides rescan tokens", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
@@ -96,7 +137,9 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(secondEvents).toEqual([
       { tokenId: "t-second", status: "ready", item: { tokenId: "t-second", targetText: "novel", display: "新词" } }
     ]);
-    expect(otherPageEvents).toEqual([{ tokenId: "t-third", status: "hidden" }]);
+    expect(otherPageEvents).toEqual([
+      { tokenId: "t-third", status: "ready", item: { tokenId: "t-third", targetText: "novel", display: "新词" } }
+    ]);
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
   });
 
@@ -688,7 +731,7 @@ function createMemoryStorage(): ExtensionStorage {
         return glossCache.get(key) as never;
       },
       async getMany(keys) {
-        return readMany<GlossItem>(glossCache, keys);
+        return readMany<GlossCacheEntry>(glossCache, keys);
       },
       async put(key, value) {
         glossCache.set(key, value);

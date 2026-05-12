@@ -31,6 +31,7 @@ export function mergeStoredSettings(value: StoredGlossaSettings | undefined): Gl
     ...stored,
     translateShortcutKey: stored?.translateShortcutKey ?? DEFAULT_SETTINGS.translateShortcutKey,
     autoTranslateEnabled: stored?.autoTranslateEnabled ?? DEFAULT_SETTINGS.autoTranslateEnabled,
+    glossCacheTtlMs: positiveNumber(stored?.glossCacheTtlMs, DEFAULT_SETTINGS.glossCacheTtlMs),
     knownWordList: isKnownWordList(stored?.knownWordList) ? stored.knownWordList : DEFAULT_SETTINGS.knownWordList,
     appearance: { ...DEFAULT_SETTINGS.appearance, ...stored?.appearance },
     prompts: { ...DEFAULT_SETTINGS.prompts, ...stored?.prompts },
@@ -51,6 +52,7 @@ export function settingsOverrides(settings: GlossaSettings): StoredGlossaSetting
   assignIfChanged(overrides, "translateShortcutKey", settings.translateShortcutKey, DEFAULT_SETTINGS.translateShortcutKey);
   assignIfChanged(overrides, "autoTranslateEnabled", settings.autoTranslateEnabled, DEFAULT_SETTINGS.autoTranslateEnabled);
   assignIfChanged(overrides, "learningWindowDays", settings.learningWindowDays, DEFAULT_SETTINGS.learningWindowDays);
+  assignIfChanged(overrides, "glossCacheTtlMs", settings.glossCacheTtlMs, DEFAULT_SETTINGS.glossCacheTtlMs);
   assignIfChanged(overrides, "knownWordList", settings.knownWordList, DEFAULT_SETTINGS.knownWordList);
   assignIfChanged(overrides, "promptVersion", settings.promptVersion, DEFAULT_SETTINGS.promptVersion);
   assignIfChanged(overrides, "modelVersion", settings.modelVersion, DEFAULT_SETTINGS.modelVersion);
@@ -118,6 +120,12 @@ function assignIfChanged<T extends keyof StoredGlossaSettings>(
 
 function hasKeys(value: object): boolean {
   return Object.keys(value).length > 0;
+}
+
+// @constraint glossa.settings_save.default_overrides.positive_number Stored positive numeric settings override defaults.
+function positiveNumber(value: unknown, fallback: number): number {
+  // @constraint glossa.settings_save.default_overrides.positive_number.fallback Invalid numeric settings fall back to their default values.
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function isKnownWordList(value: unknown): value is KnownWordListId {

@@ -5,7 +5,7 @@ import { buildCardCacheKey } from "../../src/core/cache";
 import { hashText } from "../../src/shared/hash";
 import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossItem, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossCacheEntry, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
 // @verifies glossa.extension_contracts.request_effects
 // @verifies glossa.extension_storage.typed_access
@@ -442,7 +442,7 @@ export function createMemoryStorage(): ExtensionStorage {
         return glossCache.get(key) as never;
       },
       async getMany(keys) {
-        return readMany<GlossItem>(glossCache, keys);
+        return readMany<GlossCacheEntry>(glossCache, keys);
       },
       async put(key, value) {
         glossCache.set(key, value);

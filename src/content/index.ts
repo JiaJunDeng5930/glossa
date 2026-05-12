@@ -125,6 +125,7 @@ async function boot(): Promise<void> {
         return await scanDocumentTextInChunks(document, knownWords, {
           scanVersion: version,
           requireRenderableRange: true,
+          requireViewportRange: true,
           maxTokensPerChunk: SCAN_CHUNK_MAX_TOKENS,
           maxChunkDelayMs: SCAN_CHUNK_MAX_MS
         }, async (chunk) => {

@@ -50,6 +50,12 @@ export interface GlossItem {
   phrase?: string;
 }
 
+// @constraint glossa.cache_identity.gloss_cache_entry Persisted gloss cache records extend display gloss items with cache metadata.
+export interface GlossCacheEntry extends GlossItem {
+  // @constraint glossa.cache_identity.gloss_cache_entry.created_at Persisted gloss cache entries store the cache creation time in milliseconds.
+  createdAt: number;
+}
+
 export type MessageSource = "content-script" | "service-worker" | "options";
 export type MessageTarget = MessageSource;
 export type MessageVersion = 1;
@@ -245,6 +251,8 @@ export interface GlossaSettings {
   translateShortcutKey: string;
   autoTranslateEnabled: boolean;
   learningWindowDays: number;
+  // @behavior glossa.settings_save.gloss_cache_ttl Gloss cache hits are fresh for this configured number of milliseconds after cache creation.
+  glossCacheTtlMs: number;
   knownWordList: KnownWordListId;
   promptVersion: string;
   modelVersion: string;
@@ -268,6 +276,7 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   translateShortcutKey: "Alt+G",
   autoTranslateEnabled: false,
   learningWindowDays: 3,
+  glossCacheTtlMs: 24 * 60 * 60 * 1_000,
   knownWordList: "junior-high",
   promptVersion: "gloss-v1",
   modelVersion: "gpt-4.1-mini",

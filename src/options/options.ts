@@ -147,6 +147,7 @@ async function loadSettings(): Promise<void> {
   translateShortcutCapture.textContent = settings.translateShortcutKey;
   setChecked("autoTranslateEnabled", settings.autoTranslateEnabled);
   setInput("learningWindowDays", String(settings.learningWindowDays));
+  setInput("glossCacheTtlHours", String(msToHours(settings.glossCacheTtlMs)));
   setInput("knownWordList", settings.knownWordList);
   setInput("glossTextColor", settings.appearance.textColor);
   setInput("glossBackgroundColor", settings.appearance.backgroundColor);
@@ -186,6 +187,7 @@ function readFormSettings(): GlossaSettings {
     translateShortcutKey: readInput("translateShortcutKey").trim() || DEFAULT_SETTINGS.translateShortcutKey,
     autoTranslateEnabled: readCheckbox("autoTranslateEnabled"),
     learningWindowDays: Math.max(1, Number(readInput("learningWindowDays")) || DEFAULT_SETTINGS.learningWindowDays),
+    glossCacheTtlMs: hoursToMs(readInput("glossCacheTtlHours"), DEFAULT_SETTINGS.glossCacheTtlMs),
     knownWordList: readKnownWordList(),
     promptVersion: DEFAULT_SETTINGS.promptVersion,
     modelVersion: readInput("modelVersion").trim() || DEFAULT_SETTINGS.modelVersion,
@@ -691,6 +693,17 @@ function secondsToMs(value: string, fallbackMs: number): number {
 
 function msToSeconds(value: number): number {
   return Math.max(1, Math.round(value / 1_000));
+}
+
+// @constraint glossa.settings_save.gloss_cache_ttl.hour_input Gloss cache TTL settings are stored in milliseconds after positive hour values are rounded to whole milliseconds.
+function hoursToMs(value: string, fallbackMs: number): number {
+  // @constraint glossa.settings_save.gloss_cache_ttl.hour_input.fallback Invalid gloss cache TTL hour input falls back to the configured default duration.
+  const hours = Math.max(1, Number(value) || fallbackMs / 3_600_000);
+  return Math.round(hours * 3_600_000);
+}
+
+function msToHours(value: number): number {
+  return Math.max(1, Math.round(value / 3_600_000));
 }
 
 function hexToRgb(hex: string, alpha: number): string {

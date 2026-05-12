@@ -1,4 +1,4 @@
-// @behavior glossa.page_translation.candidate_scan Visible editable-safe text nodes produce DOM-grounded English token candidates.
+// @behavior glossa.page_translation.candidate_scan Viewport-visible editable-safe text nodes produce DOM-grounded English token candidates.
 import { isKnownLemma } from "../core/lexicon";
 import { normalizeLemma } from "../core/state";
 import type { SentenceCandidate, TokenCandidate } from "../shared/types";
@@ -46,6 +46,8 @@ export interface ScanOptions {
   minWordLength?: number;
   minContextChars?: number;
   requireRenderableRange?: boolean;
+  // @constraint glossa.page_translation.candidate_scan.viewport_option Scan options expose a viewport-range filter for content activation scans.
+  requireViewportRange?: boolean;
 }
 
 export interface ScanChunkOptions extends ScanOptions {
@@ -141,7 +143,7 @@ export function scanDocumentText(
         const endOffset = startOffset + surface.length;
         const nodeStartOffset = sentenceStart + startOffset;
         const nodeEndOffset = sentenceStart + endOffset;
-        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset)) {
+        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset, options.requireViewportRange === true)) {
           stats.rejectedByVisibility += 1;
           continue;
         }
@@ -268,7 +270,7 @@ export async function scanDocumentTextInChunks(
         const endOffset = startOffset + surface.length;
         const nodeStartOffset = sentenceStart + startOffset;
         const nodeEndOffset = sentenceStart + endOffset;
-        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset)) {
+        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset, options.requireViewportRange === true)) {
           stats.rejectedByVisibility += 1;
           continue;
         }
@@ -454,19 +456,32 @@ function hasMeaningfulText(text: string | null): boolean {
   return typeof text === "string" && /[A-Za-z]/.test(text);
 }
 
-function hasRenderableRange(textNode: Text, startOffset: number, endOffset: number): boolean {
+function hasRenderableRange(textNode: Text, startOffset: number, endOffset: number, requireViewportRange: boolean): boolean {
   const doc = textNode.ownerDocument;
   const range = doc.createRange();
   try {
     range.setStart(textNode, startOffset);
     range.setEnd(textNode, endOffset);
     const rects = range.getClientRects();
-    return Array.from(rects).some((rect) => rect.width > 0 && rect.height > 0);
+    return Array.from(rects).some((rect) => {
+      if (rect.width <= 0 || rect.height <= 0) {
+        return false;
+      }
+      // @behavior glossa.page_translation.candidate_scan.viewport_tokens Candidate token ranges must intersect the current viewport before content sends them for translation.
+      return !requireViewportRange || intersectsViewport(rect, doc);
+    });
   } catch {
     return false;
   } finally {
     range.detach();
   }
+}
+
+function intersectsViewport(rect: DOMRect, doc: Document): boolean {
+  const view = doc.defaultView;
+  const width = view?.innerWidth ?? doc.documentElement.clientWidth;
+  const height = view?.innerHeight ?? doc.documentElement.clientHeight;
+  return rect.right > 0 && rect.bottom > 0 && rect.left < width && rect.top < height;
 }
 
 export function createSourceFingerprint(text: string, startOffset: number, endOffset: number): string {

@@ -1,6 +1,6 @@
 // @intent glossa.extension_storage Settings, vocabulary records, gloss cache entries, card cache entries, and carded-word records stay inside extension-owned storage.
 // @constraint glossa.extension_storage.typed_access Settings, lexicon, cache, and carded-word storage use one typed asynchronous access contract.
-import type { AnkiCardOutput, CardedWordRecord, GlossaSettings, GlossItem, VocabularyRecord, VocabularyState } from "../shared/types";
+import type { AnkiCardOutput, CardedWordRecord, GlossaSettings, GlossCacheEntry, VocabularyRecord, VocabularyState } from "../shared/types";
 import { mergeStoredSettings, settingsOverrides, type StoredGlossaSettings } from "../shared/settings";
 
 export interface KeyValueStore<T> {
@@ -30,8 +30,9 @@ export interface SettingsStore {
 
 export interface ExtensionStorage {
   settings: SettingsStore;
+  // @constraint glossa.cache_identity.gloss_cache_entry.store Extension storage persists gloss cache entries with cache metadata.
+  glossCache: KeyValueStore<GlossCacheEntry>;
   lexicon: LexiconStore;
-  glossCache: KeyValueStore<GlossItem>;
   // @constraint glossa.cache_identity.card_content_cache.store Card cache storage persists generated card content without note-write identifiers.
   cardCache: KeyValueStore<AnkiCardOutput>;
   // @constraint glossa.card_creation.duplicate_gate.record_store Extension storage exposes a word-only carded-word store for duplicate-card gating.
@@ -44,7 +45,7 @@ export function createExtensionStorage(): ExtensionStorage {
   return {
     settings: createChromeSettingsStore(),
     lexicon: createLexiconStore(),
-    glossCache: createIndexedStore<GlossItem>("glossCache"),
+    glossCache: createIndexedStore<GlossCacheEntry>("glossCache"),
     cardCache: createIndexedStore<AnkiCardOutput>("cardCache"),
     cardedWords: createIndexedStore<CardedWordRecord>("cardedWords")
   };

@@ -51,6 +51,7 @@ describe("extension message envelopes", () => {
         translateShortcutKey: "Alt+G",
         autoTranslateEnabled: false,
         learningWindowDays: 3,
+        glossCacheTtlMs: DEFAULT_SETTINGS.glossCacheTtlMs,
         knownWordList: "junior-high",
         promptVersion: "gloss-v1",
         modelVersion: "gpt-4.1-mini",
