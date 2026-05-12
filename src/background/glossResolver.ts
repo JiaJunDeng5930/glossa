@@ -673,6 +673,7 @@ async function currentRecord(
   }
   const current = transitionExpiredLearning(record, now);
   if (current !== record) {
+    // @behavior glossa.word_memory.learning_lifecycle.expired_learning_persistence Expired learning state transitions discovered during lookup are written back to the lexicon store.
     trackWrite(() => storage.lexicon.put(current));
   }
   return current;
@@ -682,6 +683,7 @@ async function persistShownRecord(storage: ExtensionStorage, token: TokenCandida
   const key = vocabularyKey("en", token.lemma);
   const record = await storage.lexicon.get(key);
   const current = record ? transitionExpiredLearning(record, now) : createCandidateRecord(token.lemma, token.surface, "en", now);
+  // @behavior glossa.word_memory.learning_lifecycle.shown_persistence Ready gloss outcomes write the displayed vocabulary state back to the lexicon store.
   await storage.lexicon.put(markRecordShown(current, now));
 }
 

@@ -86,7 +86,8 @@ describe("requirement automation tool", () => {
     await runTool(cwd, ["check", "--staged"]);
 
     const agents = readFileSync(join(cwd, "AGENTS.md"), "utf8");
-    expect(agents).toContain("|demo.feature|demo.feature.{}");
+    expect(agents).toContain("|demo.feature|demo.feature.{ready}");
+    expect(agents).toContain("|demo.feature.ready|demo.feature.ready.{}");
   }, 120_000);
 
   // @verifies requirements.change_anchoring.diff_lines
@@ -461,6 +462,7 @@ function writeValidRequirementFiles(cwd: string): void {
       "",
       "// @behavior demo.feature The demo command returns the configured value.",
       "export function demoValue(): string {",
+      "  // @behavior demo.feature.ready The demo command returns ready text to callers.",
       "  return \"demo\";",
       "}",
       "",

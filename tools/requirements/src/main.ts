@@ -428,7 +428,7 @@ function onlyWhitespaceAndComments(text: string): boolean {
   return stripped.length === 0;
 }
 
-// @behavior requirements.comment_tree.validation Requirement checks enforce declared ancestry, valid verification references, test locations, and leaf coverage.
+// @behavior requirements.comment_tree.validation Requirement checks enforce declared ancestry, valid verification references, test locations, and descendant-aware leaf coverage.
 function validateDeclarations(
   comments: RequirementComment[],
   declarations: Map<string, RequirementComment>,
@@ -451,8 +451,8 @@ function validateDeclarations(
     }
     if (target.tag === "@intent") diagnostics.push(diag(verification, "invalid-verification-target", "verification must reference a behavior or constraint"));
     if (!isTestPath(verification.file)) diagnostics.push(diag(verification, "verification-outside-test", "verification comments must appear in configured test paths"));
-    // @constraint requirements.comment_tree.validation.verified_id_set Verification coverage is tracked by referenced requirement ID.
-    verifiedIds.add(verification.id);
+    // @constraint requirements.comment_tree.validation.verified_id_set Verification coverage expands from the referenced requirement ID to descendant requirement IDs.
+    addVerifiedIds(verification.id, declarations, verifiedIds);
   }
 
   for (const [id, declaration] of declarations) {
@@ -472,13 +472,22 @@ function ancestors(id: string): string[] {
   return result;
 }
 
-// @constraint requirements.comment_tree.validation.leaf_coverage Leaf behavior and constraint IDs require verification coverage.
+// @constraint requirements.comment_tree.validation.leaf_coverage Leaf behavior and constraint IDs require direct or ancestor verification coverage.
 function isLeaf(id: string, declarations: Map<string, RequirementComment>): boolean {
   const prefix = `${id}.`;
   for (const other of declarations.keys()) {
     if (other.startsWith(prefix)) return false;
   }
   return true;
+}
+
+function addVerifiedIds(id: string, declarations: Map<string, RequirementComment>, verifiedIds: Set<string>): void {
+  const prefix = `${id}.`;
+  for (const candidate of declarations.keys()) {
+    if (candidate === id || candidate.startsWith(prefix)) {
+      verifiedIds.add(candidate);
+    }
+  }
 }
 
 // @constraint requirements.comment_tree.validation.test_references Verification references stay inside unit, integration, or e2e test files.
@@ -496,7 +505,7 @@ function buildAgentsMd(registry: Registry): string {
     return `${current.slice(0, start)}${block}${current.slice(end)}`;
   }
   // @behavior requirements.agent_index.default_insertion Missing AGENTS markers receive the baseline requirement instructions before the generated index.
-  const insertion = `\n## Requirement Comments\n\nRequirement truth lives in source comments. Use \`@behavior\`, \`@constraint\`, and \`@intent\` for globally unique requirement declarations with one sentence bound to one code unit. A code unit can be a module, type, function, method, branch, state transition, external call, failure path, assertion, or narrower syntax unit. Organize dotted IDs by product or tool requirement domain, then by narrower behavioral detail; a descendant ID expresses a detail of its ancestor next to the code unit that implements that detail. A broad file, type, or function comment covers that code unit only, so inner branches, state transitions, side effects, failure policies, structural abstractions, and test assertions need narrower descendant comments. Public contracts, state policies, durable writes, external calls, observability effects, timeouts, retries, error mapping, access or safety rules, structural abstractions, and test expectations require local requirement comments when they are added or changed. Architecture descriptions, module boundaries, layer duties, helper names, parser roles, loader roles, generator roles, wrapper roles, record shapes, command names, and code-navigation notes belong in ordinary engineering docs or ordinary comments. \`@intent\` is reserved for an active abstraction boundary whose current business purpose is required by the system. Use \`@verifies\` as a direct reference whose content is exactly the tag plus an existing \`@behavior\` or \`@constraint\` ID, choosing the most specific ID that the test expectation verifies. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with \`npm run req:fmt-agents\` after requirement tag changes.\n\n${block}\n`;
+  const insertion = `\n## Requirement Comments\n\nRequirement truth lives in source comments. Use \`@behavior\`, \`@constraint\`, and \`@intent\` for globally unique requirement declarations with one sentence bound to one code unit. A code unit can be a module, type, function, method, branch, state transition, external call, failure path, assertion, or narrower syntax unit. Organize dotted IDs by product or tool requirement domain, then by narrower behavioral detail; a descendant ID expresses a detail of its ancestor next to the code unit that implements that detail. A broad file, type, or function comment covers that code unit only, so inner branches, state transitions, side effects, failure policies, structural abstractions, and test assertions need narrower descendant comments. Public contracts, state policies, durable writes, external calls, observability effects, timeouts, retries, error mapping, access or safety rules, structural abstractions, and test expectations require local requirement comments when they are added or changed. Architecture descriptions, module boundaries, layer duties, helper names, parser roles, loader roles, generator roles, wrapper roles, record shapes, command names, and code-navigation notes belong in ordinary engineering docs or ordinary comments. \`@intent\` is reserved for an active abstraction boundary whose current business purpose is required by the system. Use \`@verifies\` as a direct reference whose content is exactly the tag plus an existing \`@behavior\` or \`@constraint\` ID; a referenced ID covers that requirement and all descendant requirements under it. Search source comments for an ID before changing behavior or structure. The generated requirement index is for retrieval and is updated with \`npm run req:fmt-agents\` after requirement tag changes.\n\n${block}\n`;
   return current.endsWith("\n") ? `${current}${insertion}` : `${current}\n${insertion}`;
 }
 
