@@ -189,7 +189,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation|glossa.page_translation.{activation,candidate_scan,inline_rendering,lookup_order,shortcut_selection,token_geometry}
 |glossa.page_translation.activation|glossa.page_translation.activation.{}
 |glossa.page_translation.candidate_scan|glossa.page_translation.candidate_scan.{overflow_clip,overflow_scroll,viewport_option,viewport_tokens}
-|glossa.page_translation.candidate_scan.overflow_clip|glossa.page_translation.candidate_scan.overflow_clip.{values}
+|glossa.page_translation.candidate_scan.overflow_clip|glossa.page_translation.candidate_scan.overflow_clip.{shadow_host,values}
+|glossa.page_translation.candidate_scan.overflow_clip.shadow_host|glossa.page_translation.candidate_scan.overflow_clip.shadow_host.{}
 |glossa.page_translation.candidate_scan.overflow_clip.values|glossa.page_translation.candidate_scan.overflow_clip.values.{}
 |glossa.page_translation.candidate_scan.overflow_scroll|glossa.page_translation.candidate_scan.overflow_scroll.{}
 |glossa.page_translation.candidate_scan.viewport_option|glossa.page_translation.candidate_scan.viewport_option.{}

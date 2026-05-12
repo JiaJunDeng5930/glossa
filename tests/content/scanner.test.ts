@@ -172,6 +172,60 @@ describe("content scanner", () => {
     }
   });
 
+  // @verifies glossa.page_translation.candidate_scan.overflow_clip.shadow_host
+  it("clips shadow-root token eligibility through overflow ancestors outside the host", () => {
+    document.body.innerHTML = `
+      <main>
+        <section id="scroller" style="height: 100px; overflow: auto;">
+          <article id="host"></article>
+        </section>
+      </main>
+    `;
+    const host = document.querySelector("#host")!;
+    const shadow = host.attachShadow({ mode: "open" });
+    const paragraph = document.createElement("p");
+    paragraph.textContent = "Hidden quarry appears.";
+    shadow.append(paragraph);
+    const originalGetClientRects = Range.prototype.getClientRects;
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+    Range.prototype.getClientRects = function () {
+      return [{
+        width: 12,
+        height: 12,
+        top: 140,
+        bottom: 152,
+        left: 10,
+        right: 22
+      }] as unknown as DOMRectList;
+    };
+    Element.prototype.getBoundingClientRect = function () {
+      if (this.id === "scroller") {
+        return {
+          width: 300,
+          height: 100,
+          top: 0,
+          bottom: 100,
+          left: 0,
+          right: 300
+        } as DOMRect;
+      }
+      return originalGetBoundingClientRect.call(this);
+    };
+
+    try {
+      const result = scanDocumentText(document, new Set(), {
+        requireRenderableRange: true,
+        requireViewportRange: true
+      });
+
+      expect(result.tokens).toEqual([]);
+      expect(result.stats.rejectedByVisibility).toBeGreaterThan(0);
+    } finally {
+      Range.prototype.getClientRects = originalGetClientRects;
+      Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    }
+  });
+
   it("streams scan chunks by token count inside large text nodes", async () => {
     document.body.innerHTML = `
       <main>

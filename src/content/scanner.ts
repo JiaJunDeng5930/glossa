@@ -488,7 +488,7 @@ function intersectsVisibleArea(rect: DOMRect, textNode: Text, doc: Document): bo
   if (!hasPositiveArea(left, right, top, bottom)) {
     return false;
   }
-  let element = textNode.parentElement;
+  let element = firstClipAncestor(textNode);
   while (element) {
     if (!view?.getComputedStyle) {
       return true;
@@ -511,9 +511,26 @@ function intersectsVisibleArea(rect: DOMRect, textNode: Text, doc: Document): bo
         return false;
       }
     }
-    element = element.parentElement;
+    element = nextClipAncestor(element);
   }
   return true;
+}
+
+function firstClipAncestor(textNode: Text): Element | null {
+  if (textNode.parentElement) {
+    return textNode.parentElement;
+  }
+  const root = textNode.getRootNode();
+  return root instanceof ShadowRoot ? root.host : null;
+}
+
+function nextClipAncestor(element: Element): Element | null {
+  if (element.parentElement) {
+    return element.parentElement;
+  }
+  // @behavior glossa.page_translation.candidate_scan.overflow_clip.shadow_host Shadow-root token visibility continues through the host element before checking outer scroll containers.
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot ? root.host : null;
 }
 
 function clipsOverflow(value: string): boolean {

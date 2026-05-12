@@ -62,19 +62,26 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(await storage.glossCache.get(await cacheKey(settings, "Known ignored cached novel words.", "novel", 21, 26))).toMatchObject({ createdAt: 100 });
   });
 
-  it("uses fresh persisted gloss cache before lexicon state and ignores expired cache entries", async () => {
+  it("uses fresh persisted gloss cache before known and ignored lexicon state and ignores expired cache entries", async () => {
     const storage = createMemoryStorage();
     const settings = { ...testSettings(), glossCacheTtlMs: 100 };
     await storage.settings.set(settings);
     await storage.lexicon.put(record("fresh", "known"));
+    await storage.lexicon.put(record("ignored", "ignored"));
     await storage.lexicon.put(record("stale", "known"));
-    await storage.glossCache.put(await cacheKey(settings, "Fresh stale words.", "fresh", 0, 5), {
+    await storage.glossCache.put(await cacheKey(settings, "Fresh ignored stale words.", "fresh", 0, 5), {
       tokenId: "old-fresh",
       targetText: "fresh",
       display: "新鲜",
       createdAt: 150
     });
-    await storage.glossCache.put(await cacheKey(settings, "Fresh stale words.", "stale", 6, 11), {
+    await storage.glossCache.put(await cacheKey(settings, "Fresh ignored stale words.", "ignored", 6, 13), {
+      tokenId: "old-ignored",
+      targetText: "ignored",
+      display: "忽略缓存",
+      createdAt: 150
+    });
+    await storage.glossCache.put(await cacheKey(settings, "Fresh ignored stale words.", "stale", 14, 19), {
       tokenId: "old-stale",
       targetText: "stale",
       display: "过期",
@@ -86,15 +93,17 @@ describe("gloss resolver lookup-first pipeline", () => {
 
     await resolver.resolve("https://example.test/page", [{
       id: "s1",
-      text: "Fresh stale words.",
+      text: "Fresh ignored stale words.",
       tokens: [
         { id: "t-fresh", sentenceId: "s1", surface: "Fresh", lemma: "fresh", startOffset: 0, endOffset: 5 },
-        { id: "t-stale", sentenceId: "s1", surface: "stale", lemma: "stale", startOffset: 6, endOffset: 11 }
+        { id: "t-ignored", sentenceId: "s1", surface: "ignored", lemma: "ignored", startOffset: 6, endOffset: 13 },
+        { id: "t-stale", sentenceId: "s1", surface: "stale", lemma: "stale", startOffset: 14, endOffset: 19 }
       ]
     }], settings, 200, { emit: (event) => events.push(event) });
 
     expect(events).toEqual([
       { tokenId: "t-fresh", status: "ready", item: { tokenId: "t-fresh", targetText: "Fresh", display: "新鲜" } },
+      { tokenId: "t-ignored", status: "ready", item: { tokenId: "t-ignored", targetText: "ignored", display: "忽略缓存" } },
       { tokenId: "t-stale", status: "hidden" }
     ]);
     expect(ai.glossFrame).not.toHaveBeenCalled();
