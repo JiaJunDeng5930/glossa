@@ -765,7 +765,7 @@ test("content bundle rescans newly visible text inside overflow scrollers", asyn
     <main>
       <section id="scroller" style="height: 160px; overflow: auto;">
         <p id="visible">Quizzical archive appears here.</p>
-        <div style="height: 720px"></div>
+        <div style="height: 240px"></div>
         <p id="inner">Obscure quarry appears inside.</p>
       </section>
     </main>

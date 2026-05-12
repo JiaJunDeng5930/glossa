@@ -121,6 +121,57 @@ describe("content scanner", () => {
     }
   });
 
+  // @verifies glossa.page_translation.candidate_scan.overflow_clip
+  it("clips viewport token eligibility through overflow ancestors", () => {
+    document.body.innerHTML = `
+      <main>
+        <section id="scroller" style="height: 100px; overflow: auto;">
+          <p>Visible archive appears.</p>
+          <p>Hidden quarry appears.</p>
+        </section>
+      </main>
+    `;
+    const originalGetClientRects = Range.prototype.getClientRects;
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+    Range.prototype.getClientRects = function () {
+      const clipped = this.toString().startsWith("Hidden") || this.toString().startsWith("quarry");
+      return [{
+        width: 12,
+        height: 12,
+        top: clipped ? 140 : 10,
+        bottom: clipped ? 152 : 22,
+        left: 10,
+        right: 22
+      }] as unknown as DOMRectList;
+    };
+    Element.prototype.getBoundingClientRect = function () {
+      if (this.id === "scroller") {
+        return {
+          width: 300,
+          height: 100,
+          top: 0,
+          bottom: 100,
+          left: 0,
+          right: 300
+        } as DOMRect;
+      }
+      return originalGetBoundingClientRect.call(this);
+    };
+
+    try {
+      const result = scanDocumentText(document, new Set(), {
+        requireRenderableRange: true,
+        requireViewportRange: true
+      });
+
+      expect(result.tokens.map((token) => token.surface)).toEqual(["Visible", "archive", "appears"]);
+      expect(result.stats.rejectedByVisibility).toBeGreaterThan(0);
+    } finally {
+      Range.prototype.getClientRects = originalGetClientRects;
+      Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    }
+  });
+
   it("streams scan chunks by token count inside large text nodes", async () => {
     document.body.innerHTML = `
       <main>

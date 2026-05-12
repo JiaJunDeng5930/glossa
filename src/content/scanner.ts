@@ -467,8 +467,8 @@ function hasRenderableRange(textNode: Text, startOffset: number, endOffset: numb
       if (rect.width <= 0 || rect.height <= 0) {
         return false;
       }
-      // @behavior glossa.page_translation.candidate_scan.viewport_tokens Candidate token ranges must intersect the current viewport before content sends them for translation.
-      return !requireViewportRange || intersectsViewport(rect, doc);
+      // @behavior glossa.page_translation.candidate_scan.viewport_tokens Candidate token ranges must intersect the currently visible scrollport area before content sends them for translation.
+      return !requireViewportRange || intersectsVisibleArea(rect, textNode, doc);
     });
   } catch {
     return false;
@@ -477,11 +477,52 @@ function hasRenderableRange(textNode: Text, startOffset: number, endOffset: numb
   }
 }
 
-function intersectsViewport(rect: DOMRect, doc: Document): boolean {
+function intersectsVisibleArea(rect: DOMRect, textNode: Text, doc: Document): boolean {
   const view = doc.defaultView;
   const width = view?.innerWidth ?? doc.documentElement.clientWidth;
   const height = view?.innerHeight ?? doc.documentElement.clientHeight;
-  return rect.right > 0 && rect.bottom > 0 && rect.left < width && rect.top < height;
+  let left = Math.max(rect.left, 0);
+  let right = Math.min(rect.right, width);
+  let top = Math.max(rect.top, 0);
+  let bottom = Math.min(rect.bottom, height);
+  if (!hasPositiveArea(left, right, top, bottom)) {
+    return false;
+  }
+  let element = textNode.parentElement;
+  while (element) {
+    if (!view?.getComputedStyle) {
+      return true;
+    }
+    const style = view.getComputedStyle(element);
+    const clipsX = clipsOverflow(style.overflowX || style.overflow);
+    const clipsY = clipsOverflow(style.overflowY || style.overflow);
+    if (clipsX || clipsY) {
+      // @behavior glossa.page_translation.candidate_scan.overflow_clip Candidate token visibility is clipped by scroll-container ancestors before translation lookup starts.
+      const clipRect = element.getBoundingClientRect();
+      if (clipsX) {
+        left = Math.max(left, clipRect.left);
+        right = Math.min(right, clipRect.right);
+      }
+      if (clipsY) {
+        top = Math.max(top, clipRect.top);
+        bottom = Math.min(bottom, clipRect.bottom);
+      }
+      if (!hasPositiveArea(left, right, top, bottom)) {
+        return false;
+      }
+    }
+    element = element.parentElement;
+  }
+  return true;
+}
+
+function clipsOverflow(value: string): boolean {
+  // @constraint glossa.page_translation.candidate_scan.overflow_clip.values Overflow clipping applies to CSS values that create a scrollport or clip box.
+  return value === "auto" || value === "scroll" || value === "hidden" || value === "clip";
+}
+
+function hasPositiveArea(left: number, right: number, top: number, bottom: number): boolean {
+  return right > left && bottom > top;
 }
 
 export function createSourceFingerprint(text: string, startOffset: number, endOffset: number): string {
