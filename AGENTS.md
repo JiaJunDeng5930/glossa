@@ -188,7 +188,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.failure_reporting.user_copy|glossa.failure_reporting.user_copy.{}
 |glossa.page_translation|glossa.page_translation.{activation,candidate_scan,inline_rendering,lookup_order,shortcut_selection,token_geometry}
 |glossa.page_translation.activation|glossa.page_translation.activation.{}
-|glossa.page_translation.candidate_scan|glossa.page_translation.candidate_scan.{viewport_option,viewport_tokens}
+|glossa.page_translation.candidate_scan|glossa.page_translation.candidate_scan.{overflow_scroll,viewport_option,viewport_tokens}
+|glossa.page_translation.candidate_scan.overflow_scroll|glossa.page_translation.candidate_scan.overflow_scroll.{}
 |glossa.page_translation.candidate_scan.viewport_option|glossa.page_translation.candidate_scan.viewport_option.{}
 |glossa.page_translation.candidate_scan.viewport_tokens|glossa.page_translation.candidate_scan.viewport_tokens.{}
 |glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{}

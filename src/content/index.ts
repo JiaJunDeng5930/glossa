@@ -655,7 +655,10 @@ async function boot(): Promise<void> {
   });
   observer.observe(document.body, { childList: true, characterData: true, subtree: true });
   observeOpenShadowRoots(document.body);
-  window.addEventListener("scroll", () => scheduleScan("scroll"), { passive: true });
+  const onScroll = (): void => scheduleScan("scroll");
+  // @behavior glossa.page_translation.candidate_scan.overflow_scroll Element scroll events reschedule viewport scans so newly visible overflow-container text becomes eligible.
+  document.addEventListener("scroll", onScroll, { passive: true, capture: true });
+  window.addEventListener("scroll", onScroll, { passive: true });
 
   function observeOpenShadowRoots(root: ParentNode): void {
     if (stopped) {
