@@ -13,6 +13,14 @@ export interface KeyValueStore<T> {
   clear(): Promise<void>;
 }
 
+// @constraint glossa.cache_identity.gloss_cache_entry.fresh_store Gloss cache storage exposes fresh-read methods for TTL-aware database cache requests.
+export interface GlossCacheStore extends KeyValueStore<GlossCacheEntry> {
+  // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read Gloss cache reads return persisted entries only while their creation time is inside the requested TTL window.
+  getFresh(key: string, now: number, ttlMs: number): Promise<GlossCacheEntry | undefined>;
+  // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read_many Batched gloss cache reads return only entries that are fresh for the request time and TTL.
+  getFreshMany(keys: string[], now: number, ttlMs: number): Promise<Map<string, GlossCacheEntry>>;
+}
+
 export interface LexiconStore {
   get(key: string): Promise<VocabularyRecord | undefined>;
   getMany(keys: string[]): Promise<Map<string, VocabularyRecord>>;
@@ -31,7 +39,7 @@ export interface SettingsStore {
 export interface ExtensionStorage {
   settings: SettingsStore;
   // @constraint glossa.cache_identity.gloss_cache_entry.store Extension storage persists gloss cache entries with cache metadata.
-  glossCache: KeyValueStore<GlossCacheEntry>;
+  glossCache: GlossCacheStore;
   lexicon: LexiconStore;
   // @constraint glossa.cache_identity.card_content_cache.store Card cache storage persists generated card content without note-write identifiers.
   cardCache: KeyValueStore<AnkiCardOutput>;
@@ -45,7 +53,7 @@ export function createExtensionStorage(): ExtensionStorage {
   return {
     settings: createChromeSettingsStore(),
     lexicon: createLexiconStore(),
-    glossCache: createIndexedStore<GlossCacheEntry>("glossCache"),
+    glossCache: createGlossCacheStore(),
     cardCache: createIndexedStore<AnkiCardOutput>("cardCache"),
     cardedWords: createIndexedStore<CardedWordRecord>("cardedWords")
   };
@@ -138,6 +146,33 @@ function createIndexedStore<T>(name: StoreName): KeyValueStore<T> {
       await transactionDone(tx);
     }
   };
+}
+
+function createGlossCacheStore(): GlossCacheStore {
+  const store = createIndexedStore<GlossCacheEntry>("glossCache");
+  return {
+    ...store,
+    async getFresh(key, now, ttlMs) {
+      const value = await store.get(key);
+      // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read.expiry A gloss cache entry past createdAt plus TTL is returned as a cache miss.
+      return value && isFreshGlossCacheEntry(value, now, ttlMs) ? value : undefined;
+    },
+    async getFreshMany(keys, now, ttlMs) {
+      const values = await store.getMany(keys);
+      const result = new Map<string, GlossCacheEntry>();
+      for (const [key, value] of values) {
+        // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read_many.expiry Batched gloss cache reads omit entries past createdAt plus TTL.
+        if (isFreshGlossCacheEntry(value, now, ttlMs)) {
+          result.set(key, value);
+        }
+      }
+      return result;
+    }
+  };
+}
+
+function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: number): boolean {
+  return now < value.createdAt + ttlMs;
 }
 
 function createLexiconStore(): LexiconStore {

@@ -444,6 +444,13 @@ export function createMemoryStorage(): ExtensionStorage {
       async getMany(keys) {
         return readMany<GlossCacheEntry>(glossCache, keys);
       },
+      async getFresh(key, now, ttlMs) {
+        const value = glossCache.get(key) as GlossCacheEntry | undefined;
+        return value && isFreshGlossCacheEntry(value, now, ttlMs) ? value : undefined;
+      },
+      async getFreshMany(keys, now, ttlMs) {
+        return freshMany(readMany<GlossCacheEntry>(glossCache, keys), now, ttlMs);
+      },
       async put(key, value) {
         glossCache.set(key, value);
       },
@@ -499,6 +506,20 @@ function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T
     }
   }
   return result;
+}
+
+function freshMany(values: Map<string, GlossCacheEntry>, now: number, ttlMs: number): Map<string, GlossCacheEntry> {
+  const result = new Map<string, GlossCacheEntry>();
+  for (const [key, value] of values) {
+    if (isFreshGlossCacheEntry(value, now, ttlMs)) {
+      result.set(key, value);
+    }
+  }
+  return result;
+}
+
+function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: number): boolean {
+  return now < value.createdAt + ttlMs;
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {

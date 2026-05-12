@@ -143,6 +143,47 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps page memory replay independent from persistent gloss cache TTL", async () => {
+    const storage = createMemoryStorage();
+    const settings = { ...testSettings(), glossCacheTtlMs: 50 };
+    await storage.settings.set(settings);
+    const ai = {
+      gloss: vi.fn(),
+      glossFrame: vi.fn(async () => ({
+        items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai });
+    const sentence = "A novel archive appears.";
+    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const samePageEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const otherPageEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    await resolver.resolve("https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: (event) => firstEvents.push(event) });
+    await resolver.resolve("https://example.test/a", [{
+      id: "s2",
+      text: sentence,
+      tokens: [{ id: "t-second", sentenceId: "s2", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 200, { emit: (event) => samePageEvents.push(event) });
+    await resolver.resolve("https://example.test/b", [{
+      id: "s3",
+      text: sentence,
+      tokens: [{ id: "t-third", sentenceId: "s3", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 200, { emit: (event) => otherPageEvents.push(event) });
+
+    expect(firstEvents.map((event) => event.status)).toEqual(["pending", "ready"]);
+    expect(samePageEvents).toEqual([
+      { tokenId: "t-second", status: "ready", item: { tokenId: "t-second", targetText: "novel", display: "新词" } }
+    ]);
+    expect(otherPageEvents).toEqual([{ tokenId: "t-third", status: "hidden" }]);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
+  });
+
   it("groups cache misses into a size-triggered AI frame", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();
@@ -733,6 +774,13 @@ function createMemoryStorage(): ExtensionStorage {
       async getMany(keys) {
         return readMany<GlossCacheEntry>(glossCache, keys);
       },
+      async getFresh(key, now, ttlMs) {
+        const value = glossCache.get(key) as GlossCacheEntry | undefined;
+        return value && isFreshGlossCacheEntry(value, now, ttlMs) ? value : undefined;
+      },
+      async getFreshMany(keys, now, ttlMs) {
+        return freshMany(readMany<GlossCacheEntry>(glossCache, keys), now, ttlMs);
+      },
       async put(key, value) {
         glossCache.set(key, value);
       },
@@ -788,4 +836,18 @@ function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T
     }
   }
   return result;
+}
+
+function freshMany(values: Map<string, GlossCacheEntry>, now: number, ttlMs: number): Map<string, GlossCacheEntry> {
+  const result = new Map<string, GlossCacheEntry>();
+  for (const [key, value] of values) {
+    if (isFreshGlossCacheEntry(value, now, ttlMs)) {
+      result.set(key, value);
+    }
+  }
+  return result;
+}
+
+function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: number): boolean {
+  return now < value.createdAt + ttlMs;
 }

@@ -90,8 +90,13 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.cache_identity|glossa.cache_identity.{card_content_cache,gloss_cache_entry,request_parts,text_hash}
 |glossa.cache_identity.card_content_cache|glossa.cache_identity.card_content_cache.{store}
 |glossa.cache_identity.card_content_cache.store|glossa.cache_identity.card_content_cache.store.{}
-|glossa.cache_identity.gloss_cache_entry|glossa.cache_identity.gloss_cache_entry.{created_at,store}
+|glossa.cache_identity.gloss_cache_entry|glossa.cache_identity.gloss_cache_entry.{created_at,fresh_read,fresh_read_many,fresh_store,store}
 |glossa.cache_identity.gloss_cache_entry.created_at|glossa.cache_identity.gloss_cache_entry.created_at.{}
+|glossa.cache_identity.gloss_cache_entry.fresh_read|glossa.cache_identity.gloss_cache_entry.fresh_read.{expiry}
+|glossa.cache_identity.gloss_cache_entry.fresh_read.expiry|glossa.cache_identity.gloss_cache_entry.fresh_read.expiry.{}
+|glossa.cache_identity.gloss_cache_entry.fresh_read_many|glossa.cache_identity.gloss_cache_entry.fresh_read_many.{expiry}
+|glossa.cache_identity.gloss_cache_entry.fresh_read_many.expiry|glossa.cache_identity.gloss_cache_entry.fresh_read_many.expiry.{}
+|glossa.cache_identity.gloss_cache_entry.fresh_store|glossa.cache_identity.gloss_cache_entry.fresh_store.{}
 |glossa.cache_identity.gloss_cache_entry.store|glossa.cache_identity.gloss_cache_entry.store.{}
 |glossa.cache_identity.request_parts|glossa.cache_identity.request_parts.{gloss_key_fields}
 |glossa.cache_identity.request_parts.gloss_key_fields|glossa.cache_identity.request_parts.gloss_key_fields.{}

@@ -10,7 +10,7 @@
 
 The in-memory cache is a bounded replay layer for the current page URL and background lifetime. IndexedDB remains the durable source for gloss cache and lexicon state. Marking a word as shown updates only lexicon state; it does not invalidate or mutate the gloss caches.
 
-DB reads pass through a short-window coalescer. Individual token lookups ask for lexicon and gloss cache keys, and the coalescer batches same-store reads into one `getMany` transaction per 8ms window. Shown-state and cache writes run through the write side after visible outcomes have already been emitted.
+DB reads pass through a short-window coalescer. Individual token lookups ask for lexicon keys and fresh gloss cache keys; the gloss cache store applies `createdAt + settings.glossCacheTtlMs` before returning entries, and the coalescer batches same-store reads into one transaction per 8ms window. Shown-state and cache writes run through the write side after visible outcomes have already been emitted.
 
 AI misses use an in-flight map keyed by the durable gloss cache key plus the live AI settings that select the outlet. A duplicate miss with the same settings attaches to the running lookup, emits its own `pending`, then receives the shared `ready` or `error` result with the current token id. The first lookup owns the AI frame entry and cache write.
 

@@ -115,11 +115,6 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     (keys) => deps.storage.lexicon.getMany(keys),
     deps.dbReadCoalesceMs ?? DEFAULT_DB_READ_COALESCE_MS
   );
-  const glossCacheReads = createReadCoalescer(
-    "glossCache",
-    (keys) => deps.storage.glossCache.getMany(keys),
-    deps.dbReadCoalesceMs ?? DEFAULT_DB_READ_COALESCE_MS
-  );
   const aiOutlet = createAiOutlet({
     ai: deps.ai,
     storage: deps.storage,
@@ -153,6 +148,11 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const createSession = (pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession => {
     const startedAt = nowMs();
     const tasks = new Set<Promise<void>>();
+    const glossCacheReads = createReadCoalescer(
+      "glossCache",
+      (keys) => deps.storage.glossCache.getFreshMany(keys, now, settings.glossCacheTtlMs),
+      deps.dbReadCoalesceMs ?? DEFAULT_DB_READ_COALESCE_MS
+    );
     const stats: ResolverStats = {
       chunks: 0,
       tokens: 0,
@@ -320,10 +320,10 @@ async function resolveToken(input: {
     }
 
     const cached = await input.glossCacheReads.get(cacheKey);
-    // @behavior glossa.page_translation.lookup_order.fresh_cache_precedes_lexicon Fresh persisted gloss cache hits return ready before known or ignored lexicon state gates run.
+    // @behavior glossa.page_translation.lookup_order.fresh_cache_precedes_lexicon Database-fresh persisted gloss cache hits return ready before known or ignored lexicon state gates run.
     if (input.sink.isActive?.() === false) {
       return;
-    } else if (cached && isFreshGlossCacheEntry(cached, input.settings, input.now)) {
+    } else if (cached) {
       const item = rehydrateCachedGloss(cached, input.token);
       input.remember(memoryKey, item);
       input.emit({ tokenId: input.token.id, status: "ready", item });
@@ -695,10 +695,6 @@ function rehydrateCachedGloss(item: GlossItem, token: TokenCandidate): GlossItem
     tokenId: token.id,
     targetText: token.surface
   };
-}
-
-function isFreshGlossCacheEntry(item: GlossCacheEntry, settings: GlossaSettings, now: number): boolean {
-  return now < item.createdAt + settings.glossCacheTtlMs;
 }
 
 function transientMemoryKey(pageUrl: string, cacheKey: string): string {
