@@ -7,10 +7,8 @@ import "../styles/global.css";
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Glossa AI 为英文阅读自动标出生词释义，并支持通过 Alt 点击生成 Anki 卡片。"
-    />
+    <meta name="description" content="Glossa AI 官网" />
+    <link rel="icon" href="data:," />
     <title>Glossa AI</title>
   </head>
   <body>
@@ -30,100 +28,67 @@ import "../styles/global.css";
     </header>
 
     <main>
-      <section class="story" id="features" aria-label="Glossa AI 阅读演示" data-story>
-        <div class="story-stage" data-stage>
-          <div class="story-left">
-            <div class="copy-track" data-copy-track>
-              <article class="copy-panel">
+      <section class="story" id="features" aria-label="Glossa AI 阅读与制卡演示" data-story>
+        <div class="stage">
+          <div class="left-viewport">
+            <div class="left-track" data-left-track>
+              <section class="left-panel hero-panel">
                 <h1 class="brand-title">Glossa AI</h1>
                 <p class="brand-subtitle">你阅读和学习英语的新方式</p>
-                <div class="quill-scene" aria-hidden="true" data-ink-scene>
-                  <svg class="ink-line" viewBox="0 0 520 190">
-                    <path d="M7 44 C91 15 145 27 194 58 C236 84 281 85 318 57 C358 27 411 38 438 78 C459 111 444 145 397 171"></path>
+                <div class="ink-scene" aria-hidden="true">
+                  <svg class="ink-line" viewBox="0 0 600 210">
+                    <path d="M12 50 C94 16 154 30 213 68 C270 106 324 111 383 154"></path>
                   </svg>
-                  <svg class="feather" viewBox="0 0 220 150">
-                    <path class="feather-body" d="M28 123 C59 53 127 8 202 12 C174 31 151 62 132 103 C98 122 62 128 28 123 Z"></path>
-                    <path d="M43 119 C90 88 128 49 192 17"></path>
-                    <path d="M71 108 C66 88 73 69 86 51"></path>
-                    <path d="M95 95 C89 75 97 52 112 35"></path>
-                    <path d="M121 78 C116 61 125 40 143 26"></path>
-                    <path d="M132 104 L103 145"></path>
-                  </svg>
+                  <img class="quill-image" src="/assets/quill.png" alt="" />
                 </div>
-              </article>
+              </section>
 
-              <article class="copy-panel">
+              <section class="left-panel">
                 <h2>流畅阅读，<br />即时无障碍</h2>
                 <p>
                   阅读英文文段的时候，Glossa 为您智能翻译生词。根据您的设置和历史记录筛选生词；使用 AI
                   智能提供最符合语境的翻译。
                 </p>
-              </article>
+              </section>
 
-              <article class="copy-panel">
+              <section class="left-panel">
                 <h2>智能制卡，<br />巩固学习</h2>
                 <p>长按 Alt 键并且点击您需要制卡的单词，让 AI 为您智能制作 Anki 卡片，学习您不会的生词。</p>
-                <div class="side-feather" aria-hidden="true">
-                  <svg viewBox="0 0 230 250">
-                    <path d="M196 11 C179 83 123 135 33 221"></path>
-                    <path class="feather-body" d="M32 221 C60 137 112 82 196 11 C175 98 124 174 32 221 Z"></path>
-                    <path d="M57 202 C78 190 96 175 111 154"></path>
-                    <path d="M77 181 C102 167 122 145 139 117"></path>
-                    <path d="M101 154 C126 139 147 113 168 70"></path>
-                  </svg>
-                </div>
-              </article>
+              </section>
             </div>
           </div>
 
-          <div class="story-right">
-            <article class="reading-panel" aria-label="英文用法介绍" data-reading-panel>
-              <p class="reading-text">
+          <div class="right-stage">
+            <article class="reading-demo" aria-label="英文阅读演示" data-reading-demo>
+              <p class="reading-copy">
                 Glossa AI helps you read English with
-                <span class="gloss-word"><span class="gloss-label">自信</span>confidence</span>
-                by showing just the right Chinese
-                <span class="gloss-word"><span class="gloss-label">释义</span>glosses</span>, only for words that
-                <span class="gloss-word"><span class="gloss-label">重要</span>matter</span>.
+                <span class="gloss-token"><span class="gloss-label">自信</span><span class="source-word">confidence</span></span>
+                by showing just the right Chinese glosses for words that
+                <span class="gloss-token"><span class="gloss-label">重要</span><span class="source-word">matter</span></span>.
                 Each gloss appears in
-                <span class="gloss-word"><span class="gloss-label">语境</span>context</span>,
-                so you can
-                <span class="gloss-word"><span class="gloss-label">理解</span>grasp</span>
-                meaning without breaking your flow. It is a calmer, smarter
-                way to build
-                <span class="gloss-word"><span class="gloss-label">词汇</span>vocabulary</span>,
-                strengthen comprehension, and enjoy what you read.
+                <span class="gloss-token"><span class="gloss-label">语境</span><span class="source-word">context</span></span>,
+                so you can grasp meaning without breaking your flow. For serious readers, this support becomes
+                <span class="gloss-token card-target"><span class="gloss-label">必不可少</span><span class="source-word">indispensable</span></span>
+                when long articles introduce unfamiliar vocabulary, subtle phrasing, and ideas that deserve careful attention.
               </p>
 
-              <div class="carding-demo" data-carding-demo aria-hidden="true">
+              <div class="carding-layer" aria-hidden="true">
                 <div class="alt-key">Alt</div>
                 <div class="reading-mask"></div>
-                <span class="selected-word">indispensable</span>
-                <span class="cursor"></span>
-                <section class="anki-preview">
-                  <div class="preview-head">
-                    <span>Glossa AI · 制卡预览</span>
-                    <button class="preview-close" type="button" aria-label="关闭">×</button>
+                <span class="click-highlight">indispensable</span>
+                <span class="mouse-pointer"></span>
+                <section class="anki-card" aria-label="Anki 卡片示意">
+                  <div class="anki-title">Anki</div>
+                  <div class="anki-row">
+                    <span>Front</span>
+                    <strong>indispensable</strong>
                   </div>
-                  <div class="preview-body">
-                    <div class="preview-field">
-                      <small>单词</small>
-                      <strong>indispensable</strong>
-                      <p>不可或缺的；必不可少的</p>
-                    </div>
-                    <div class="preview-field">
-                      <small>词性</small>
-                      <strong>adj.</strong>
-                    </div>
+                  <div class="anki-row">
+                    <span>Back</span>
+                    <p>不可或缺的；必不可少的</p>
                   </div>
-                  <div class="preview-example">
-                    <span class="example-label">例句</span>
-                    <p class="example-en">This hierarchy was absolutely indispensable given the complexity of tax law.</p>
-                    <p class="example-cn">鉴于税法的复杂性，这种层级结构是绝对不可或缺的。</p>
-                  </div>
-                  <div class="preview-actions">
-                    <button type="button">编辑</button>
-                    <button type="button">取消</button>
-                    <button class="orange-action" type="button">添加到 Anki</button>
+                  <div class="anki-example">
+                    For serious readers, this support becomes indispensable.
                   </div>
                 </section>
               </div>
@@ -133,87 +98,61 @@ import "../styles/global.css";
       </section>
 
       <section class="price-section" id="price" aria-label="价格介绍">
-        <header class="price-title">
-          <h2>价格</h2>
-          <svg viewBox="0 0 520 66" aria-hidden="true">
-            <path d="M18 32 C93 12 159 56 238 32 C306 11 363 33 502 29"></path>
-            <path d="M240 29 C251 14 268 15 279 29 C268 43 251 43 240 29 Z"></path>
-          </svg>
-          <p>选择适合你的方式</p>
-        </header>
-
+        <h2>价格</h2>
         <div class="plans">
-          <article class="plan-card">
-            <div class="price">￥0<span>/月</span></div>
-            <div class="divider" aria-hidden="true"></div>
+          <article class="plan">
+            <div class="plan-price">￥0<span>/月</span></div>
             <p>自备 AI 密钥，无需登录</p>
           </article>
-          <article class="plan-card paid">
-            <span class="bookmark" aria-hidden="true">☆</span>
-            <div class="price">￥39<span>/月</span></div>
-            <div class="divider" aria-hidden="true"></div>
-            <p>登录后，直接使用 AI，无需手动配置。</p>
+          <article class="plan">
+            <div class="plan-price">￥39<span>/月</span></div>
+            <p>登录后，直接使用 AI，无需手动配置</p>
           </article>
         </div>
-
-        <p class="download-note" id="download">
-          下载入口预留在这里，用于连接浏览器扩展安装页。
-        </p>
+        <span id="download" aria-hidden="true"></span>
         <span id="login" aria-hidden="true"></span>
       </section>
     </main>
 
     <script>
       const story = document.querySelector("[data-story]");
-      const track = document.querySelector("[data-copy-track]");
-      const readingPanel = document.querySelector("[data-reading-panel]");
-      const inkScene = document.querySelector("[data-ink-scene]");
+      const leftTrack = document.querySelector("[data-left-track]");
+      const readingDemo = document.querySelector("[data-reading-demo]");
 
       function clamp(value, min, max) {
         return Math.min(Math.max(value, min), max);
       }
 
-      function segmentProgress(value, start, end) {
+      function segment(value, start, end) {
         return clamp((value - start) / (end - start), 0, 1);
       }
 
       function updateStory() {
-        if (!story || !track || !readingPanel) {
+        if (!story || !leftTrack || !readingDemo) {
           return;
         }
 
-        if (window.matchMedia("(max-width: 860px)").matches) {
-          track.style.transform = "";
-          readingPanel.style.setProperty("--label-opacity", "1");
-          readingPanel.style.setProperty("--text-wash", "1");
-          readingPanel.style.setProperty("--carding-opacity", "1");
-          readingPanel.style.setProperty("--mask-opacity", "1");
-          readingPanel.style.setProperty("--selection-opacity", "1");
-          readingPanel.style.setProperty("--cursor-opacity", "1");
-          readingPanel.style.setProperty("--card-opacity", "1");
-          inkScene?.style.setProperty("--ink-progress", "1");
+        const isMobile = window.matchMedia("(max-width: 820px)").matches;
+        if (isMobile) {
+          leftTrack.style.transform = "";
+          readingDemo.style.setProperty("--gloss-progress", "1");
+          readingDemo.style.setProperty("--alt-progress", "1");
+          readingDemo.style.setProperty("--mask-progress", "1");
+          readingDemo.style.setProperty("--click-progress", "1");
+          readingDemo.style.setProperty("--card-progress", "1");
           return;
         }
 
-        const rect = story.getBoundingClientRect();
         const scrollable = story.offsetHeight - window.innerHeight;
-        const progress = clamp(-rect.top / scrollable, 0, 1);
-        const trackProgress = segmentProgress(progress, 0, 0.72);
-        const labelProgress = segmentProgress(progress, 0.16, 0.36);
-        const cardingProgress = segmentProgress(progress, 0.48, 0.75);
-        const maskProgress = segmentProgress(progress, 0.54, 0.64);
-        const selectionProgress = segmentProgress(progress, 0.58, 0.68);
-        const cardProgress = segmentProgress(progress, 0.68, 0.82);
+        const progress = clamp(-story.getBoundingClientRect().top / scrollable, 0, 1);
+        const leftProgress = segment(progress, 0, 0.68);
 
-        track.style.transform = `translateY(${-trackProgress * 66.6667}%)`;
-        readingPanel.style.setProperty("--label-opacity", String(labelProgress));
-        readingPanel.style.setProperty("--text-wash", String(labelProgress));
-        readingPanel.style.setProperty("--carding-opacity", String(cardingProgress));
-        readingPanel.style.setProperty("--mask-opacity", String(maskProgress));
-        readingPanel.style.setProperty("--selection-opacity", String(selectionProgress));
-        readingPanel.style.setProperty("--cursor-opacity", String(selectionProgress));
-        readingPanel.style.setProperty("--card-opacity", String(cardProgress));
-        inkScene?.style.setProperty("--ink-progress", "1");
+        leftTrack.style.transform = `translateY(${-leftProgress * 66.6667}%)`;
+        readingDemo.style.setProperty("--gloss-progress", String(segment(progress, 0.14, 0.34)));
+        readingDemo.style.setProperty("--alt-progress", String(segment(progress, 0.47, 0.55)));
+        readingDemo.style.setProperty("--mask-progress", String(segment(progress, 0.54, 0.62)));
+        readingDemo.style.setProperty("--click-progress", String(segment(progress, 0.61, 0.69)));
+        readingDemo.style.setProperty("--card-progress", String(segment(progress, 0.68, 0.82)));
       }
 
       window.addEventListener("scroll", updateStory, { passive: true });
