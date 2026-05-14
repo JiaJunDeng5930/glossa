@@ -222,6 +222,26 @@ import "../styles/global.css";
         return clamp((value - start) / (end - start), 0, 1);
       }
 
+      function heldStageProgress(value) {
+        if (value < 0.18) {
+          return 0;
+        }
+
+        if (value < 0.34) {
+          return segment(value, 0.18, 0.34);
+        }
+
+        if (value < 0.52) {
+          return 1;
+        }
+
+        if (value < 0.68) {
+          return 1 + segment(value, 0.52, 0.68);
+        }
+
+        return 2;
+      }
+
       function updateStory() {
         if (!story || !leftTrack || !readingDemo) {
           return;
@@ -243,14 +263,14 @@ import "../styles/global.css";
           return;
         }
         const progress = clamp(-story.getBoundingClientRect().top / scrollable, 0, 1);
-        const leftProgress = segment(progress, 0, 0.68);
+        const leftProgress = heldStageProgress(progress);
 
-        leftTrack.style.transform = `translateY(${-leftProgress * 66.6667}%)`;
-        readingDemo.style.setProperty("--gloss-progress", String(segment(progress, 0.14, 0.34)));
-        readingDemo.style.setProperty("--alt-progress", String(segment(progress, 0.47, 0.55)));
-        readingDemo.style.setProperty("--mask-progress", String(segment(progress, 0.54, 0.62)));
-        readingDemo.style.setProperty("--click-progress", String(segment(progress, 0.61, 0.69)));
-        readingDemo.style.setProperty("--card-progress", String(segment(progress, 0.68, 0.82)));
+        leftTrack.style.transform = `translateY(${-leftProgress * 33.3333}%)`;
+        readingDemo.style.setProperty("--gloss-progress", String(segment(progress, 0.22, 0.38)));
+        readingDemo.style.setProperty("--alt-progress", String(segment(progress, 0.62, 0.7)));
+        readingDemo.style.setProperty("--mask-progress", String(segment(progress, 0.68, 0.76)));
+        readingDemo.style.setProperty("--click-progress", String(segment(progress, 0.74, 0.82)));
+        readingDemo.style.setProperty("--card-progress", String(segment(progress, 0.8, 0.9)));
       }
 
       window.addEventListener("scroll", updateStory, { passive: true });
