@@ -167,8 +167,6 @@ a {
 }
 
 .brand-subtitle,
-.left-panel p,
-.mobile-panel p,
 .price-section h2,
 .plan p {
   font-family: "FZShuTi", "FZSTK", "STXingkai", "KaiTi", "STKaiti", serif;
@@ -228,8 +226,9 @@ a {
 .mobile-panel p {
   max-width: 35rem;
   margin: 0;
+  font-family: "KaiTi", "STKaiti", "SimKai", "Songti SC", serif;
   font-size: clamp(1.12rem, 1.45vw, 1.5rem);
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1.92;
 }
 
@@ -248,6 +247,11 @@ a {
   min-height: min(36rem, calc(100svh - var(--nav-height) - 4rem));
   margin-inline: auto;
   --gloss-progress: 0;
+  --gloss-1: var(--gloss-progress);
+  --gloss-2: var(--gloss-progress);
+  --gloss-3: var(--gloss-progress);
+  --gloss-4: var(--gloss-progress);
+  --gloss-5: var(--gloss-progress);
   --alt-progress: 0;
   --mask-progress: 0;
   --click-progress: 0;
@@ -267,17 +271,38 @@ a {
 .gloss-token {
   position: relative;
   display: inline-block;
-  padding-top: 0.78em;
+  padding-top: 1.08em;
   margin: 0 0.03em;
   line-height: 1;
   vertical-align: baseline;
   white-space: nowrap;
+  --token-gloss-progress: var(--gloss-progress);
+}
+
+.gloss-1 {
+  --token-gloss-progress: var(--gloss-1);
+}
+
+.gloss-2 {
+  --token-gloss-progress: var(--gloss-2);
+}
+
+.gloss-3 {
+  --token-gloss-progress: var(--gloss-3);
+}
+
+.gloss-4 {
+  --token-gloss-progress: var(--gloss-4);
+}
+
+.gloss-5 {
+  --token-gloss-progress: var(--gloss-5);
 }
 
 .gloss-label {
   position: absolute;
+  top: 0.18em;
   left: 50%;
-  bottom: calc(100% - 0.76em);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -290,8 +315,8 @@ a {
   font-size: 0.7rem;
   font-weight: 600;
   line-height: 1;
-  opacity: var(--gloss-progress);
-  transform: translate(-50%, calc(0.22rem * (1 - var(--gloss-progress))));
+  opacity: var(--token-gloss-progress);
+  transform: translate(-50%, calc(0.18rem * (1 - var(--token-gloss-progress))));
 }
 
 .source-word {
@@ -307,24 +332,14 @@ a {
 
 .word-pointer {
   position: absolute;
-  left: 70%;
-  top: 82%;
+  left: 68%;
+  top: 72%;
   z-index: 6;
-  width: 2rem;
-  height: 2rem;
+  width: clamp(1.65rem, 2.35vw, 2.2rem);
+  height: auto;
   opacity: var(--click-progress);
-  transform: translate(calc(-0.7rem * (1 - var(--click-progress))), calc(-0.55rem * (1 - var(--click-progress))));
+  transform: translate(calc(-0.9rem * (1 - var(--click-progress))), calc(-0.72rem * (1 - var(--click-progress))));
   pointer-events: none;
-}
-
-.word-pointer::before {
-  display: block;
-  width: 0;
-  height: 0;
-  border-top: 2.25rem solid #fff;
-  border-right: 1.25rem solid transparent;
-  filter: drop-shadow(1px 2px 1px rgba(0, 0, 0, 0.68));
-  content: "";
 }
 
 .carding-layer {
@@ -335,21 +350,14 @@ a {
 
 .alt-key {
   position: absolute;
-  top: 0.4rem;
-  left: clamp(1.2rem, 8%, 3.3rem);
+  top: 0.1rem;
+  left: clamp(1.1rem, 7%, 3rem);
   z-index: 4;
-  display: grid;
-  place-items: center;
-  width: 5.6rem;
-  height: 2.85rem;
-  border: 1.5px solid #16120e;
-  border-radius: 7px;
-  background: rgba(250, 244, 232, 0.94);
-  color: #16120e;
-  font-size: 1.38rem;
-  font-weight: 700;
+  display: block;
+  width: clamp(5.1rem, 7.8vw, 6.8rem);
+  height: auto;
   opacity: var(--alt-progress);
-  box-shadow: inset 0 0 0 4px rgba(250, 244, 232, 0.95), inset 0 0 0 5px #16120e;
+  transform: translateY(calc(-0.25rem * (1 - var(--alt-progress))));
 }
 
 .reading-mask {
@@ -416,8 +424,11 @@ a {
 .price-section {
   position: relative;
   z-index: 12;
+  display: grid;
+  align-content: center;
+  gap: clamp(2.6rem, 6svh, 4.8rem);
   min-height: 100svh;
-  padding: calc(var(--nav-height) + 3rem) max(var(--page-gutter), calc((100vw - var(--content-max)) / 2)) 5rem;
+  padding: var(--nav-height) max(var(--page-gutter), calc((100vw - var(--content-max)) / 2)) var(--nav-height);
   background:
     radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.36), transparent 28%),
     radial-gradient(circle at 78% 16%, rgba(174, 142, 98, 0.1), transparent 31%),
@@ -426,7 +437,7 @@ a {
 }
 
 .price-section h2 {
-  margin: 0 0 clamp(2.6rem, 6svh, 4.8rem);
+  margin: 0;
   text-align: center;
   font-size: clamp(3.35rem, 5vw, 4.8rem);
   font-weight: 300;
@@ -439,6 +450,11 @@ a {
   gap: clamp(2rem, 5vw, 5rem);
   width: min(72rem, 100%);
   margin: 0 auto;
+}
+
+.price-section h2,
+.plans {
+  transform: translateY(calc(var(--nav-height) * 0.45));
 }
 
 .plan {
@@ -585,10 +601,11 @@ a {
   }
 
   .gloss-token {
-    padding-top: 0.82em;
+    padding-top: 1em;
   }
 
   .gloss-label {
+    top: 0.16em;
     min-height: 1.02rem;
     padding: 0.06rem 0.28rem 0.1rem;
     font-size: 0.6rem;
@@ -613,9 +630,7 @@ a {
   .alt-key {
     top: 0.4rem;
     left: 0;
-    width: 4.7rem;
-    height: 2.45rem;
-    font-size: 1.18rem;
+    width: 4.95rem;
   }
 
   .reading-mask {
@@ -625,13 +640,7 @@ a {
   }
 
   .word-pointer {
-    width: 1.45rem;
-    height: 1.45rem;
-  }
-
-  .word-pointer::before {
-    border-top-width: 1.7rem;
-    border-right-width: 0.95rem;
+    width: 1.55rem;
   }
 
   .anki-card {
@@ -648,7 +657,17 @@ a {
 
   .price-section {
     min-height: auto;
+    display: block;
     padding: 4rem var(--page-gutter) 4.5rem;
+  }
+
+  .price-section h2 {
+    margin-bottom: 2.2rem;
+    transform: none;
+  }
+
+  .plans {
+    transform: none;
   }
 
   .plans {
