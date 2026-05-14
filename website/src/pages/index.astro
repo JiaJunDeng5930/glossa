@@ -157,38 +157,41 @@ import "../styles/global.css";
         </section>
 
         <article class="reading-demo mobile-reading mobile-reading-card" aria-label="Anki 制卡演示">
-          <p class="reading-copy">
-            Glossa AI helps you read English with
-            <span class="gloss-token gloss-1"><span class="gloss-label">自信</span><span class="source-word">confidence</span></span>
-            by showing just the right Chinese glosses for words that
-            <span class="gloss-token gloss-2"><span class="gloss-label">重要</span><span class="source-word">matter</span></span>.
-            Each gloss appears in
-            <span class="gloss-token gloss-3"><span class="gloss-label">语境</span><span class="source-word">context</span></span>,
-            so you can grasp meaning without breaking your flow. For serious readers, this support becomes
-            <span class="gloss-token gloss-4 card-target"><span class="gloss-label">必不可少</span><span class="source-word">indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span></span>
-            when long articles introduce
-            <span class="gloss-token gloss-5"><span class="gloss-label">陌生</span><span class="source-word">unfamiliar</span></span>
-            vocabulary, subtle phrasing, and ideas that deserve careful attention.
-          </p>
+          <div class="mobile-card-reading-shell">
+            <p class="reading-copy">
+              Glossa AI helps you read English with
+              <span class="gloss-token gloss-1"><span class="gloss-label">自信</span><span class="source-word">confidence</span></span>
+              by showing just the right Chinese glosses for words that
+              <span class="gloss-token gloss-2"><span class="gloss-label">重要</span><span class="source-word">matter</span></span>.
+              Each gloss appears in
+              <span class="gloss-token gloss-3"><span class="gloss-label">语境</span><span class="source-word">context</span></span>,
+              so you can grasp meaning without breaking your flow. For serious readers, this support becomes
+              <span class="gloss-token gloss-4 card-target"><span class="gloss-label">必不可少</span><span class="source-word">indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span></span>
+              when long articles introduce
+              <span class="gloss-token gloss-5"><span class="gloss-label">陌生</span><span class="source-word">unfamiliar</span></span>
+              vocabulary, subtle phrasing, and ideas that deserve careful attention.
+            </p>
 
-          <div class="carding-layer" aria-hidden="true">
-            <img class="alt-key" src="/assets/alt-key.png" alt="" />
-            <div class="reading-mask"></div>
-            <section class="anki-card" aria-label="Anki 卡片示意">
-              <div class="anki-title">Anki</div>
-              <div class="anki-row">
-                <span>Front</span>
-                <strong>indispensable</strong>
-              </div>
-              <div class="anki-row">
-                <span>Back</span>
-                <p>不可或缺的；必不可少的</p>
-              </div>
-              <div class="anki-example">
-                For serious readers, this support becomes indispensable.
-              </div>
-            </section>
+            <div class="carding-layer" aria-hidden="true">
+              <img class="alt-key" src="/assets/alt-key.png" alt="" />
+              <div class="reading-mask"></div>
+            </div>
           </div>
+
+          <section class="anki-card" aria-label="Anki 卡片示意">
+            <div class="anki-title">Anki</div>
+            <div class="anki-row">
+              <span>Front</span>
+              <strong>indispensable</strong>
+            </div>
+            <div class="anki-row">
+              <span>Back</span>
+              <p>不可或缺的；必不可少的</p>
+            </div>
+            <div class="anki-example">
+              For serious readers, this support becomes indispensable.
+            </div>
+          </section>
         </article>
       </section>
 
@@ -272,7 +275,7 @@ import "../styles/global.css";
           ["--gloss-4", 0.28, 0.34],
           ["--gloss-5", 0.34, 0.4],
         ];
-        const overlayProgress = segment(progress, 0.62, 0.72);
+        const overlayProgress = segment(progress, 0.7, 0.75);
 
         leftTrack.style.transform = `translateY(${-leftProgress * 33.3333}%)`;
         readingDemo.style.setProperty("--gloss-progress", String(segment(progress, 0.1, 0.4)));
@@ -281,8 +284,8 @@ import "../styles/global.css";
         }
         readingDemo.style.setProperty("--alt-progress", String(overlayProgress));
         readingDemo.style.setProperty("--mask-progress", String(overlayProgress));
-        readingDemo.style.setProperty("--click-progress", String(segment(progress, 0.74, 0.82)));
-        readingDemo.style.setProperty("--card-progress", String(segment(progress, 0.8, 0.9)));
+        readingDemo.style.setProperty("--click-progress", String(segment(progress, 0.8, 0.84)));
+        readingDemo.style.setProperty("--card-progress", String(segment(progress, 0.89, 0.95)));
       }
 
       window.addEventListener("scroll", updateStory, { passive: true });

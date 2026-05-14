@@ -614,28 +614,37 @@ a {
 
   .mobile-reading-card {
     position: relative;
-    padding-bottom: clamp(22rem, 82vw, 28rem);
+    padding-bottom: 0;
     --alt-progress: 1;
     --mask-progress: 1;
     --click-progress: 1;
     --card-progress: 1;
   }
 
-  .mobile-reading-card .carding-layer {
-    top: auto;
-    bottom: 0;
-    height: clamp(21rem, 78vw, 27rem);
+  .mobile-card-reading-shell {
+    position: relative;
+    margin-top: 3.55rem;
   }
 
-  .alt-key {
-    top: 0.4rem;
-    left: 0;
+  .mobile-card-reading-shell .reading-copy {
+    position: relative;
+    z-index: 1;
+  }
+
+  .mobile-card-reading-shell .carding-layer {
+    z-index: 2;
+    inset: 0;
+  }
+
+  .mobile-card-reading-shell .alt-key {
+    top: -3.25rem;
+    left: 0.4rem;
     width: 4.95rem;
   }
 
-  .reading-mask {
-    inset: 3.4rem 0 auto;
-    height: clamp(10rem, 34vw, 13.6rem);
+  .mobile-card-reading-shell .reading-mask {
+    inset: 0;
+    height: auto;
     background: rgba(9, 9, 9, calc(0.4 * var(--mask-progress)));
   }
 
@@ -643,11 +652,15 @@ a {
     width: 1.55rem;
   }
 
-  .anki-card {
-    right: 0;
-    bottom: 0;
+  .mobile-reading-card .anki-card {
+    position: relative;
+    right: auto;
+    bottom: auto;
     width: 100%;
+    margin-top: 1.05rem;
     padding: 0.95rem 1rem 1.05rem;
+    opacity: 1;
+    transform: none;
   }
 
   .anki-row {
