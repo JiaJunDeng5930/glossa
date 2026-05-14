@@ -13,11 +13,11 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "verify": "npm run req:check:all && npm run typecheck && npm run test && npm run build && npm run test:e2e",
-    "req:scan": "TMPDIR=/tmp tsx tools/requirements/src/main.ts scan",
-    "req:fmt-agents": "TMPDIR=/tmp tsx tools/requirements/src/main.ts fmt-agents",
-    "req:check:staged": "TMPDIR=/tmp tsx tools/requirements/src/main.ts check --staged",
-    "req:check:all": "TMPDIR=/tmp tsx tools/requirements/src/main.ts check --all",
-    "req:check": "TMPDIR=/tmp tsx tools/requirements/src/main.ts check",
+    "req:scan": "node scripts/run-requirements.mjs scan",
+    "req:fmt-agents": "node scripts/run-requirements.mjs fmt-agents",
+    "req:check:staged": "node scripts/run-requirements.mjs check --staged",
+    "req:check:all": "node scripts/run-requirements.mjs check --all",
+    "req:check": "node scripts/run-requirements.mjs check",
     "prepare": "node scripts/install-hooks.mjs"
   },
   "devDependencies": {
