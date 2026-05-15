@@ -122,7 +122,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         display: inline-block;
         position: relative;
         min-width: max-content;
-        padding-block-start: calc(var(--glossa-font-size) * 1.25 + 4px);
+        padding-block-start: calc(var(--glossa-font-size) + 1px);
         vertical-align: baseline;
         max-width: max-content;
         white-space: nowrap;
@@ -135,15 +135,15 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         position: absolute;
         top: 0;
         left: 50%;
-        padding: 1px 4px;
-        border-radius: 4px;
+        padding: 0 3px;
+        border-radius: 0;
         background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
         color: var(--glossa-text-color);
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
-        line-height: 1.25;
+        line-height: 1.15;
         white-space: nowrap;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.22);
         pointer-events: none;
         transform: translateX(-50%);
       }
@@ -208,7 +208,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         padding-inline: 4px;
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
-        line-height: 1.25;
+        line-height: 1.15;
         white-space: nowrap;
       }
     `;
