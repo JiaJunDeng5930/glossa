@@ -114,6 +114,23 @@ describe("extension message envelopes", () => {
     });
   });
 
+  it("rejects malformed nested word-click token fields", () => {
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "Create archive card.",
+      token: { id: "t1", sentenceId: "s1", surface: "archive", lemma: "archive", startOffset: 7, endOffset: 14 }
+    });
+    const malformed = {
+      ...message,
+      payload: {
+        ...message.payload,
+        token: { ...message.payload.token, startOffset: "7" }
+      }
+    };
+
+    expect(() => validateContentMessage(malformed)).toThrow("Malformed word.clicked payload");
+  });
+
   it("validates gloss scan port messages", () => {
     const message = createGlossPortMessage("gloss.scan", {
       scanId: "scan-1",
@@ -153,6 +170,37 @@ describe("extension message envelopes", () => {
     expect(validateGlossPortOutbound(ack, "scan-1")).toMatchObject({ type: "gloss.chunk.ack", payload: { acceptedTokens: 2 } });
   });
 
+  it("rejects malformed nested gloss scan chunk sentence fields", () => {
+    const message = createGlossPortMessage("gloss.scan.chunk", {
+      scanId: "scan-1",
+      chunkId: "scan-1:0",
+      chunkIndex: 0,
+      pageUrl: "https://example.test/path",
+      sentences: [
+        {
+          id: "s1",
+          text: "Create archive card.",
+          tokens: [{ id: "t1", sentenceId: "s1", surface: "archive", lemma: "archive", startOffset: 7, endOffset: 14 }]
+        }
+      ]
+    });
+    const malformed = {
+      ...message,
+      payload: {
+        ...message.payload,
+        sentences: [
+          {
+            id: "s1",
+            text: "Create archive card.",
+            tokens: [{ id: "t1", sentenceId: "s1", surface: "archive", lemma: 42, startOffset: 7, endOffset: 14 }]
+          }
+        ]
+      }
+    };
+
+    expect(() => validateGlossPortInbound(malformed)).toThrow("Malformed gloss.scan.chunk payload");
+  });
+
   it("validates gloss token, done and error port messages", () => {
     const token = createGlossPortMessage("gloss.token", {
       scanId: "scan-1",
@@ -167,6 +215,51 @@ describe("extension message envelopes", () => {
     expect(validateGlossPortOutbound(token, "scan-1")).toMatchObject({ type: "gloss.token", payload: { status: "ready" } });
     expect(validateGlossPortOutbound(done, "scan-1")).toMatchObject({ type: "gloss.done" });
     expect(validateGlossPortOutbound(error, "scan-1")).toMatchObject({ type: "gloss.error", payload: errorPayload });
+  });
+
+  it("rejects malformed nested ready gloss token items", () => {
+    const message = createGlossPortMessage("gloss.token", {
+      scanId: "scan-1",
+      tokenId: "t1",
+      status: "ready",
+      item: { tokenId: "t1", targetText: "submit", display: "提交" }
+    });
+    const malformed = {
+      ...message,
+      payload: {
+        ...message.payload,
+        item: { tokenId: "t1", targetText: "submit", display: 42 }
+      }
+    };
+
+    expect(() => validateGlossPortOutbound(malformed, "scan-1")).toThrow("Malformed gloss.token payload");
+  });
+
+  it("rejects malformed nested background response fields", () => {
+    const settingsRequest = createContentMessage("settings.get", {});
+    const settingsResponse = createBackgroundResponse(settingsRequest, "settings.response", { settings: DEFAULT_SETTINGS });
+    const malformedSettingsResponse = {
+      ...settingsResponse,
+      payload: {
+        settings: {
+          ...DEFAULT_SETTINGS,
+          appearance: { ...DEFAULT_SETTINGS.appearance, fontSize: "11" }
+        }
+      }
+    };
+    const clickRequest = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "Create archive card.",
+      token: { id: "t1", sentenceId: "s1", surface: "archive", lemma: "archive", startOffset: 7, endOffset: 14 }
+    });
+    const clickResponse = createBackgroundResponse(clickRequest, "word.clicked.ok", { noteIds: [123] });
+    const malformedClickResponse = {
+      ...clickResponse,
+      payload: { noteIds: ["123"] }
+    };
+
+    expect(() => validateBackgroundResponse(malformedSettingsResponse, settingsRequest)).toThrow("Malformed settings.response payload");
+    expect(() => validateBackgroundResponse(malformedClickResponse, clickRequest)).toThrow("Malformed word.clicked.ok payload");
   });
 
   it("rejects malformed diagnostic error payloads", () => {

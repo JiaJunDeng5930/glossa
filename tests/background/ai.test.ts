@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, type GlossaSettings } from "../../src/shared/types";
 
 describe("AI backend adapters", () => {
   // @verifies glossa.ai_requests.openai.responses
+  // @verifies glossa.ai_requests.backend_interface.json_helper
   // @verifies glossa.ai_requests.reasoning_effort
   // @verifies glossa.ai_requests.failure.timeout_cleanup
   it("sends reasoning effort to the Responses API and parses output_text", async () => {
@@ -155,6 +156,22 @@ describe("AI backend adapters", () => {
     })).rejects.toMatchObject({
       payload: { reason: "unauthorized", service: "ai", status: 401 }
     });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // @verifies glossa.ai_requests.failure.http_status
+  it("classifies HTTP missing endpoint failures after one AI request attempt", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: "missing" }, 404));
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
+
+    await expect(createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: []
+    })).rejects.toMatchObject({
+      payload: { reason: "not-found", service: "ai", status: 404 }
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   // @verifies glossa.ai_requests.failure.request_error
@@ -175,6 +192,29 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  // @verifies glossa.ai_requests.failure.request_error
+  // @verifies glossa.ai_requests.failure.retry_limit
+  it("retries recoverable AI request errors before returning a valid response", async () => {
+    let attempt = 0;
+    const fetchImpl = vi.fn(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new TypeError("fetch failed");
+      }
+      return jsonResponse({ items: [] });
+    });
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
+
+    const result = await createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: []
+    });
+
+    expect(result.items).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   // @verifies glossa.ai_requests.failure.invalid_json
   it("classifies invalid model JSON as an AI response diagnostic error", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "not json" }));
@@ -187,6 +227,56 @@ describe("AI backend adapters", () => {
     })).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
     });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // @verifies glossa.ai_requests.failure.invalid_json
+  it("classifies malformed backend JSON after one AI request attempt", async () => {
+    const fetchImpl = vi.fn(async () => textResponse("not json"));
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
+
+    await expect(createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: []
+    })).rejects.toMatchObject({
+      payload: { reason: "invalid-response", service: "ai" }
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // @verifies glossa.ai_requests.failure.invalid_json
+  it("classifies invalid gloss response shapes after one AI request attempt", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      items: [{ tokenId: "t1", display: "提交" }]
+    }));
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
+
+    await expect(createAiBackend(fetchImpl as never).gloss({
+      settings,
+      sentence: "Submit the form.",
+      tokens: [{ id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }]
+    })).rejects.toMatchObject({
+      payload: { reason: "invalid-response", service: "ai" }
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // @verifies glossa.ai_requests.failure.invalid_json
+  it("classifies invalid Anki card response shapes after one AI request attempt", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      cards: [{ front: "<b>Submit</b> the form.", back: 42 }]
+    }));
+    const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
+
+    await expect(createAiBackend(fetchImpl as never).ankiCard({
+      settings,
+      sentence: "Submit the form.",
+      token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
+    })).rejects.toMatchObject({
+      payload: { reason: "invalid-response", service: "ai" }
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   // @verifies glossa.ai_requests.failure.timeout
@@ -278,6 +368,13 @@ function settingsFor(
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" }
+  });
+}
+
+function textResponse(value: string, status = 200): Response {
+  return new Response(value, {
     status,
     headers: { "content-type": "application/json" }
   });

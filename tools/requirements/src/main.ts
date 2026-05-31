@@ -9,6 +9,13 @@ type RequirementTag = "@behavior" | "@constraint" | "@intent" | "@verifies";
 type SnapshotMode = "worktree" | "staged";
 type Command = "scan" | "fmt-agents" | "check" | "help";
 
+interface CliOptions {
+  command: Command;
+  staged: boolean;
+  fullAnchors: boolean;
+  base?: string;
+}
+
 // @intent requirements.analysis_consistency.source_text Source analysis pairs each TypeScript path with the exact text selected for validation.
 interface SourceFile {
   path: string;
@@ -74,25 +81,57 @@ interface SourceLine {
   text: string;
 }
 
+interface TypeMemberFact {
+  startLine: number;
+  endLine: number;
+  exported: boolean;
+  implicitPublic: boolean;
+}
+
+interface SourceAnalysis {
+  source: ts.SourceFile;
+  bindableNodes: BoundTarget[];
+  firstCodeStart: number;
+  typeMembers: TypeMemberFact[];
+}
+
 const TAGS = ["@behavior", "@constraint", "@intent", "@verifies"] as const;
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 const GENERATED_DIRS = new Set([".git", "node_modules", "dist", "coverage", "playwright-report", "test-results", "worktree-glossa"]);
 const INDEX_START = "<!-- BEGIN AGENTS_MD_REQUIREMENT_INDEX -->";
 const INDEX_END = "<!-- END AGENTS_MD_REQUIREMENT_INDEX -->";
 const ID_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
+const sourceAnalysisCache = new WeakMap<SourceFile, SourceAnalysis>();
+
+// @constraint requirements.cli.errors CLI argument validation uses typed errors so public usage failures are separated from unexpected tool failures.
+class CliError extends Error {}
 
 // @behavior requirements.cli Requirement commands provide deterministic local and automation-facing diagnostics with stable exit status.
 function main(): void {
+  // @behavior requirements.cli.error_boundary The requirement CLI converts typed argument errors to public output and lets unexpected errors surface.
+  try {
+    runMain();
+  } catch (error) {
+    // @behavior requirements.cli.error_output CLI argument errors print the diagnostic and usage text to stderr with a failing exit code.
+    if (error instanceof CliError) {
+      console.error(error.message);
+      console.error(helpUsage());
+      process.exitCode = 1;
+      return;
+    }
+    // @behavior requirements.cli.unexpected_error Unexpected requirement CLI errors surface through the process instead of being rewritten as usage errors.
+    throw error;
+  }
+}
+
+function runMain(): void {
   const args = process.argv.slice(2);
-  const command = parseCommand(args);
+  const { command, staged, fullAnchors, base } = parseCliOptions(args);
   if (command === "help") {
     printHelp();
     return;
   }
 
-  const staged = args.includes("--staged");
-  const fullAnchors = args.includes("--all");
-  const base = parseOptionValue(args, "--base");
   // @behavior requirements.cli.snapshot_mode The staged flag selects the source snapshot mode used by command execution.
   const mode: SnapshotMode = staged ? "staged" : "worktree";
   // @behavior requirements.cli.snapshot_load The selected snapshot mode controls which source files enter registry construction.
@@ -132,24 +171,62 @@ function main(): void {
   process.exitCode = diagnostics.length > 0 ? 1 : 0;
 }
 
-// @behavior requirements.cli.dispatch Unknown requirement commands resolve to public help output.
+// @behavior requirements.cli.dispatch Unknown requirement commands fail with public help output.
 function parseCommand(args: string[]): Command {
   const command = args.find((arg) => !arg.startsWith("--")) ?? "help";
   if (command === "scan" || command === "fmt-agents" || command === "check") return command;
-  return "help";
+  if (command === "help") return command;
+  // @behavior requirements.cli.dispatch.unknown_command Unknown requirement commands fail with a typed CLI error.
+  throw new CliError(`Unknown requirement command: ${command}`);
 }
 
-// @behavior requirements.cli.compare_ref_option Staged and base comparison flags consume the following argument as their comparison ref.
-function parseOptionValue(args: string[], name: string): string | undefined {
-  const index = args.indexOf(name);
-  if (index === -1) return undefined;
-  return args[index + 1];
+// @behavior requirements.cli.compare_ref_option Base comparison flags consume the following non-flag argument as their comparison ref.
+function parseCliOptions(args: string[]): CliOptions {
+  const command = parseCommand(args);
+  const result: CliOptions = { command, staged: false, fullAnchors: false };
+  let positionalSeen = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    if (!arg.startsWith("--")) {
+      if (positionalSeen) {
+        // @behavior requirements.cli.positional_args Requirement commands accept at most one positional command argument.
+        throw new CliError(`Unexpected positional argument: ${arg}`);
+      }
+      positionalSeen = true;
+      continue;
+    }
+    if (arg === "--staged") {
+      result.staged = true;
+      continue;
+    }
+    if (arg === "--all") {
+      result.fullAnchors = true;
+      continue;
+    }
+    if (arg === "--base") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        // @behavior requirements.cli.compare_ref_option.missing_ref Base comparison without a following ref fails with a typed CLI error.
+        throw new CliError("--base requires a git ref");
+      }
+      result.base = value;
+      index += 1;
+      continue;
+    }
+    // @behavior requirements.cli.unknown_options Unknown requirement CLI options fail with public usage output.
+    throw new CliError(`Unknown requirement option: ${arg}`);
+  }
+  return result;
 }
 
 // @behavior requirements.cli.help Help output lists the public commands and comparison options used by scripts and hooks.
 function printHelp(): void {
   // @behavior requirements.cli.help.usage Help output prints the public usage line on stdout.
-  console.log("Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged] [--all] [--base <git-ref>]");
+  console.log(helpUsage());
+}
+
+function helpUsage(): string {
+  return "Usage: tsx tools/requirements/src/main.ts <scan|fmt-agents|check> [--staged] [--all] [--base <git-ref>]";
 }
 
 // @behavior requirements.source_snapshot Requirement validation reads the selected source snapshot from worktree files or Git index blobs.
@@ -235,7 +312,7 @@ function buildRegistry(files: SourceFile[]): Registry {
 
 // @constraint requirements.comment_syntax Source comments become declarations with tag, unique dotted ID, and one sentence or verification references with tag and ID.
 function parseRequirements(file: SourceFile, diagnostics: Diagnostic[]): RequirementComment[] {
-  const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
+  const source = analyzeSourceFile(file).source;
   const ranges = collectCommentRanges(file.text, source);
   const comments: RequirementComment[] = [];
 
@@ -324,9 +401,9 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
   for (const file of files) {
     const fileComments = byFile.get(file.path) ?? [];
     if (fileComments.length === 0) continue;
-    const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
-    const nodes = collectBindableNodes(source);
-    const firstCodeStart = findFirstCodeStart(source);
+    const analysis = analyzeSourceFile(file);
+    const nodes = analysis.bindableNodes;
+    const firstCodeStart = analysis.firstCodeStart;
     for (const comment of fileComments) {
       const beforeComment = file.text.slice(0, comment.start);
       const beforeFirstCode = file.text.slice(comment.end, firstCodeStart);
@@ -366,6 +443,40 @@ function collectBindableNodes(source: ts.SourceFile): BoundTarget[] {
   };
   ts.forEachChild(source, visit);
   return nodes.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+// @intent requirements.analysis_consistency.source_facts A source analysis cache reuses one parsed TypeScript tree and derived facts for every check of a file snapshot.
+function analyzeSourceFile(file: SourceFile): SourceAnalysis {
+  const cached = sourceAnalysisCache.get(file);
+  if (cached) {
+    return cached;
+  }
+  const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
+  const analysis: SourceAnalysis = {
+    source,
+    bindableNodes: collectBindableNodes(source),
+    firstCodeStart: findFirstCodeStart(source),
+    typeMembers: collectTypeMemberFacts(source)
+  };
+  sourceAnalysisCache.set(file, analysis);
+  return analysis;
+}
+
+function collectTypeMemberFacts(source: ts.SourceFile): TypeMemberFact[] {
+  const facts: TypeMemberFact[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertySignature(node) || ts.isMethodSignature(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node)) {
+      facts.push({
+        startLine: offsetLine(source.text, node.getStart(source)),
+        endLine: offsetLine(source.text, node.getEnd()),
+        exported: isExportedTypeMember(node),
+        implicitPublic: isImplicitPublicClassMember(node)
+      });
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+  return facts;
 }
 
 // @constraint requirements.comment_binding.target_kinds Requirement targets include declarations, branches, side effects, returns, throws, and test calls.
@@ -627,10 +738,9 @@ function checkDiffAnchors(files: SourceFile[], registry: Registry, lines: HunkLi
 function collectSourceLines(files: SourceFile[]): SourceLine[] {
   const lines: SourceLine[] = [];
   for (const file of files) {
-    const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
     const textLines = file.text.split(/\r?\n/);
     const seen = new Set<number>();
-    for (const target of collectBindableNodes(source)) {
+    for (const target of analyzeSourceFile(file).bindableNodes) {
       if (seen.has(target.line)) continue;
       // @behavior requirements.change_anchoring.full_source.lines.dedupe Multiple bindable nodes starting on the same source line collapse to one full-source audit line.
       seen.add(target.line);
@@ -679,8 +789,45 @@ function deletedLineAnchorSources(
   currentLine: number,
 ): Array<{ file: SourceFile; comments: RequirementComment[]; line: number }> {
   const sources = [{ file: oldFile, comments: bindRequirementCommentsForFile(oldFile), line: oldLine }];
-  if (currentFile && currentComments) sources.push({ file: currentFile, comments: currentComments, line: currentLine });
+  if (currentFile && currentComments) {
+    sources.push({ file: currentFile, comments: currentComments, line: currentLine });
+    for (const nearbyLine of nearbyCurrentAnchorLines(currentFile, currentLine)) {
+      if (nearbyLine !== currentLine) {
+        sources.push({ file: currentFile, comments: currentComments, line: nearbyLine });
+      }
+    }
+    for (const targetLine of nearbyCurrentRequirementTargetLines(currentComments, currentLine)) {
+      sources.push({ file: currentFile, comments: currentComments, line: targetLine });
+    }
+  }
   return sources;
+}
+
+// @behavior requirements.change_anchoring.current_deletion_anchor.comment_prefix Deleted-line checks can use nearby current code lines when replacement hunks begin with requirement comments.
+function nearbyCurrentAnchorLines(file: SourceFile, line: number): number[] {
+  const lines = file.text.split(/\r?\n/);
+  const result: number[] = [];
+  let cursor = line;
+  while (cursor <= lines.length && result.length < 8) {
+    const text = lines[cursor - 1] ?? "";
+    if (text.trim() !== "" && !isStandaloneRequirementComment(text)) {
+      result.push(cursor);
+    }
+    cursor += 1;
+  }
+  return result;
+}
+
+// @behavior requirements.change_anchoring.current_deletion_anchor.nearby_targets Deleted-line checks can use nearby current requirement targets in replacement hunks.
+function nearbyCurrentRequirementTargetLines(comments: RequirementComment[], line: number): number[] {
+  const result = new Set<number>();
+  for (const comment of comments) {
+    if (!comment.target) continue;
+    if (line <= comment.target.line && comment.target.line <= line + 24) {
+      result.add(comment.target.line);
+    }
+  }
+  return [...result];
 }
 
 // @behavior requirements.change_anchoring.deleted_context Deleted TypeScript lines keep old-snapshot syntax context during staged and base checks.
@@ -785,23 +932,12 @@ function classifyChangedLine(text: string, path: string, file: SourceFile, line:
 
 // @behavior requirements.change_anchoring.type_member_changes Exported type members, implicit-public class members, and state-shaped members remain visible to contract and state-policy checks.
 function isTrackedTypeMemberLine(file: SourceFile, line: number, text: string): boolean {
-  const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true);
-  let matched = false;
-  const visit = (node: ts.Node) => {
-    if (matched) return;
-    if (ts.isPropertySignature(node) || ts.isMethodSignature(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node)) {
-      const startLine = offsetLine(file.text, node.getStart(source));
-      const endLine = offsetLine(file.text, node.getEnd());
-      // @behavior requirements.change_anchoring.type_member_changes.span_match A changed line inside a type member uses the member visibility and state-shaped text for classification.
-      if (startLine <= line && line <= endLine) {
-        matched = isExportedTypeMember(node) || isImplicitPublicClassMember(node) || /\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b/.test(text);
-        return;
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return matched;
+  // @behavior requirements.change_anchoring.type_member_changes.span_match A changed line inside a type member uses the member visibility and state-shaped text for classification.
+  return analyzeSourceFile(file).typeMembers.some((member) =>
+    member.startLine <= line
+    && line <= member.endLine
+    && (member.exported || member.implicitPublic || /\b(state|status|phase|mode|step|kind|lifecycle|ready|pending|hidden|error)\b/.test(text))
+  );
 }
 
 // @behavior requirements.change_anchoring.exported_type_members Members of exported interfaces and exported type literals count as public contracts.
@@ -849,7 +985,7 @@ interface AnchorLookupOptions {
 
 function hasAnchorForLine(comments: RequirementComment[], line: number, category: string, file: SourceFile, text: string, options: AnchorLookupOptions): boolean {
   const typeMember = isTrackedTypeMemberLine(file, line, text);
-  const firstCodeStart = options.allowFileContractAnchor ? findFirstCodeStart(ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true)) : 0;
+  const firstCodeStart = options.allowFileContractAnchor ? analyzeSourceFile(file).firstCodeStart : 0;
   return comments.some((comment) => {
     if (!comment.target) return false;
     // @constraint requirements.change_anchoring.local_anchor.full_source_contract Full-source contract checks accept leading module contract comments as historical contract coverage.

@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { resolve } from "node:path";
+import { DEFAULT_SETTINGS, type GlossaSettings } from "../../src/shared/types";
 
-type RuntimeSettings = Record<string, unknown>;
+type RuntimeSettings = Partial<GlossaSettings>;
 
 // @verifies glossa.page_translation.activation
 // @verifies glossa.page_translation.inline_rendering
@@ -1054,6 +1055,187 @@ test("content bundle handles invalidated extension context during word click", a
   expect(pageErrors).toEqual([]);
 });
 
+// @verifies glossa.extension_contracts.request_effects.runtime_settlement
+test("content bundle accepts the first runtime message result when callback and promise both settle", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setContent("<main><p>Manual archive appears here.</p></main>");
+  await installUnhandledRejectionCapture(page);
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) => {
+      if (message.type !== "settings.get") {
+        return undefined;
+      }
+      const settings = Reflect.get(window, "__glossaRuntimeSettings");
+      const response = {
+        type: "settings.response",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { settings }
+      };
+      callback?.(response);
+      return Promise.resolve({ ...response, requestId: "late-channel" });
+    });
+  });
+
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await expect(page.locator("#glossa-overlay")).toHaveCount(1);
+  await page.waitForTimeout(100);
+
+  expect(pageErrors).toEqual([]);
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaUnhandledRejections"))).toEqual([]);
+  expect(await sentMessageTypes(page)).toEqual(["settings.get"]);
+});
+
+// @verifies glossa.extension_contracts.request_effects.runtime_settlement
+// @verifies glossa.page_translation.activation.settings_failure
+test("content bundle stops startup after a settings request timeout", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setContent("<main><p>Manual archive appears here.</p></main>");
+  await installTraceCapture(page);
+  await page.evaluate(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      return nativeSetTimeout(handler, timeout === 5_000 ? 10 : timeout, ...args);
+    }) as typeof window.setTimeout;
+  });
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string }, callback?: (response: unknown) => void) => {
+      if (message.type !== "settings.get") {
+        return undefined;
+      }
+      window.setTimeout(() => callback?.({ malformed: true }), 20);
+      return new Promise(() => undefined);
+    });
+  });
+
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => {
+    const traces = Reflect.get(window, "__glossaTraceEvents") as Array<{ operation?: string; result?: string }>;
+    return traces.some((event) => event.operation === "settings.get" && event.result === "error");
+  });
+  await page.waitForTimeout(50);
+
+  expect(pageErrors).toEqual([]);
+  await expect(page.locator("#glossa-overlay")).toHaveCount(0);
+  expect(await sentMessageTypes(page)).toEqual(["settings.get"]);
+});
+
+// @verifies glossa.page_translation.activation.settings_failure
+test("content bundle stops startup after settings read throws", async ({ page }) => {
+  await page.setContent("<main><p>Manual archive appears here.</p></main>");
+  await installTraceCapture(page);
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string }) => {
+      if (message.type === "settings.get") {
+        throw new Error("settings unavailable");
+      }
+      return undefined;
+    });
+  });
+
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => {
+    const traces = Reflect.get(window, "__glossaTraceEvents") as Array<{ operation?: string; result?: string }>;
+    return traces.some((event) => event.operation === "settings.get" && event.result === "error");
+  });
+
+  await expect(page.locator("#glossa-overlay")).toHaveCount(0);
+  expect(await page.evaluate(() => (Reflect.get(window, "__glossaListeners") as unknown[]).length)).toBe(0);
+});
+
+// @verifies glossa.extension_contracts.restart_continuity
+test("content bundle keeps invalidated settings reads quiet", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setContent("<main><p>Manual archive appears here.</p></main>");
+  await installTraceCapture(page);
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string }) => {
+      if (message.type === "settings.get") {
+        throw new Error("Extension context invalidated.");
+      }
+      return undefined;
+    });
+  });
+
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForTimeout(100);
+
+  expect(pageErrors).toEqual([]);
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaTraceEvents"))).toEqual([]);
+  await expect(page.locator("#glossa-overlay")).toHaveCount(0);
+});
+
+// @verifies glossa.page_translation.activation.lifecycle_cleanup
+test("content bundle removes page and runtime listeners when content stops", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setContent("<main><p id=\"target\">Submit draft carefully.</p><article id=\"host\"></article></main>");
+  await page.locator("#host").evaluate((host) => {
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = "<p>Shadow archive appears carefully.</p>";
+  });
+  await installLifecycleListenerTracker(page);
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string }) => {
+      if (message.type === "word.clicked") {
+        throw new Error("Extension context invalidated.");
+      }
+      return undefined;
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => {
+    const listeners = Reflect.get(window, "__glossaTrackedListeners") as () => unknown[];
+    return (Reflect.get(window, "__glossaListeners") as unknown[]).length === 1 && listeners().length > 0;
+  });
+
+  await page.keyboard.down("Alt");
+  await clickWord(page, "#target", "Submit");
+  await page.keyboard.up("Alt");
+
+  await page.waitForFunction(() => {
+    const listeners = Reflect.get(window, "__glossaTrackedListeners") as () => unknown[];
+    return (Reflect.get(window, "__glossaListeners") as unknown[]).length === 0 && listeners().length === 0;
+  });
+  expect(pageErrors).toEqual([]);
+});
+
 // @verifies glossa.page_translation.token_geometry
 test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Obscure archive archive terms appear here.</p></main>");
@@ -1377,6 +1559,99 @@ async function tokenGeometry(page: Page): Promise<{
   });
 }
 
+async function installUnhandledRejectionCapture(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const reasons: string[] = [];
+    Reflect.set(window, "__glossaUnhandledRejections", reasons);
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason;
+      reasons.push(reason instanceof Error ? reason.message : String(reason));
+    });
+  });
+}
+
+async function installTraceCapture(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const traces: unknown[] = [];
+    const originalWarn = console.warn.bind(console);
+    const originalDebug = console.debug.bind(console);
+    Reflect.set(window, "__glossaTraceEvents", traces);
+    console.warn = (...args: unknown[]) => {
+      if (args[0] === "[glossa-trace]") {
+        traces.push(args[1]);
+      }
+      originalWarn(...args);
+    };
+    console.debug = (...args: unknown[]) => {
+      if (args[0] === "[glossa-trace]") {
+        traces.push(args[1]);
+      }
+      originalDebug(...args);
+    };
+  });
+}
+
+async function installLifecycleListenerTracker(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type TrackedListener = {
+      target: string;
+      type: string;
+      listener: EventListenerOrEventListenerObject;
+      capture: boolean;
+    };
+    const trackedTypes = new Set(["click", "keydown", "keyup", "scroll"]);
+    const active: TrackedListener[] = [];
+    const originalAdd = EventTarget.prototype.addEventListener;
+    const originalRemove = EventTarget.prototype.removeEventListener;
+    const targetName = (target: EventTarget): string | undefined => {
+      if (target === document) {
+        return "document";
+      }
+      if (target === window) {
+        return "window";
+      }
+      if (typeof ShadowRoot !== "undefined" && target instanceof ShadowRoot) {
+        return "shadowRoot";
+      }
+      return undefined;
+    };
+    const captureOf = (options?: boolean | AddEventListenerOptions): boolean => {
+      return typeof options === "boolean" ? options : options?.capture === true;
+    };
+    EventTarget.prototype.addEventListener = function (
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | AddEventListenerOptions
+    ): void {
+      const target = targetName(this);
+      if (target && listener && trackedTypes.has(type)) {
+        active.push({ target, type, listener, capture: captureOf(options) });
+      }
+      return originalAdd.call(this, type, listener, options);
+    };
+    EventTarget.prototype.removeEventListener = function (
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | EventListenerOptions
+    ): void {
+      const target = targetName(this);
+      if (target && listener && trackedTypes.has(type)) {
+        const capture = captureOf(options);
+        const index = active.findIndex((item) => item.target === target && item.type === type && item.listener === listener && item.capture === capture);
+        if (index >= 0) {
+          active.splice(index, 1);
+        }
+      }
+      return originalRemove.call(this, type, listener, options);
+    };
+    Reflect.set(window, "__glossaTrackedListeners", () => active.map((item) => ({
+      target: item.target,
+      type: item.type,
+      capture: item.capture
+    })));
+  });
+}
+
 async function sentMessageTypes(page: Page): Promise<string[]> {
   return await page.evaluate(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
@@ -1423,11 +1698,13 @@ async function pressTranslationShortcut(page: Page): Promise<void> {
 }
 
 async function installChromeRuntime(page: Page, settings: RuntimeSettings): Promise<void> {
+  const runtimeSettings = completeRuntimeSettings(settings);
   await page.evaluate((settings) => {
     const sent: unknown[] = [];
     const activationListeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
     const endedScans = new Set<string>();
     const pendingDone = new Map<string, unknown>();
+    Reflect.set(window, "__glossaRuntimeSettings", settings);
     Reflect.set(window, "__glossaMessages", sent);
     Reflect.set(window, "__glossaListeners", activationListeners);
     Reflect.set(window, "__glossaDisconnects", 0);
@@ -1467,6 +1744,12 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
         onMessage: {
           addListener(listener: (message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void) {
             activationListeners.push(listener);
+          },
+          removeListener(listener: (message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void) {
+            const index = activationListeners.indexOf(listener);
+            if (index >= 0) {
+              activationListeners.splice(index, 1);
+            }
           }
         },
         connect() {
@@ -1596,5 +1879,28 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
         }
       }
     });
-  }, settings);
+  }, runtimeSettings);
+}
+
+function completeRuntimeSettings(settings: RuntimeSettings): GlossaSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    appearance: {
+      ...DEFAULT_SETTINGS.appearance,
+      ...(settings.appearance ?? {})
+    },
+    prompts: {
+      ...DEFAULT_SETTINGS.prompts,
+      ...(settings.prompts ?? {})
+    },
+    ai: {
+      ...DEFAULT_SETTINGS.ai,
+      ...(settings.ai ?? {})
+    },
+    anki: {
+      ...DEFAULT_SETTINGS.anki,
+      ...(settings.anki ?? {})
+    }
+  };
 }

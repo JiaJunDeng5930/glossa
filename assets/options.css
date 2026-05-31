@@ -21,6 +21,12 @@
   --space-48: 48px;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   background: var(--color-fog);
@@ -198,6 +204,7 @@ select:disabled {
 
 .known-words-dialog {
   width: min(920px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
   max-height: calc(100vh - 48px);
   padding: var(--space-28);
   border: 1px solid var(--color-silver-mist);
@@ -527,7 +534,8 @@ output {
   }
 
   .known-words-dialog {
-    width: min(100vw - 24px, 680px);
+    width: min(calc(100vw - 24px), 680px);
+    max-width: calc(100vw - 24px);
     padding: var(--space-20);
   }
 
