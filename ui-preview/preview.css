@@ -78,7 +78,7 @@ body.review-page {
   min-width: max-content;
   max-width: max-content;
   margin-inline: 1px;
-  padding-block-start: calc(var(--glossa-font-size) + 1px);
+  padding-block-start: calc(var(--glossa-font-size) + 3px);
   line-height: inherit;
   text-align: center;
   vertical-align: baseline;
