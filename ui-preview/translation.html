@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Glossa 翻译显示效果</title>
+    <link rel="stylesheet" href="/ui-preview/preview.css">
+  </head>
+  <body class="review-page translation-preview">
+    <main class="review-shell">
+      <section class="reader-frame" aria-label="翻译显示效果预览">
+        <article class="reader-article">
+          <p>
+            A
+            <span data-glossa-token data-glossa-status="ready" data-glossa-display-kind="gloss">
+              <span data-glossa-token-width>分布式</span>
+              <span data-glossa-token-label>分布式</span>
+              <span data-glossa-token-surface>distributed</span>
+            </span>
+            reader often builds a
+            <span data-glossa-token data-glossa-status="ready" data-glossa-display-kind="gloss" data-glossa-feedback="card-success">
+              <span data-glossa-token-width>细致</span>
+              <span data-glossa-token-label>细致</span>
+              <span data-glossa-token-surface>nuanced</span>
+            </span>
+            model of the text before making a decision.
+          </p>
+          <p>
+            The page can keep
+            <span data-glossa-token data-glossa-status="pending" data-glossa-display-kind="feedback" data-glossa-feedback="card-pending">
+              <span data-glossa-token-width>...</span>
+              <span data-glossa-token-label>...</span>
+              <span data-glossa-token-surface>pending</span>
+            </span>
+            items visible while the service returns results, then replace them with compact labels.
+          </p>
+          <p>
+            When a request fails, the source word remains in place and the badge becomes
+            <span data-glossa-token data-glossa-status="error" data-glossa-display-kind="feedback" data-glossa-feedback="card-error" title="当前服务无法返回释义">
+              <span data-glossa-token-width>×</span>
+              <span data-glossa-token-label>×</span>
+              <span data-glossa-token-surface>unavailable</span>
+            </span>
+            so the reading line keeps its layout.
+          </p>
+        </article>
+        <div data-glossa-duplicate-card-prompt role="dialog" aria-label="重复制卡确认">
+          <span>archive 已经制过卡，继续制卡？</span>
+          <button type="button" aria-label="继续制卡">✓</button>
+          <button type="button" aria-label="取消制卡">×</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
