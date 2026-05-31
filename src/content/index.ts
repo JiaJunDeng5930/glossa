@@ -40,20 +40,34 @@ interface GlossSession {
 }
 
 async function boot(): Promise<void> {
-  const settingsResponse = await runtimeMessage(createContentMessage("settings.get", {}))
-    .catch((error) => {
-      if (isExtensionContextInvalidated(error)) {
-        throw error;
-      }
-      return undefined;
-    });
-  const settings = settingsResponse?.type === "settings.response" ? settingsResponse.payload.settings : undefined;
-  const knownWords = await loadKnownWords(settings?.knownWordList ?? "junior-high");
+  // @behavior glossa.page_translation.activation.settings_request Content startup reads settings through the runtime envelope before attaching page listeners.
+  const settingsRequest = createContentMessage("settings.get", {});
+  let settingsResponse: BackgroundResponseMessage;
+  // @behavior glossa.page_translation.activation.settings_request.read_failure Settings read failures are handled before startup attaches page listeners.
+  try {
+    settingsResponse = await runtimeMessage(settingsRequest);
+  } catch (error) {
+    // @behavior glossa.page_translation.activation.settings_failure.context_invalidated Extension context invalidation during settings read stops boot through the outer handler.
+    if (isExtensionContextInvalidated(error)) {
+      throw error;
+    }
+    // @behavior glossa.page_translation.activation.settings_failure Settings-read failures emit diagnostics and stop content startup before page listeners attach.
+    reportError("settings.get", error, settingsRequest.requestId);
+    return;
+  }
+  // @behavior glossa.page_translation.activation.settings_error_response Settings error responses emit diagnostics and stop content startup before page listeners attach.
+  if (settingsResponse.type !== "settings.response") {
+    reportError("settings.get", settingsResponse.type === "error" ? settingsResponse.payload : new Error(`Unexpected settings response ${settingsResponse.type}`), settingsResponse.requestId);
+    return;
+  }
+  const settings = settingsResponse.payload.settings;
+  const knownWords = await loadKnownWords(settings.knownWordList);
   const overlay = createGlossOverlay(document, settings?.appearance);
   let scanVersion = 0;
   let scanTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let pageUrl = urlWithoutHash(location.href);
   let stopped = false;
+  const lifecycleCleanups: Array<() => void> = [];
   const autoTranslateEnabled = settings?.autoTranslateEnabled ?? false;
   const wordClickTimeout = wordClickTimeoutMs(settings);
   let translationEnabled = autoTranslateEnabled;
@@ -63,6 +77,7 @@ async function boot(): Promise<void> {
   const glossSessions = new Set<GlossSession>();
   let scanInProgress = 0;
 
+  // @behavior glossa.page_translation.activation.stop_cleanup Stopping content translation cancels prompts, scans, ports, listeners, selection mode, and rendered overlays.
   const stopContentScript = (reason: string): void => {
     if (stopped) {
       return;
@@ -74,8 +89,7 @@ async function boot(): Promise<void> {
       scanTimer = undefined;
     }
     closeAllGlossSessions();
-    observer?.disconnect();
-    selectionController?.detach();
+    runLifecycleCleanups();
     overlay.setSelectionMode(false);
     overlay.clear();
     trace({
@@ -93,6 +107,33 @@ async function boot(): Promise<void> {
       return;
     }
     reportError(operation, error, requestId);
+  };
+
+  // @behavior glossa.page_translation.activation.lifecycle_cleanup Lifecycle cleanups release page event listeners, runtime listeners, observers, and selection handlers when content stops.
+  const registerLifecycleCleanup = (cleanup: () => void): void => {
+    if (stopped) {
+      cleanup();
+      return;
+    }
+    lifecycleCleanups.push(cleanup);
+  };
+
+  const runLifecycleCleanups = (): void => {
+    for (const cleanup of lifecycleCleanups.splice(0).reverse()) {
+      cleanup();
+    }
+    observer = undefined;
+    selectionController = undefined;
+  };
+
+  const addLifecycleEventListener = (
+    target: EventTarget,
+    type: string,
+    listener: EventListener,
+    options?: boolean | AddEventListenerOptions
+  ): void => {
+    target.addEventListener(type, listener, options);
+    registerLifecycleCleanup(() => target.removeEventListener(type, listener, options));
   };
 
   const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
@@ -529,7 +570,10 @@ async function boot(): Promise<void> {
     await enableTranslation(reason);
   };
 
-  const onShortcutKeyDown = (event: KeyboardEvent): void => {
+  const onShortcutKeyDown: EventListener = (event): void => {
+    if (!(event instanceof KeyboardEvent)) {
+      return;
+    }
     if (matchesShortcut(event, settings?.translateShortcutKey ?? "Alt+G")) {
       event.preventDefault();
       event.stopPropagation();
@@ -538,7 +582,8 @@ async function boot(): Promise<void> {
   };
 
   const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
-  runtime?.onMessage?.addListener((message: unknown, _sender, sendResponse) => {
+  // @behavior glossa.page_translation.activation.popup_message The popup activation message enables translation and returns a typed success or failure response.
+  const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
     if (!isTranslateActivationMessage(message)) {
       return false;
     }
@@ -554,9 +599,13 @@ async function boot(): Promise<void> {
       sendResponse({ ok: false, message: payload.message, error: payload } satisfies TranslateActivationResponse);
     });
     return true;
-  });
+  };
+  if (runtime?.onMessage) {
+    runtime.onMessage.addListener(onRuntimeMessage);
+    registerLifecycleCleanup(() => runtime.onMessage.removeListener(onRuntimeMessage));
+  }
 
-  document.addEventListener("keydown", onShortcutKeyDown, true);
+  addLifecycleEventListener(document, "keydown", onShortcutKeyDown, true);
 
   if (translationEnabled) {
     await scanAndRender("boot");
@@ -640,6 +689,7 @@ async function boot(): Promise<void> {
     }
   }
   selectionController.attach();
+  registerLifecycleCleanup(() => selectionController?.detach());
 
   observer = new MutationObserver((mutations) => {
     if (stopped) {
@@ -656,11 +706,14 @@ async function boot(): Promise<void> {
   const onScroll = (): void => scheduleScan("scroll");
   const scrollObservedShadowRoots = new WeakSet<ShadowRoot>();
   // @behavior glossa.page_translation.candidate_scan.overflow_scroll Element scroll events reschedule viewport scans so newly visible overflow-container text becomes eligible.
-  document.addEventListener("scroll", onScroll, { passive: true, capture: true });
-  window.addEventListener("scroll", onScroll, { passive: true });
+  addLifecycleEventListener(document, "scroll", onScroll, { passive: true, capture: true });
+  addLifecycleEventListener(window, "scroll", onScroll, { passive: true });
+  // @behavior glossa.page_translation.activation.observer_cleanup Stopping content translation disconnects the active mutation observer through the lifecycle cleanup registry.
+  registerLifecycleCleanup(() => observer?.disconnect());
   observer.observe(document.body, { childList: true, characterData: true, subtree: true });
   observeOpenShadowRoots(document.body);
 
+  // @behavior glossa.page_translation.candidate_scan.shadow_root_observation Open shadow roots are observed recursively for scroll and DOM changes until content translation stops.
   function observeOpenShadowRoots(root: ParentNode): void {
     if (stopped) {
       return;
@@ -670,7 +723,7 @@ async function boot(): Promise<void> {
         if (!scrollObservedShadowRoots.has(element.shadowRoot)) {
           scrollObservedShadowRoots.add(element.shadowRoot);
           // @behavior glossa.page_translation.candidate_scan.overflow_scroll.shadow_root Shadow-root scroll events reschedule viewport scans for newly visible Web Component content.
-          element.shadowRoot.addEventListener("scroll", onScroll, { passive: true, capture: true });
+          addLifecycleEventListener(element.shadowRoot, "scroll", onScroll, { passive: true, capture: true });
         }
         observer?.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
         observeOpenShadowRoots(element.shadowRoot);
@@ -678,17 +731,21 @@ async function boot(): Promise<void> {
     }
   }
 
+  // @behavior glossa.page_translation.inline_rendering.pending_state Pending token ids stay tracked only while their rendered pending gloss remains active.
   function updatePendingTokenState(session: GlossSession, outcome: GlossTokenPayload, render: { result: string }): void {
+    // @behavior glossa.page_translation.inline_rendering.pending_state.add Pending outcomes add a token to the pending set only when rendering accepted the pending gloss.
     if (outcome.status === "pending" && render.result !== "skipped") {
       session.pendingTokenIds.add(outcome.tokenId);
       return;
     }
+    // @behavior glossa.page_translation.inline_rendering.pending_state.remove Terminal gloss outcomes remove the token from the pending set.
     if (outcome.status === "ready" || outcome.status === "hidden" || outcome.status === "error") {
       session.pendingTokenIds.delete(outcome.tokenId);
     }
   }
 }
 
+// @behavior glossa.extension_contracts.request_effects.runtime_request Content runtime messages use callback-compatible sendMessage with timeout and response validation.
 function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
   return new Promise((resolve, reject) => {
     const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
@@ -700,7 +757,12 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
       message: ContentToBackgroundMessage,
       callback: (response: unknown) => void
     ) => Promise<unknown> | void;
+    let settled = false;
+    // @constraint glossa.extension_contracts.request_effects.runtime_timeout Runtime message requests reject with a typed timeout after the configured budget.
     const timeout = globalThis.setTimeout(() => {
+      if (settled) {
+        return;
+      }
       trace({
         component: "content-script",
         operation: message.type,
@@ -708,40 +770,59 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
         result: "timeout",
         url: location.href
       });
-      reject(messageTimeoutError(message));
+      rejectMessage(messageTimeoutError(message));
     }, timeoutMs);
-    const settle = (value: unknown) => {
+    // @behavior glossa.extension_contracts.request_effects.runtime_settlement Runtime message requests accept the first callback, promise, or timeout result and ignore later channels.
+    const finish = (callback: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       globalThis.clearTimeout(timeout);
-      resolve(validateBackgroundResponse(value, message));
+      callback();
+    };
+    const resolveMessage = (value: unknown): void => {
+      finish(() => {
+        // @behavior glossa.extension_contracts.request_effects.runtime_validation Runtime response validation happens inside settlement so validation failures reject once.
+        try {
+          resolve(validateBackgroundResponse(value, message));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    };
+    const rejectMessage = (error: unknown): void => {
+      finish(() => reject(error));
     };
     let maybePromise: Promise<unknown> | void;
     try {
       maybePromise = sendMessage(message, (response: unknown) => {
+        if (settled) {
+          return;
+        }
         let error: chrome.runtime.LastError | undefined;
         try {
           error = chrome.runtime.lastError;
         } catch (lastError) {
-          globalThis.clearTimeout(timeout);
-          reject(lastError);
+          // @behavior glossa.extension_contracts.request_effects.runtime_last_error_access Runtime lastError access failures reject the pending request.
+          rejectMessage(lastError);
           return;
         }
         if (error) {
-          globalThis.clearTimeout(timeout);
-          reject(new Error(error.message));
+          // @behavior glossa.extension_contracts.request_effects.runtime_last_error_value Runtime lastError values reject the pending request with the reported message.
+          rejectMessage(new Error(error.message));
         } else {
-          settle(response);
+          resolveMessage(response);
         }
       }) as Promise<unknown> | void;
     } catch (error) {
-      globalThis.clearTimeout(timeout);
-      reject(error);
+      // @behavior glossa.extension_contracts.request_effects.runtime_send_failure Synchronous sendMessage failures reject the pending runtime request through the shared settlement path.
+      rejectMessage(error);
       return;
     }
     if (maybePromise && typeof maybePromise.then === "function") {
-      maybePromise.then(settle, (error) => {
-        globalThis.clearTimeout(timeout);
-        reject(error);
-      });
+      // @behavior glossa.extension_contracts.request_effects.runtime_promise_channel Promise-based sendMessage results share the same settlement path as callback results.
+      maybePromise.then(resolveMessage, rejectMessage);
     }
   });
 }

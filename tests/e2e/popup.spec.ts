@@ -1,12 +1,16 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-// @verifies glossa.translation_start_popup
-test("popup translate button activates the current tab", async ({ page }) => {
+async function loadPopup(page: Page): Promise<void> {
   const html = await readFile(resolve("dist/popup/popup.html"), "utf8");
   await page.setContent(html.replace("<link rel=\"stylesheet\" href=\"../assets/popup.css\">", "").replace("<script type=\"module\" src=\"../popup.js\"></script>", ""));
   await page.addStyleTag({ path: resolve("dist/assets/popup.css") });
+}
+
+// @verifies glossa.translation_start_popup
+test("popup translate button activates the current tab", async ({ page }) => {
+  await loadPopup(page);
   await page.evaluate(() => {
     const sent: unknown[] = [];
     Reflect.set(window, "__glossaTabMessages", sent);
@@ -37,4 +41,63 @@ test("popup translate button activates the current tab", async ({ page }) => {
     tabId: 11,
     message: { type: "glossa.activateTranslation" }
   }]);
+});
+
+// @verifies glossa.translation_start_popup
+test("popup translate button reports structured activation errors", async ({ page }) => {
+  await loadPopup(page);
+  await page.evaluate(() => {
+    Reflect.set(window, "chrome", {
+      runtime: {
+        openOptionsPage() {}
+      },
+      tabs: {
+        async query() {
+          return [{ id: 11 }];
+        },
+        async sendMessage() {
+          return {
+            ok: false,
+            error: { reason: "timeout", message: "runtime timeout", service: "runtime" }
+          };
+        }
+      }
+    });
+    window.close = () => {
+      Reflect.set(window, "__glossaPopupClosed", true);
+    };
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/popup.js") });
+
+  await page.locator("#translate-page").click();
+
+  await expect(page.locator("#popup-status")).toHaveText("扩展请求超时");
+  await expect(page.locator("#translate-page")).toBeEnabled();
+  await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__glossaPopupClosed"))).toBeFalsy();
+});
+
+// @verifies glossa.translation_start_popup
+test("popup translate button reports malformed activation responses", async ({ page }) => {
+  await loadPopup(page);
+  await page.evaluate(() => {
+    Reflect.set(window, "chrome", {
+      runtime: {
+        openOptionsPage() {}
+      },
+      tabs: {
+        async query() {
+          return [{ id: 11 }];
+        },
+        async sendMessage() {
+          return { ok: false };
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/popup.js") });
+
+  await page.locator("#translate-page").click();
+
+  await expect(page.locator("#popup-status")).toHaveText("当前页面无法翻译");
+  await expect(page.locator("#translate-page")).toBeEnabled();
 });

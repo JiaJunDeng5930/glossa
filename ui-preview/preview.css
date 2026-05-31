@@ -14,6 +14,12 @@
   --glossa-font-size: 11px;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body.review-page {
   margin: 0;
   background: var(--color-fog);

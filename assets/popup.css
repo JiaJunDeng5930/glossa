@@ -8,6 +8,12 @@
   --color-caution: #b64400;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   width: 220px;
   margin: 0;

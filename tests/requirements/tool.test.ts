@@ -17,6 +17,9 @@ describe("requirement automation tool", () => {
   // @verifies requirements.cli.help.usage
   // @verifies requirements.cli.compare_ref_option
   // @verifies requirements.cli.full_anchor_check
+  // @verifies requirements.cli.errors
+  // @verifies requirements.cli.error_boundary
+  // @verifies requirements.cli.unexpected_error
   // @verifies requirements.test_config
   // @verifies requirements.test_config.requirement_node
   // @verifies requirements.test_config.requirement_node.exec_helpers
@@ -26,6 +29,61 @@ describe("requirement automation tool", () => {
 
     expect(output).toContain("Usage: tsx tools/requirements/src/main.ts");
     expect(output).toContain("[--all]");
+  }, 120_000);
+
+  // @verifies requirements.cli.dispatch
+  // @verifies requirements.cli.dispatch.unknown_command
+  // @verifies requirements.cli.error_output
+  it("rejects unknown commands", async () => {
+    let stderr = "";
+    try {
+      await runTool(process.cwd(), ["chek"]);
+    } catch (error) {
+      stderr = errorStderr(error);
+    }
+
+    expect(stderr).toContain("Unknown requirement command: chek");
+    expect(stderr).toContain("Usage: tsx tools/requirements/src/main.ts");
+  }, 120_000);
+
+  // @verifies requirements.cli.compare_ref_option
+  // @verifies requirements.cli.compare_ref_option.missing_ref
+  it("rejects base comparison without a ref", async () => {
+    let stderr = "";
+    try {
+      await runTool(process.cwd(), ["check", "--base", "--all"]);
+    } catch (error) {
+      stderr = errorStderr(error);
+    }
+
+    expect(stderr).toContain("--base requires a git ref");
+    expect(stderr).toContain("Usage: tsx tools/requirements/src/main.ts");
+  }, 120_000);
+
+  // @verifies requirements.cli.unknown_options
+  it("rejects unknown options", async () => {
+    let stderr = "";
+    try {
+      await runTool(process.cwd(), ["check", "--unknown"]);
+    } catch (error) {
+      stderr = errorStderr(error);
+    }
+
+    expect(stderr).toContain("Unknown requirement option: --unknown");
+    expect(stderr).toContain("Usage: tsx tools/requirements/src/main.ts");
+  }, 120_000);
+
+  // @verifies requirements.cli.positional_args
+  it("rejects extra positional arguments", async () => {
+    let stderr = "";
+    try {
+      await runTool(process.cwd(), ["check", "extra"]);
+    } catch (error) {
+      stderr = errorStderr(error);
+    }
+
+    expect(stderr).toContain("Unexpected positional argument: extra");
+    expect(stderr).toContain("Usage: tsx tools/requirements/src/main.ts");
   }, 120_000);
 
   // @verifies requirements.source_snapshot.worktree
@@ -355,6 +413,8 @@ describe("requirement automation tool", () => {
   }, 120_000);
 
   // @verifies requirements.change_anchoring.current_deletion_anchor
+  // @verifies requirements.change_anchoring.current_deletion_anchor.comment_prefix
+  // @verifies requirements.change_anchoring.current_deletion_anchor.nearby_targets
   it("accepts a current anchor for a deletion-only side effect change", async () => {
     const cwd = await createFixtureRepo();
     writeFileSync(
