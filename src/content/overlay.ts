@@ -122,7 +122,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         display: inline-block;
         position: relative;
         min-width: max-content;
-        padding-block-start: calc(var(--glossa-font-size) + 1px);
+        padding-block-start: calc(var(--glossa-font-size) + 3px);
         vertical-align: baseline;
         max-width: max-content;
         white-space: nowrap;
