@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
+    "preview:ui": "node scripts/serve-ui-preview.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:requirements",
     "test:unit": "vitest run --exclude 'tests/requirements/**'",
