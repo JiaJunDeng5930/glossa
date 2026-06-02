@@ -4,16 +4,50 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Glossa</title>
+    <link rel="stylesheet" href="../assets/theme.css">
     <link rel="stylesheet" href="../assets/popup.css">
   </head>
   <body>
     <main class="popup-menu">
-      <header>
-        <strong>Glossa</strong>
+      <header class="popup-header">
+        <div class="brand-mark" aria-hidden="true">G</div>
+        <div>
+          <strong>Glossa</strong>
+          <span>阅读设置</span>
+        </div>
       </header>
-      <button id="translate-page" type="button">翻译本页</button>
-      <button id="open-options" class="secondary" type="button">设置</button>
+      <section class="page-state" aria-label="当前页面">
+        <div>
+          <span>当前页面</span>
+          <strong>已准备</strong>
+        </div>
+        <span class="proof-mark">OK</span>
+      </section>
+      <button id="translate-page" class="primary-command" type="button">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z"/>
+          <path d="m9 9 1.5 1.5L14 7"/>
+        </svg>
+        翻译本页
+      </button>
+      <button id="open-options" class="secondary-command" type="button">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z"/>
+        </svg>
+        设置
+      </button>
       <output id="popup-status" role="status"></output>
+      <footer class="shortcut-note" aria-label="快捷键">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M4 7h16v10H4zM7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10"/>
+        </svg>
+        <span>快捷键</span>
+        <kbd>Alt</kbd>
+        <span>+</span>
+        <kbd>G</kbd>
+      </footer>
     </main>
     <script type="module" src="../popup.js"></script>
   </body>

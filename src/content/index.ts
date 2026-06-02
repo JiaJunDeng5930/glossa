@@ -5,6 +5,7 @@ import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
 import { matchesShortcut } from "../shared/shortcut";
+import { GLOSSA_THEME } from "../shared/theme";
 import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import { wordClickTimeoutMs } from "./cardTimeout";
@@ -840,45 +841,59 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     prompt.setAttribute("aria-label", "重复制卡确认");
     prompt.style.cssText = [
       "position:fixed",
-      "top:16px",
-      "right:16px",
+      "top:18px",
+      "right:18px",
       "z-index:2147483647",
       "display:grid",
       "grid-template-columns:minmax(0,1fr) auto auto",
       "align-items:center",
-      "gap:8px",
-      "max-width:min(360px,calc(100vw - 32px))",
-      "padding:10px 12px",
-      "border-radius:12px",
-      "background:#1d1d1f",
-      "color:#ffffff",
-      "font:14px/1.35 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
-      "box-shadow:0 8px 24px rgba(0,0,0,0.2)"
+      "gap:10px",
+      "max-width:min(430px,calc(100vw - 36px))",
+      "padding:14px",
+      "border:1px solid #bdb5a6",
+      "border-radius:6px",
+      "background:linear-gradient(rgba(255,253,247,0.98),rgba(255,249,238,0.94)),radial-gradient(circle at 15% 20%,rgba(31,36,40,0.05) 0 1px,transparent 1px)",
+      "background-size:auto,16px 16px",
+      "color:#1f2428",
+      "font:14px/1.4 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
+      "box-shadow:0 12px 28px rgba(42,35,24,0.16)"
     ].join(";");
     const text = doc.createElement("span");
     text.textContent = `${input.surface} 已经制过卡，继续制卡？`;
-    text.style.cssText = "min-width:0;overflow-wrap:anywhere";
-    const confirm = doc.createElement("button");
-    confirm.type = "button";
+    text.style.cssText = "min-width:0;overflow-wrap:anywhere;font-weight:700";
     // @behavior glossa.card_creation.duplicate_gate.prompt_controls The duplicate-card prompt exposes one confirmation control and one cancellation control.
-    confirm.textContent = "✓";
+    const confirm = doc.createElement("button");
+    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.confirm_label The duplicate-card confirmation control uses visible text and an aria label for the continue action.
+    confirm.type = "button";
+    confirm.textContent = "继续制卡";
     confirm.setAttribute("aria-label", "继续制卡");
     const cancel = doc.createElement("button");
     cancel.type = "button";
-    cancel.textContent = "×";
+    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.cancel_label The duplicate-card cancellation control uses visible text and an aria label for the cancel action.
+    cancel.textContent = "取消";
     cancel.setAttribute("aria-label", "取消制卡");
-    for (const button of [confirm, cancel]) {
-      button.style.cssText = [
-        "width:30px",
-        "height:30px",
-        "border:0",
-        "border-radius:999px",
-        "background:rgba(255,255,255,0.16)",
-        "color:#ffffff",
-        "font:18px/1 ui-sans-serif,system-ui",
-        "cursor:pointer"
-      ].join(";");
-    }
+    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.confirm_style The duplicate-card confirmation control uses the shared theme accent as its primary action color.
+    confirm.style.cssText = [
+      "min-width:82px",
+      "height:34px",
+      `border:1px solid ${GLOSSA_THEME.accent}`,
+      "border-radius:6px",
+      `background:${GLOSSA_THEME.accent}`,
+      "color:#ffffff",
+      "font:700 14px/1 ui-sans-serif,system-ui",
+      "cursor:pointer"
+    ].join(";");
+    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.cancel_style The duplicate-card cancellation control stays visually secondary inside the paper confirmation prompt.
+    cancel.style.cssText = [
+      "min-width:54px",
+      "height:34px",
+      "border:1px solid #bdb5a6",
+      "border-radius:6px",
+      "background:rgba(255,253,247,0.8)",
+      "color:#1f2428",
+      "font:700 14px/1 ui-sans-serif,system-ui",
+      "cursor:pointer"
+    ].join(";");
     prompt.append(text, confirm, cancel);
     let settled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
