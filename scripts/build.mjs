@@ -1,5 +1,5 @@
 import { watch as watchFs } from "node:fs";
-import { mkdir, copyFile, cp, rm } from "node:fs/promises";
+import { mkdir, copyFile, cp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
@@ -65,6 +65,32 @@ async function copyStaticFiles() {
   await copyFile(resolve(root, "src/popup/popup.html"), resolve(dist, "popup/popup.html"));
   await rm(resolve(dist, "assets"), { recursive: true, force: true });
   await cp(resolve(root, "assets"), resolve(dist, "assets"), { recursive: true });
+  await writeThemeCss();
+}
+
+async function writeThemeCss() {
+  const theme = JSON.parse(await readFile(resolve(root, "src/shared/theme.json"), "utf8"));
+  const accent = themeString(theme, "accent");
+  const accentSoft = themeString(theme, "accentSoft");
+  const accentRgb = themeString(theme, "accentRgb");
+  const selectionWash = themeString(theme, "selectionWash");
+  await writeFile(resolve(dist, "assets/theme.css"), [
+    ":root {",
+    `  --glossa-theme-accent: ${accent};`,
+    `  --glossa-theme-accent-soft: ${accentSoft};`,
+    `  --glossa-theme-accent-rgb: ${accentRgb};`,
+    `  --glossa-theme-selection-wash: ${selectionWash};`,
+    "}",
+    ""
+  ].join("\n"));
+}
+
+function themeString(theme, key) {
+  const value = theme[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`Theme token ${key} must be a non-empty string.`);
+  }
+  return value;
 }
 
 function createStaticCopyScheduler(onFailure) {
@@ -92,6 +118,7 @@ function watchStaticFiles(onChange) {
     watchStaticPath(root, false, (filename) => filename === "manifest.json", onChange),
     watchStaticPath(resolve(root, "src/options"), false, (filename) => filename === "options.html", onChange),
     watchStaticPath(resolve(root, "src/popup"), false, (filename) => filename === "popup.html", onChange),
+    watchStaticPath(resolve(root, "src/shared"), false, (filename) => filename === "theme.json", onChange),
     watchStaticPath(resolve(root, "assets"), true, () => true, onChange)
   ];
 

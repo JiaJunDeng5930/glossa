@@ -157,7 +157,11 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.card_creation.duplicate_gate.message_type|glossa.card_creation.duplicate_gate.message_type.{}
 |glossa.card_creation.duplicate_gate.prompt|glossa.card_creation.duplicate_gate.prompt.{}
 |glossa.card_creation.duplicate_gate.prompt_cleanup|glossa.card_creation.duplicate_gate.prompt_cleanup.{}
-|glossa.card_creation.duplicate_gate.prompt_controls|glossa.card_creation.duplicate_gate.prompt_controls.{}
+|glossa.card_creation.duplicate_gate.prompt_controls|glossa.card_creation.duplicate_gate.prompt_controls.{cancel_label,cancel_style,confirm_label,confirm_style}
+|glossa.card_creation.duplicate_gate.prompt_controls.cancel_label|glossa.card_creation.duplicate_gate.prompt_controls.cancel_label.{}
+|glossa.card_creation.duplicate_gate.prompt_controls.cancel_style|glossa.card_creation.duplicate_gate.prompt_controls.cancel_style.{}
+|glossa.card_creation.duplicate_gate.prompt_controls.confirm_label|glossa.card_creation.duplicate_gate.prompt_controls.confirm_label.{}
+|glossa.card_creation.duplicate_gate.prompt_controls.confirm_style|glossa.card_creation.duplicate_gate.prompt_controls.confirm_style.{}
 |glossa.card_creation.duplicate_gate.prompt_dom|glossa.card_creation.duplicate_gate.prompt_dom.{}
 |glossa.card_creation.duplicate_gate.prompt_setting|glossa.card_creation.duplicate_gate.prompt_setting.{}
 |glossa.card_creation.duplicate_gate.prompt_supersede|glossa.card_creation.duplicate_gate.prompt_supersede.{}
@@ -204,7 +208,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.card_creation.note_request.timeout.options_check|glossa.card_creation.note_request.timeout.options_check.{}
 |glossa.card_creation.note_request.timeout.setting|glossa.card_creation.note_request.timeout.setting.{}
 |glossa.card_creation.note_request.timeout_cleanup|glossa.card_creation.note_request.timeout_cleanup.{}
-|glossa.extension_contracts|glossa.extension_contracts.{message_envelopes,payload_consistency,request_effects,restart_continuity}
+|glossa.extension_contracts|glossa.extension_contracts.{message_envelopes,payload_consistency,request_effects,restart_continuity,theme_tokens}
 |glossa.extension_contracts.message_envelopes|glossa.extension_contracts.message_envelopes.{ai_settings_payload,background_response_types,background_route,cache_cleared_payload,content_payloads,duplicate_payload,error_payload,gloss_outbound_payloads,gloss_scan_chunk,gloss_scan_end,gloss_scan_start,gloss_token_base,gloss_token_error,gloss_token_outbound,gloss_token_ready,options_payloads,settings_response_payload,word_click_payloads,word_clicked_ok_payload}
 |glossa.extension_contracts.message_envelopes.ai_settings_payload|glossa.extension_contracts.message_envelopes.ai_settings_payload.{}
 |glossa.extension_contracts.message_envelopes.background_response_types|glossa.extension_contracts.message_envelopes.background_response_types.{}
@@ -244,6 +248,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.extension_contracts.request_effects.runtime_timeout|glossa.extension_contracts.request_effects.runtime_timeout.{}
 |glossa.extension_contracts.request_effects.runtime_validation|glossa.extension_contracts.request_effects.runtime_validation.{}
 |glossa.extension_contracts.restart_continuity|glossa.extension_contracts.restart_continuity.{}
+|glossa.extension_contracts.theme_tokens|glossa.extension_contracts.theme_tokens.{}
 |glossa.extension_storage|glossa.extension_storage.{typed_access}
 |glossa.extension_storage.typed_access|glossa.extension_storage.typed_access.{key_value_clear,key_value_delete,lexicon_delete,lexicon_delete_impl}
 |glossa.extension_storage.typed_access.key_value_clear|glossa.extension_storage.typed_access.key_value_clear.{}
@@ -282,8 +287,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.lookup_order.fresh_cache_precedes_lexicon|glossa.page_translation.lookup_order.fresh_cache_precedes_lexicon.{}
 |glossa.page_translation.lookup_order.gloss_cache_created_at|glossa.page_translation.lookup_order.gloss_cache_created_at.{}
 |glossa.page_translation.lookup_order.lexicon_hidden_after_cache|glossa.page_translation.lookup_order.lexicon_hidden_after_cache.{}
-|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{duplicate_prompt_controls}
+|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{duplicate_prompt_controls,selection_note}
 |glossa.page_translation.shortcut_selection.duplicate_prompt_controls|glossa.page_translation.shortcut_selection.duplicate_prompt_controls.{}
+|glossa.page_translation.shortcut_selection.selection_note|glossa.page_translation.shortcut_selection.selection_note.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
 |glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,gloss_cache_ttl,timeout_seconds}
 |glossa.settings_save.clear_gloss_cache|glossa.settings_save.clear_gloss_cache.{background_request}

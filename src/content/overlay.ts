@@ -1,5 +1,6 @@
 // @behavior glossa.page_translation.inline_rendering Ready, pending, hidden, and error gloss outcomes keep the source word on its original text baseline.
 import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossTokenPayload } from "../shared/types";
+import { GLOSSA_THEME } from "../shared/theme";
 import { userMessageForError } from "../shared/userMessages";
 import type { ScannedToken } from "./scanner";
 import { validateTokenForRender } from "./range";
@@ -60,6 +61,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
   applyAppearance(host, appearance);
   const shadow = host.attachShadow({ mode: "open" });
   const style = doc.createElement("style");
+  // @constraint glossa.page_translation.shortcut_selection.selection_note Selection mode displays an extension-owned note while the shortcut selection host state is active.
   style.textContent = `
     :host {
       all: initial;
@@ -72,7 +74,10 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     .selection-veil {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.18);
+      background:
+        radial-gradient(circle at 15% 18%, rgba(31, 36, 40, 0.05) 0 1px, transparent 1px),
+        ${GLOSSA_THEME.selectionWash};
+      background-size: 18px 18px, auto;
       opacity: 0;
       pointer-events: none;
       transition: opacity 120ms ease;
@@ -80,14 +85,41 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     :host([data-glossa-selecting="true"]) .selection-veil {
       opacity: 1;
     }
+    .selection-note {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      max-width: min(320px, calc(100vw - 36px));
+      padding: 10px 12px;
+      border: 1px solid #bdb5a6;
+      border-radius: 6px;
+      background:
+        linear-gradient(rgba(255, 253, 247, 0.98), rgba(255, 249, 238, 0.94)),
+        radial-gradient(circle at 20% 20%, rgba(31, 36, 40, 0.05) 0 1px, transparent 1px);
+      background-size: auto, 16px 16px;
+      color: #1f2428;
+      font: 700 13px/1.35 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+      box-shadow: 0 10px 24px rgba(42, 35, 24, 0.14);
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+    :host([data-glossa-selecting="true"]) .selection-note {
+      opacity: 1;
+      transform: translateY(0);
+    }
   `;
   const veil = doc.createElement("div");
   veil.className = "selection-veil";
   veil.dataset.glossaOwned = "1";
   veil.setAttribute("aria-hidden", "true");
+  const selectionNote = doc.createElement("div");
+  selectionNote.className = "selection-note";
+  selectionNote.dataset.glossaOwned = "1";
+  selectionNote.textContent = "选择单词来制卡";
   const layer = doc.createElement("div");
   layer.part.add("layer");
-  shadow.append(style, veil, layer);
+  shadow.append(style, veil, selectionNote, layer);
   doc.documentElement.append(host);
   const renderedNodes = new Set<HTMLElement>();
   const originalTextNodesByToken = new Map<string, Text>();
@@ -122,7 +154,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         display: inline-block;
         position: relative;
         min-width: max-content;
-        padding-block-start: calc(var(--glossa-font-size) + 3px);
+        padding-block-start: calc(var(--glossa-font-size) + 8px);
         vertical-align: baseline;
         max-width: max-content;
         white-space: nowrap;
@@ -135,41 +167,49 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         position: absolute;
         top: 0;
         left: 50%;
-        padding: 0 3px;
-        border-radius: 0;
+        padding: 1px 6px 2px;
+        border: 1px solid color-mix(in srgb, ${GLOSSA_THEME.accent} 45%, var(--glossa-bg-color));
+        border-radius: 4px;
         background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
         color: var(--glossa-text-color);
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
+        font-weight: 700;
         line-height: 1.15;
         white-space: nowrap;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.22);
+        box-shadow: 0 1px 2px rgba(42, 35, 24, 0.16);
         pointer-events: none;
         transform: translateX(-50%);
       }
       [data-glossa-token][data-glossa-status="pending"] [data-glossa-token-label] {
-        min-width: 1.25em;
+        min-width: 2.1em;
         text-align: center;
       }
       [data-glossa-token][data-glossa-status="error"] [data-glossa-token-label] {
+        border-color: color-mix(in srgb, #b43b32 55%, var(--glossa-card-error-bg-color));
         background: color-mix(in srgb, var(--glossa-card-error-bg-color) var(--glossa-bg-alpha), transparent);
+        color: #b43b32;
       }
       [data-glossa-token][data-glossa-feedback="card-pending"] [data-glossa-token-label] {
         background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
-        min-width: 1.25em;
+        min-width: 2.1em;
         text-align: center;
       }
       [data-glossa-token][data-glossa-feedback="card-success"] [data-glossa-token-label] {
+        border-color: color-mix(in srgb, #25784a 55%, var(--glossa-card-success-bg-color));
         background: color-mix(in srgb, var(--glossa-card-success-bg-color) var(--glossa-bg-alpha), transparent);
+        color: #25784a;
       }
       [data-glossa-token][data-glossa-feedback="card-error"] [data-glossa-token-label] {
+        border-color: color-mix(in srgb, #b43b32 55%, var(--glossa-card-error-bg-color));
         background: color-mix(in srgb, var(--glossa-card-error-bg-color) var(--glossa-bg-alpha), transparent);
+        color: #b43b32;
       }
       [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label],
       [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-status="error"] [data-glossa-token-label] {
-        width: 1.5em;
-        height: 1.5em;
-        min-width: 1.5em;
+        width: 1.65em;
+        height: 1.65em;
+        min-width: 1.65em;
         padding: 0;
         color: transparent;
         overflow: hidden;
@@ -182,10 +222,10 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 0.82em;
+        width: 0.86em;
         height: 2px;
         border-radius: 999px;
-        background: var(--glossa-text-color);
+        background: #b43b32;
         transform-origin: center;
       }
       [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label]::before,
@@ -199,15 +239,19 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       [data-glossa-token-surface] {
         display: inline;
         line-height: inherit;
+        text-decoration: underline;
+        text-decoration-style: dotted;
+        text-underline-offset: 4px;
       }
       [data-glossa-token-width] {
         display: block;
         height: 0;
         overflow: hidden;
         visibility: hidden;
-        padding-inline: 4px;
+        padding-inline: 6px;
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
+        font-weight: 700;
         line-height: 1.15;
         white-space: nowrap;
       }

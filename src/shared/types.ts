@@ -281,13 +281,13 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   promptVersion: "gloss-v1",
   modelVersion: "gpt-4.1-mini",
   appearance: {
-    textColor: "#ffffff",
-    backgroundColor: "#0f172a",
-    cardSuccessBackgroundColor: "#16a34a",
-    cardErrorBackgroundColor: "#dc2626",
-    backgroundOpacity: 0.9,
+    textColor: "#1f2428",
+    backgroundColor: "#fff4c9",
+    cardSuccessBackgroundColor: "#e5f6eb",
+    cardErrorBackgroundColor: "#ffece8",
+    backgroundOpacity: 0.94,
     fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-    fontSize: 11
+    fontSize: 12
   },
   prompts: {
     gloss: "Translate each unfamiliar English word or phrase into Simplified Chinese for its current context. Return a short inline label that fits above the source word.",

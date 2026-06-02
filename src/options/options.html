@@ -4,209 +4,225 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Glossa 设置</title>
+    <link rel="stylesheet" href="../assets/theme.css">
     <link rel="stylesheet" href="../assets/options.css">
   </head>
   <body>
-    <main>
-      <header class="page-hero">
-        <p>Glossa</p>
-        <h1>阅读设置</h1>
-      </header>
-      <form id="settings-form">
-        <section class="settings-card" aria-labelledby="reading-heading">
-          <h2 id="reading-heading">阅读</h2>
-          <div class="field-grid">
-            <label>
-              选词快捷键
-              <span class="field-help">按住这个快捷键并点击页面单词来制卡。</span>
-              <input name="shortcutKey" type="hidden">
-              <button id="shortcut-capture" class="secondary" type="button"></button>
-            </label>
-            <label>
-              翻译快捷键
-              <span class="field-help">在页面中按下这个快捷键来开启或关闭本页翻译。</span>
-              <input name="translateShortcutKey" type="hidden">
-              <button id="translate-shortcut-capture" class="secondary" type="button"></button>
-            </label>
-            <label class="checkbox-field">
-              <input name="autoTranslateEnabled" type="checkbox">
-              <span>
-                自动翻译
-                <small class="field-help">打开页面后自动开始扫描并显示释义。</small>
-              </span>
-            </label>
-            <label>
-              学习窗口天数
-              <span class="field-help">点击制卡后的词会在这段时间内继续显示释义。</span>
-              <input name="learningWindowDays" type="number" min="1" step="1">
-            </label>
-            <label>
-              基础过滤词表
-              <span class="field-help">词表内的基础词会在页面扫描时跳过。</span>
-              <select name="knownWordList"></select>
-            </label>
+    <main class="settings-shell">
+      <aside class="settings-rail" aria-label="设置导航">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">G</div>
+          <div>
+            <strong>Glossa</strong>
+            <span>阅读 · 释义 · 记忆</span>
           </div>
-        </section>
-        <section class="settings-card" aria-labelledby="known-words-heading">
-          <h2 id="known-words-heading">已掌握词汇</h2>
-          <p id="known-words-summary" class="field-help">正在读取已掌握词汇。</p>
-          <button id="open-known-words" class="secondary" type="button">管理词汇</button>
-        </section>
-        <section class="settings-card" aria-labelledby="appearance-heading">
-          <h2 id="appearance-heading">释义样式</h2>
-          <div class="style-grid">
-            <label>
-              文字颜色
-              <span class="field-help">控制释义标签中的文字颜色。</span>
-              <input name="glossTextColor" type="color">
-            </label>
-            <label>
-              背景颜色
-              <span class="field-help">控制普通释义标签的背景颜色。</span>
-              <input name="glossBackgroundColor" type="color">
-            </label>
-            <label>
-              制卡成功背景
-              <span class="field-help">控制制卡成功反馈的背景颜色。</span>
-              <input name="cardSuccessBackgroundColor" type="color">
-            </label>
-            <label>
-              制卡失败背景
-              <span class="field-help">控制制卡失败反馈的背景颜色。</span>
-              <input name="cardErrorBackgroundColor" type="color">
-            </label>
-            <label>
-              深浅
-              <span class="field-help">控制释义和反馈标签的背景透明度。</span>
-              <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
-            </label>
-            <label>
-              字体
-              <span class="field-help">控制释义标签和预览的字体。</span>
-              <select name="glossFontFamily">
-                <option value="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">系统无衬线</option>
-                <option value="Georgia, Times New Roman, serif">衬线</option>
-                <option value="Inter, ui-sans-serif, system-ui, sans-serif">Inter</option>
-                <option value="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">等宽</option>
-              </select>
-            </label>
-            <label>
-              字号
-              <span class="field-help">控制释义标签的文字大小。</span>
-              <input name="glossFontSize" type="number" min="9" max="24" step="1">
-            </label>
+        </div>
+        <nav class="section-nav">
+          <a href="#reading-section">阅读</a>
+          <a href="#known-words-section">已掌握词汇</a>
+          <a href="#appearance-section">释义样式</a>
+          <a href="#ai-section">AI</a>
+          <a href="#anki-section">Anki</a>
+          <a href="#prompt-section">提示词</a>
+          <a href="#cache-section">缓存</a>
+        </nav>
+      </aside>
+
+      <section class="settings-workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="document-label">Chrome 扩展设置</p>
+            <h1>阅读设置</h1>
           </div>
-          <div id="gloss-preview" class="gloss-preview">
-            读者可以
-            <span class="preview-word">
-              <strong class="preview-gloss">适应</strong>
-              <span>adapt</span>
-            </span>
-            并理解
-            <span class="preview-word">
-              <strong class="preview-gloss preview-gloss-success">复杂</strong>
-              <span>complex</span>
-            </span>
-            ，标记
-            <span class="preview-word">
-              <strong class="preview-gloss preview-gloss-error">×</strong>
-              <span>failed</span>
-            </span>
-            的观点。
-          </div>
-        </section>
-        <div class="settings-grid">
-          <section class="settings-card" aria-labelledby="ai-heading">
-            <h2 id="ai-heading">AI</h2>
-            <label>
-              AI 服务
-              <span class="field-help">选择生成释义和卡片内容的服务类型。</span>
-              <select name="provider">
-                <option value="openai-responses">OpenAI Responses API</option>
-                <option value="openai-chat-completions">OpenAI Chat Completions API</option>
-                <option value="openai-completions">OpenAI Completions API</option>
-                <option value="glossa-backend">Glossa 后端</option>
-              </select>
-            </label>
-            <label>
-              AI 接口地址
-              <span class="field-help">发送 AI 请求的 HTTP 地址。</span>
-              <input name="aiEndpoint" autocomplete="off">
-            </label>
-            <label>
-              AI API 密钥
-              <span class="field-help">发送 OpenAI 请求时使用的密钥。</span>
-              <input name="apiKey" type="password" autocomplete="off">
-            </label>
-            <label>
-              模型
-              <span class="field-help">AI 请求体中的模型名称。</span>
-              <input name="modelVersion" autocomplete="off">
-            </label>
-            <label>
-              推理强度
-              <span class="field-help">控制支持推理参数的 AI 请求强度。</span>
-              <select name="reasoningEffort">
-                <option value="none">无</option>
-                <option value="minimal">极简</option>
-                <option value="low">低</option>
-                <option value="medium">中</option>
-                <option value="high">高</option>
-                <option value="xhigh">超高</option>
-              </select>
-            </label>
-            <label>
-              AI 超时秒数
-              <span class="field-help">单次 AI 请求等待响应的最长时间。</span>
-              <input name="aiRequestTimeoutSeconds" type="number" min="1" step="1">
-            </label>
-            <button id="test-ai" class="test-button" type="button" data-state="idle" aria-label="测试 AI">
-              <span class="test-label">测试 AI</span>
-              <span class="test-spinner" aria-hidden="true"></span>
-              <svg class="test-icon test-icon-success" aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M20 6 9 17l-5-5"/>
+          <div class="header-actions">
+            <output id="status" role="status"></output>
+            <button class="primary-action" type="submit" form="settings-form">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/>
+                <path d="M17 21v-8H7v8M7 3v5h8"/>
               </svg>
-              <svg class="test-icon test-icon-error" aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
-              </svg>
+              保存
             </button>
+          </div>
+        </header>
+
+        <form id="settings-form" class="settings-form">
+          <section id="reading-section" class="settings-panel" aria-labelledby="reading-heading">
+            <div class="panel-heading">
+              <p>01</p>
+              <h2 id="reading-heading">阅读</h2>
+            </div>
+            <div class="field-grid">
+              <label>
+                选词快捷键
+                <span class="field-help">按住这个快捷键并点击页面单词来制卡。</span>
+                <input name="shortcutKey" type="hidden">
+                <button id="shortcut-capture" class="secondary" type="button"></button>
+              </label>
+              <label>
+                翻译快捷键
+                <span class="field-help">在页面中按下这个快捷键来开启或关闭本页翻译。</span>
+                <input name="translateShortcutKey" type="hidden">
+                <button id="translate-shortcut-capture" class="secondary" type="button"></button>
+              </label>
+              <label class="switch-field">
+                <span>
+                  自动翻译
+                  <small class="field-help">打开页面后自动开始扫描并显示释义。</small>
+                </span>
+                <input name="autoTranslateEnabled" type="checkbox">
+              </label>
+              <label>
+                学习窗口天数
+                <span class="field-help">点击制卡后的词会在这段时间内继续显示释义。</span>
+                <input name="learningWindowDays" type="number" min="1" step="1">
+              </label>
+              <label class="wide-field">
+                基础过滤词表
+                <span class="field-help">词表内的基础词会在页面扫描时跳过。</span>
+                <select name="knownWordList"></select>
+              </label>
+            </div>
           </section>
-          <section class="settings-card" aria-labelledby="anki-heading">
-            <h2 id="anki-heading">Anki</h2>
-            <label>
-              AnkiConnect 接口地址
-              <span class="field-help">发送 AnkiConnect 请求的本机地址。</span>
-              <input name="ankiEndpoint" autocomplete="off">
-            </label>
-            <label>
-              Anki 牌组
-              <span class="field-help">新卡片写入的 Anki 牌组。</span>
-              <select name="ankiDeck" disabled></select>
-            </label>
-            <label>
-              Anki 卡片模板
-              <span class="field-help">新卡片写入的模板，需要包含 Front 和 Back 字段。</span>
-              <select name="ankiModelName" disabled></select>
-            </label>
-            <label>
-              Anki 超时秒数
-              <span class="field-help">单次 AnkiConnect 请求等待响应的最长时间。</span>
-              <input name="ankiRequestTimeoutSeconds" type="number" min="1" step="1">
-            </label>
-            <label>
-              重复制卡提示秒数
-              <span class="field-help">已制卡词汇的确认提示在页面上停留的时间。</span>
-              <input name="duplicatePromptSeconds" type="number" min="1" step="1">
-            </label>
-            <div class="anki-actions">
-              <button id="refresh-anki" class="icon-button" type="button" data-state="idle" aria-label="刷新 Anki">
-                <span class="test-spinner" aria-hidden="true"></span>
-                <svg class="test-icon refresh-icon" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/>
+
+          <section id="known-words-section" class="settings-panel compact-panel" aria-labelledby="known-words-heading">
+            <div class="panel-heading">
+              <p>02</p>
+              <h2 id="known-words-heading">已掌握词汇</h2>
+            </div>
+            <div class="summary-row">
+              <p id="known-words-summary" class="field-help">正在读取已掌握词汇。</p>
+              <button id="open-known-words" class="secondary" type="button">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M4 5h16M4 12h16M4 19h16"/>
+                  <path d="M8 5v14"/>
                 </svg>
+                管理词汇
               </button>
-              <button id="test-anki" class="test-button" type="button" data-state="idle" aria-label="测试 Anki">
-                <span class="test-label">测试 Anki</span>
+            </div>
+          </section>
+
+          <section id="appearance-section" class="settings-panel" aria-labelledby="appearance-heading">
+            <div class="panel-heading">
+              <p>03</p>
+              <h2 id="appearance-heading">释义样式</h2>
+            </div>
+            <div class="appearance-layout">
+              <div class="style-grid">
+                <label>
+                  文字颜色
+                  <span class="field-help">控制释义标签中的文字颜色。</span>
+                  <input name="glossTextColor" type="color">
+                </label>
+                <label>
+                  背景颜色
+                  <span class="field-help">控制普通释义标签的背景颜色。</span>
+                  <input name="glossBackgroundColor" type="color">
+                </label>
+                <label>
+                  制卡成功背景
+                  <span class="field-help">控制制卡成功反馈的背景颜色。</span>
+                  <input name="cardSuccessBackgroundColor" type="color">
+                </label>
+                <label>
+                  制卡失败背景
+                  <span class="field-help">控制制卡失败反馈的背景颜色。</span>
+                  <input name="cardErrorBackgroundColor" type="color">
+                </label>
+                <label>
+                  深浅
+                  <span class="field-help">控制释义和反馈标签的背景透明度。</span>
+                  <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
+                </label>
+                <label>
+                  字体
+                  <span class="field-help">控制释义标签和预览的字体。</span>
+                  <select name="glossFontFamily">
+                    <option value="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">系统无衬线</option>
+                    <option value="Georgia, Times New Roman, serif">衬线</option>
+                    <option value="Inter, ui-sans-serif, system-ui, sans-serif">Inter</option>
+                    <option value="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">等宽</option>
+                  </select>
+                </label>
+                <label>
+                  字号
+                  <span class="field-help">控制释义标签的文字大小。</span>
+                  <input name="glossFontSize" type="number" min="9" max="24" step="1">
+                </label>
+              </div>
+              <div id="gloss-preview" class="gloss-preview" aria-label="释义样式预览">
+                <p>
+                  The reader can
+                  <span class="preview-word">
+                    <strong class="preview-gloss">适应</strong>
+                    <span>adapt</span>
+                  </span>
+                  and understand
+                  <span class="preview-word">
+                    <strong class="preview-gloss preview-gloss-success">复杂</strong>
+                    <span>complex</span>
+                  </span>
+                  ideas while a failed request marks
+                  <span class="preview-word">
+                    <strong class="preview-gloss preview-gloss-error">×</strong>
+                    <span>failed</span>
+                  </span>
+                  in place.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <div class="settings-grid">
+            <section id="ai-section" class="settings-panel" aria-labelledby="ai-heading">
+              <div class="panel-heading">
+                <p>04</p>
+                <h2 id="ai-heading">AI</h2>
+              </div>
+              <label>
+                AI 服务
+                <span class="field-help">选择生成释义和卡片内容的服务类型。</span>
+                <select name="provider">
+                  <option value="openai-responses">OpenAI Responses API</option>
+                  <option value="openai-chat-completions">OpenAI Chat Completions API</option>
+                  <option value="openai-completions">OpenAI Completions API</option>
+                  <option value="glossa-backend">Glossa 后端</option>
+                </select>
+              </label>
+              <label>
+                AI 接口地址
+                <span class="field-help">发送 AI 请求的 HTTP 地址。</span>
+                <input name="aiEndpoint" autocomplete="off">
+              </label>
+              <label>
+                AI API 密钥
+                <span class="field-help">发送 OpenAI 请求时使用的密钥。</span>
+                <input name="apiKey" type="password" autocomplete="off">
+              </label>
+              <label>
+                模型
+                <span class="field-help">AI 请求体中的模型名称。</span>
+                <input name="modelVersion" autocomplete="off">
+              </label>
+              <label>
+                推理强度
+                <span class="field-help">控制支持推理参数的 AI 请求强度。</span>
+                <select name="reasoningEffort">
+                  <option value="none">无</option>
+                  <option value="minimal">极简</option>
+                  <option value="low">低</option>
+                  <option value="medium">中</option>
+                  <option value="high">高</option>
+                  <option value="xhigh">超高</option>
+                </select>
+              </label>
+              <label>
+                AI 超时秒数
+                <span class="field-help">单次 AI 请求等待响应的最长时间。</span>
+                <input name="aiRequestTimeoutSeconds" type="number" min="1" step="1">
+              </label>
+              <button id="test-ai" class="test-button" type="button" data-state="idle" aria-label="测试 AI">
+                <span class="test-label">测试 AI</span>
                 <span class="test-spinner" aria-hidden="true"></span>
                 <svg class="test-icon test-icon-success" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M20 6 9 17l-5-5"/>
@@ -215,54 +231,116 @@
                   <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
                 </svg>
               </button>
+            </section>
+
+            <section id="anki-section" class="settings-panel" aria-labelledby="anki-heading">
+              <div class="panel-heading">
+                <p>05</p>
+                <h2 id="anki-heading">Anki</h2>
+              </div>
+              <label>
+                AnkiConnect 接口地址
+                <span class="field-help">发送 AnkiConnect 请求的本机地址。</span>
+                <input name="ankiEndpoint" autocomplete="off">
+              </label>
+              <label>
+                Anki 牌组
+                <span class="field-help">新卡片写入的 Anki 牌组。</span>
+                <select name="ankiDeck" disabled></select>
+              </label>
+              <label>
+                Anki 卡片模板
+                <span class="field-help">新卡片写入的模板，需要包含 Front 和 Back 字段。</span>
+                <select name="ankiModelName" disabled></select>
+              </label>
+              <label>
+                Anki 超时秒数
+                <span class="field-help">单次 AnkiConnect 请求等待响应的最长时间。</span>
+                <input name="ankiRequestTimeoutSeconds" type="number" min="1" step="1">
+              </label>
+              <label>
+                重复制卡提示秒数
+                <span class="field-help">已制卡词汇的确认提示在页面上停留的时间。</span>
+                <input name="duplicatePromptSeconds" type="number" min="1" step="1">
+              </label>
+              <div class="anki-actions">
+                <button id="refresh-anki" class="icon-button" type="button" data-state="idle" aria-label="刷新 Anki" title="刷新 Anki">
+                  <span class="test-spinner" aria-hidden="true"></span>
+                  <svg class="test-icon refresh-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/>
+                  </svg>
+                </button>
+                <button id="test-anki" class="test-button" type="button" data-state="idle" aria-label="测试 Anki">
+                  <span class="test-label">测试 Anki</span>
+                  <span class="test-spinner" aria-hidden="true"></span>
+                  <svg class="test-icon test-icon-success" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M20 6 9 17l-5-5"/>
+                  </svg>
+                  <svg class="test-icon test-icon-error" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
+                  </svg>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <section id="prompt-section" class="settings-panel" aria-labelledby="prompt-heading">
+            <div class="panel-heading">
+              <p>06</p>
+              <h2 id="prompt-heading">提示词</h2>
+            </div>
+            <label>
+              <span class="field-heading">
+                <span>释义提示词</span>
+                <button id="reset-gloss-prompt" class="icon-button compact-icon-button" type="button" aria-label="重置释义提示词" title="重置释义提示词">
+                  <svg class="test-icon reset-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>
+                  </svg>
+                </button>
+              </span>
+              <span class="field-help">控制 AI 如何生成页面行内释义。</span>
+              <textarea name="glossPrompt" rows="5"></textarea>
+            </label>
+            <label>
+              <span class="field-heading">
+                <span>Anki 卡片提示词</span>
+                <button id="reset-anki-prompt" class="icon-button compact-icon-button" type="button" aria-label="重置 Anki 卡片提示词" title="重置 Anki 卡片提示词">
+                  <svg class="test-icon reset-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>
+                  </svg>
+                </button>
+              </span>
+              <span class="field-help">控制 AI 如何生成 Anki 卡片正反面。</span>
+              <textarea name="ankiPrompt" rows="5"></textarea>
+            </label>
+          </section>
+
+          <section id="cache-section" class="settings-panel compact-panel" aria-labelledby="cache-heading">
+            <div class="panel-heading">
+              <p>07</p>
+              <h2 id="cache-heading">缓存</h2>
+            </div>
+            <div class="summary-row">
+              <label>
+                翻译缓存有效小时数
+                <span class="field-help">缓存创建后在这段时间内优先用于页面释义。</span>
+                <input name="glossCacheTtlHours" type="number" min="1" step="1">
+              </label>
+              <button id="clear-gloss-cache" class="secondary danger-action" type="button">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/>
+                </svg>
+                清空翻译缓存
+              </button>
             </div>
           </section>
-        </div>
-        <section class="settings-card" aria-labelledby="prompt-heading">
-          <h2 id="prompt-heading">提示词</h2>
-          <label>
-            <span class="field-heading">
-              <span>释义提示词</span>
-              <button id="reset-gloss-prompt" class="icon-button compact-icon-button" type="button" aria-label="重置释义提示词" title="重置释义提示词">
-                <svg class="test-icon reset-icon" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>
-                </svg>
-              </button>
-            </span>
-            <span class="field-help">控制 AI 如何生成页面行内释义。</span>
-            <textarea name="glossPrompt" rows="5"></textarea>
-          </label>
-          <label>
-            <span class="field-heading">
-              <span>Anki 卡片提示词</span>
-              <button id="reset-anki-prompt" class="icon-button compact-icon-button" type="button" aria-label="重置 Anki 卡片提示词" title="重置 Anki 卡片提示词">
-                <svg class="test-icon reset-icon" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>
-                </svg>
-              </button>
-            </span>
-            <span class="field-help">控制 AI 如何生成 Anki 卡片正反面。</span>
-            <textarea name="ankiPrompt" rows="5"></textarea>
-          </label>
-        </section>
-        <section class="settings-card" aria-labelledby="cache-heading">
-          <h2 id="cache-heading">缓存</h2>
-          <label>
-            翻译缓存有效小时数
-            <span class="field-help">缓存创建后在这段时间内优先用于页面释义。</span>
-            <input name="glossCacheTtlHours" type="number" min="1" step="1">
-          </label>
-          <button id="clear-gloss-cache" class="secondary danger-action" type="button">清空翻译缓存</button>
-        </section>
-        <div class="actions">
-          <button class="primary-action" type="submit">保存</button>
-        </div>
-      </form>
-      <output id="status" role="status"></output>
+        </form>
+      </section>
+
       <dialog id="known-words-dialog" class="known-words-dialog" aria-labelledby="known-words-dialog-heading">
         <div class="known-words-dialog-header">
           <div>
-            <p class="dialog-kicker">Glossa</p>
+            <p class="dialog-kicker">Glossa 词汇纸夹</p>
             <h2 id="known-words-dialog-heading">已掌握词汇</h2>
           </div>
           <button id="close-known-words" class="icon-button" type="button" aria-label="关闭已掌握词汇" title="关闭已掌握词汇">
