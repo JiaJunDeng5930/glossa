@@ -40,28 +40,17 @@ body {
 
 .popup-header {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
+  gap: 6px;
+  align-items: start;
   padding-bottom: 14px;
   border-bottom: 3px double var(--ink);
 }
 
-.brand-mark {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent);
-  color: #ffffff;
-  font: 700 26px/1 Georgia, "Times New Roman", serif;
-}
-
-strong {
+.brand-logo {
   display: block;
-  font: 700 30px/1.05 Georgia, "Times New Roman", "Noto Serif SC", serif;
+  width: 154px;
+  height: auto;
+  border-radius: 4px;
 }
 
 .popup-header span,

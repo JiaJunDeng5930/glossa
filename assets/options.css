@@ -77,32 +77,19 @@ textarea {
 
 .brand-block {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: var(--space-12);
-  align-items: center;
+  gap: var(--space-6);
+  align-items: start;
 }
 
-.brand-mark {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-control);
-  background: var(--accent);
-  color: #ffffff;
-  font: 700 26px/1 Georgia, "Times New Roman", serif;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26);
-}
-
-.brand-block strong {
+.brand-logo {
   display: block;
-  font: 700 32px/1.05 Georgia, "Times New Roman", serif;
+  width: min(172px, 100%);
+  height: auto;
+  border-radius: 4px;
 }
 
 .brand-block span {
   display: block;
-  margin-top: 4px;
   color: var(--graphite);
   font-size: 13px;
 }
