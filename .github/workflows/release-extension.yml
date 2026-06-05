@@ -1,0 +1,76 @@
+name: release-extension
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-extension-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run verify
+      - name: Package extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag -replace "^v", ""
+          $manifestVersion = node -p "JSON.parse(require('node:fs').readFileSync('manifest.json', 'utf8')).version"
+          $packageVersion = node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version"
+
+          if ($version -ne $manifestVersion -or $version -ne $packageVersion) {
+            throw "Tag $tag must match manifest.json and package.json version $manifestVersion."
+          }
+
+          $archive = "glossa-extension-$tag.zip"
+          if (Test-Path -LiteralPath $archive) {
+            Remove-Item -LiteralPath $archive
+          }
+
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $distPath = (Resolve-Path -LiteralPath "dist").Path
+          $archivePath = Join-Path (Get-Location) $archive
+          $zip = [System.IO.Compression.ZipFile]::Open($archivePath, [System.IO.Compression.ZipArchiveMode]::Create)
+          try {
+            Get-ChildItem -LiteralPath $distPath -Recurse -File | ForEach-Object {
+              $entryName = $_.FullName.Substring($distPath.Length).TrimStart("\", "/").Replace("\", "/")
+              [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip,
+                $_.FullName,
+                $entryName,
+                [System.IO.Compression.CompressionLevel]::Optimal
+              ) | Out-Null
+            }
+          } finally {
+            $zip.Dispose()
+          }
+
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        id: package
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" "${{ steps.package.outputs.archive }}" \
+            --title "Glossa ${GITHUB_REF_NAME}" \
+            --notes "Extension package built from ${GITHUB_SHA}."
