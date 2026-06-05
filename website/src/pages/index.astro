@@ -1,5 +1,7 @@
 ---
 import "../styles/global.css";
+
+const repoUrl = "https://github.com/JiaJunDeng5930/glossa";
 ---
 
 <!doctype html>
@@ -13,17 +15,11 @@ import "../styles/global.css";
   </head>
   <body>
     <header class="site-nav" aria-label="主导航">
-      <div aria-hidden="true"></div>
+      <a class="nav-brand" href="#" aria-label="Glossa AI 首页">
+        <img class="nav-logo" src="/assets/logo.png" alt="" />
+      </a>
       <nav>
-        <a class="nav-link home-link" href="#" aria-label="首页">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 11.2 12 4l8.5 7.2v8.5a.8.8 0 0 1-.8.8h-5.1v-5.6H9.4v5.6H4.3a.8.8 0 0 1-.8-.8Z"></path>
-          </svg>
-        </a>
-        <a class="nav-link" href="#features">功能</a>
-        <a class="nav-link" href="#price">价格</a>
-        <a class="nav-link" href="#download">下载</a>
-        <a class="nav-link login-pill" href="#login">登录</a>
+        <a class="nav-link download-pill" href={repoUrl} target="_blank" rel="noreferrer">下载</a>
       </nav>
     </header>
 
@@ -34,7 +30,8 @@ import "../styles/global.css";
             <div class="left-viewport">
               <div class="left-track" data-left-track>
                 <section class="left-panel hero-panel">
-                  <h1 class="brand-title">Glossa AI</h1>
+                  <img class="hero-logo" src="/assets/logo.png" alt="Glossa AI" />
+                  <h1 class="visually-hidden">Glossa AI</h1>
                   <p class="brand-subtitle">你阅读和学习英语的新方式</p>
                   <div class="ink-scene" aria-hidden="true">
                     <svg class="ink-line" viewBox="0 0 600 210">
@@ -101,7 +98,8 @@ import "../styles/global.css";
 
       <section class="mobile-story" aria-label="Glossa AI 移动端叙事">
         <section class="mobile-panel hero-panel">
-          <h1 class="brand-title">Glossa AI</h1>
+          <img class="hero-logo" src="/assets/logo.png" alt="Glossa AI" />
+          <h1 class="visually-hidden">Glossa AI</h1>
           <p class="brand-subtitle">你阅读和学习英语的新方式</p>
           <div class="ink-scene" aria-hidden="true">
             <svg class="ink-line" viewBox="0 0 600 210">
@@ -193,22 +191,6 @@ import "../styles/global.css";
             </div>
           </section>
         </article>
-      </section>
-
-      <section class="price-section" id="price" aria-label="价格介绍">
-        <h2>价格</h2>
-        <div class="plans">
-          <article class="plan">
-            <div class="plan-price">￥0<span>/月</span></div>
-            <p>自备 AI 密钥，无需登录</p>
-          </article>
-          <article class="plan">
-            <div class="plan-price">￥39<span>/月</span></div>
-            <p>登录后，直接使用 AI，无需手动配置</p>
-          </article>
-        </div>
-        <span id="download" aria-hidden="true"></span>
-        <span id="login" aria-hidden="true"></span>
       </section>
     </main>
 
