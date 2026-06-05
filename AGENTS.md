@@ -310,7 +310,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.settings_save.gloss_cache_ttl.hour_input.fallback|glossa.settings_save.gloss_cache_ttl.hour_input.fallback.{}
 |glossa.settings_save.timeout_seconds|glossa.settings_save.timeout_seconds.{}
 |glossa.shortcuts|glossa.shortcuts.{}
-|glossa.translation_start_popup|glossa.translation_start_popup.{activation_resolution,activation_result,button_state,default_failure,exception_failure,structured_response}
+|glossa.translation_start_popup|glossa.translation_start_popup.{activation_resolution,activation_result,button_state,default_failure,exception_failure,shortcut_hint,structured_response}
 |glossa.translation_start_popup.activation_resolution|glossa.translation_start_popup.activation_resolution.{result_mapping}
 |glossa.translation_start_popup.activation_resolution.result_mapping|glossa.translation_start_popup.activation_resolution.result_mapping.{}
 |glossa.translation_start_popup.activation_result|glossa.translation_start_popup.activation_result.{activated_kind,failed_kind,failed_message}
@@ -327,6 +327,15 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.translation_start_popup.exception_failure.default_message|glossa.translation_start_popup.exception_failure.default_message.{}
 |glossa.translation_start_popup.exception_failure.error_message|glossa.translation_start_popup.exception_failure.error_message.{}
 |glossa.translation_start_popup.exception_failure.string_message|glossa.translation_start_popup.exception_failure.string_message.{}
+|glossa.translation_start_popup.shortcut_hint|glossa.translation_start_popup.shortcut_hint.{failure,failure_default,failure_message,failure_string,render,storage,storage_error,storage_read}
+|glossa.translation_start_popup.shortcut_hint.failure|glossa.translation_start_popup.shortcut_hint.failure.{}
+|glossa.translation_start_popup.shortcut_hint.failure_default|glossa.translation_start_popup.shortcut_hint.failure_default.{}
+|glossa.translation_start_popup.shortcut_hint.failure_message|glossa.translation_start_popup.shortcut_hint.failure_message.{}
+|glossa.translation_start_popup.shortcut_hint.failure_string|glossa.translation_start_popup.shortcut_hint.failure_string.{}
+|glossa.translation_start_popup.shortcut_hint.render|glossa.translation_start_popup.shortcut_hint.render.{}
+|glossa.translation_start_popup.shortcut_hint.storage|glossa.translation_start_popup.shortcut_hint.storage.{}
+|glossa.translation_start_popup.shortcut_hint.storage_error|glossa.translation_start_popup.shortcut_hint.storage_error.{}
+|glossa.translation_start_popup.shortcut_hint.storage_read|glossa.translation_start_popup.shortcut_hint.storage_read.{}
 |glossa.translation_start_popup.structured_response|glossa.translation_start_popup.structured_response.{error,success}
 |glossa.translation_start_popup.structured_response.error|glossa.translation_start_popup.structured_response.error.{}
 |glossa.translation_start_popup.structured_response.success|glossa.translation_start_popup.structured_response.success.{}

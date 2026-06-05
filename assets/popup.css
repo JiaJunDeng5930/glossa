@@ -177,6 +177,12 @@ output:not(:empty) {
   color: var(--ink-soft);
 }
 
+.shortcut-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 kbd {
   min-width: 32px;
   display: inline-grid;
