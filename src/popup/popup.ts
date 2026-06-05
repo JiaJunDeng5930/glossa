@@ -1,8 +1,11 @@
 // @behavior glossa.translation_start_popup The popup can activate translation for the current tab, open settings, and render failures from typed activation results.
 import { isErrorPayload } from "../shared/errors";
+import { mergeStoredSettings, type StoredGlossaSettings } from "../shared/settings";
+import { DEFAULT_SETTINGS } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 
 const DEFAULT_ACTIVATION_FAILURE_MESSAGE = "当前页面无法翻译";
+const DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE = "无法读取快捷键设置";
 
 // @constraint glossa.translation_start_popup.activation_result Popup activation resolves into a closed success state or a visible failure message.
 type ActivationResult = ActivationActivatedResult | ActivationFailedResult;
@@ -22,6 +25,12 @@ interface ActivationFailedResult {
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-page")!;
 const optionsButton = document.querySelector<HTMLButtonElement>("#open-options")!;
 const statusOutput = document.querySelector<HTMLOutputElement>("#popup-status")!;
+const translateShortcutHint = document.querySelector<HTMLElement>("#translate-shortcut-hint")!;
+
+// @behavior glossa.translation_start_popup.shortcut_hint.failure Stored shortcut read failures render a visible popup status message.
+void renderTranslateShortcutHint().catch((error) => {
+  setStatus(shortcutSettingsFailureMessage(error));
+});
 
 translateButton.addEventListener("click", () => {
   void activateCurrentTab();
@@ -64,6 +73,77 @@ async function resolveCurrentTabActivation(): Promise<ActivationResult> {
 
 function setStatus(value: string): void {
   statusOutput.value = value;
+}
+
+// @behavior glossa.translation_start_popup.shortcut_hint The popup renders the page-translation shortcut from saved settings on load.
+async function renderTranslateShortcutHint(): Promise<void> {
+  const settings = await readPopupSettings();
+  renderShortcutHint(settings.translateShortcutKey);
+}
+
+// @behavior glossa.translation_start_popup.shortcut_hint.storage Popup shortcut hint reads settings from Chrome local storage using the shared default merge rules.
+async function readPopupSettings() {
+  const stored = await readChromeLocalSettings();
+  return mergeStoredSettings(stored);
+}
+
+function readChromeLocalSettings(): Promise<StoredGlossaSettings | undefined> {
+  if (!globalThis.chrome?.storage?.local) {
+    return Promise.resolve(undefined);
+  }
+  return new Promise((resolve, reject) => {
+    // @behavior glossa.translation_start_popup.shortcut_hint.storage_read Popup shortcut hint reads the stored settings key from Chrome local storage.
+    chrome.storage.local.get("settings", (result) => {
+      // @behavior glossa.translation_start_popup.shortcut_hint.storage_error Chrome storage errors reject shortcut hint initialization with the runtime error message.
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve(result.settings as StoredGlossaSettings | undefined);
+    });
+  });
+}
+
+// @behavior glossa.translation_start_popup.shortcut_hint.render Shortcut hint rendering splits the stored shortcut into individual keycap labels.
+function renderShortcutHint(shortcut: string): void {
+  const parts = shortcutParts(shortcut);
+  translateShortcutHint.replaceChildren(...shortcutNodes(parts));
+  translateShortcutHint.setAttribute("aria-label", parts.join("+"));
+}
+
+function shortcutParts(shortcut: string): string[] {
+  const parts = shortcut.split("+").map((part) => part.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : DEFAULT_SETTINGS.translateShortcutKey.split("+");
+}
+
+function shortcutNodes(parts: string[]): Node[] {
+  const nodes: Node[] = [];
+  for (const [index, part] of parts.entries()) {
+    if (index > 0) {
+      const separator = document.createElement("span");
+      separator.className = "shortcut-separator";
+      separator.textContent = "+";
+      nodes.push(separator);
+    }
+    const keycap = document.createElement("kbd");
+    keycap.textContent = part;
+    nodes.push(keycap);
+  }
+  return nodes;
+}
+
+function shortcutSettingsFailureMessage(error: unknown): string {
+  // @behavior glossa.translation_start_popup.shortcut_hint.failure_message Error instances with messages become visible shortcut settings failure text.
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  // @behavior glossa.translation_start_popup.shortcut_hint.failure_string String exceptions become visible shortcut settings failure text.
+  if (typeof error === "string" && error) {
+    return error;
+  }
+  // @behavior glossa.translation_start_popup.shortcut_hint.failure_default Empty or unknown shortcut settings failures use the default popup failure text.
+  return DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE;
 }
 
 function isOkResponse(value: unknown): value is { ok: true } {

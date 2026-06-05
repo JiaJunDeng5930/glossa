@@ -43,6 +43,42 @@ test("popup translate button activates the current tab", async ({ page }) => {
   }]);
 });
 
+// @verifies glossa.translation_start_popup.shortcut_hint
+test("popup shortcut hint reflects the saved translation shortcut", async ({ page }) => {
+  await loadPopup(page);
+  await page.evaluate(() => {
+    Reflect.set(window, "chrome", {
+      runtime: {
+        openOptionsPage() {}
+      },
+      storage: {
+        local: {
+          get(key: string, callback: (result: unknown) => void) {
+            if (key === "settings") {
+              callback({ settings: { translateShortcutKey: "Ctrl+Shift+K" } });
+              return;
+            }
+            callback({});
+          }
+        }
+      },
+      tabs: {
+        async query() {
+          return [{ id: 11 }];
+        },
+        async sendMessage() {
+          return { ok: true };
+        }
+      }
+    });
+  });
+
+  await page.addScriptTag({ type: "module", path: resolve("dist/popup.js") });
+
+  await expect(page.locator("#translate-shortcut-hint")).toHaveAttribute("aria-label", "Ctrl+Shift+K");
+  await expect(page.locator("#translate-shortcut-hint kbd")).toHaveText(["Ctrl", "Shift", "K"]);
+});
+
 // @verifies glossa.translation_start_popup
 test("popup translate button reports structured activation errors", async ({ page }) => {
   await loadPopup(page);
