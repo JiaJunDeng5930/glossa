@@ -23,7 +23,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_PAGES_PROJECT: glossaai
@@ -40,6 +39,7 @@ jobs:
       - run: npm run build
         working-directory: website
       - uses: cloudflare/wrangler-action@v3
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
