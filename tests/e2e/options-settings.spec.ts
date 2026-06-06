@@ -1,6 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+
+async function deleteGlossaDatabase(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const deleteRequest = indexedDB.deleteDatabase("glossa");
+      deleteRequest.onsuccess = () => resolve();
+      deleteRequest.onerror = () => reject(deleteRequest.error);
+      deleteRequest.onblocked = () => reject(new Error("glossa IndexedDB deletion was blocked"));
+    });
+  });
+}
+
+async function glossaDatabaseExists(page: Page): Promise<boolean> {
+  return await page.evaluate(async () => {
+    const databases = await indexedDB.databases();
+    return databases.some((database) => database.name === "glossa" && database.version === 2);
+  });
+}
+
+async function glossaDatabaseHasStore(page: Page, storeName: string): Promise<boolean> {
+  return await page.evaluate(async (name) => {
+    return await new Promise<boolean>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const hasStore = db.objectStoreNames.contains(name);
+        db.close();
+        resolve(hasStore);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }, storeName);
+}
 
 // @verifies glossa.settings_save
 // @verifies glossa.settings_save.default_overrides
@@ -119,13 +152,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       }
     });
   });
+  await deleteGlossaDatabase(page);
   await page.evaluate(async () => {
-    await new Promise<void>((resolve, reject) => {
-      const deleteRequest = indexedDB.deleteDatabase("glossa");
-      deleteRequest.onsuccess = () => resolve();
-      deleteRequest.onerror = () => reject(deleteRequest.error);
-      deleteRequest.onblocked = () => resolve();
-    });
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open("glossa", 2);
       request.onupgradeneeded = () => {
@@ -524,26 +552,9 @@ test("options page creates the carded-word store on a fresh IndexedDB", async ({
       }
     });
   });
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve, reject) => {
-      const deleteRequest = indexedDB.deleteDatabase("glossa");
-      deleteRequest.onsuccess = () => resolve();
-      deleteRequest.onerror = () => reject(deleteRequest.error);
-      deleteRequest.onblocked = () => resolve();
-    });
-  });
+  await deleteGlossaDatabase(page);
   await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
 
-  await expect.poll(() => page.evaluate(async () => {
-    return await new Promise<boolean>((resolve, reject) => {
-      const request = indexedDB.open("glossa", 2);
-      request.onsuccess = () => {
-        const db = request.result;
-        const hasStore = db.objectStoreNames.contains("cardedWords");
-        db.close();
-        resolve(hasStore);
-      };
-      request.onerror = () => reject(request.error);
-    });
-  })).toBe(true);
+  await expect.poll(() => glossaDatabaseExists(page)).toBe(true);
+  await expect.poll(() => glossaDatabaseHasStore(page, "cardedWords")).toBe(true);
 });
