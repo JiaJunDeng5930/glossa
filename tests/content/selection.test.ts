@@ -41,6 +41,146 @@ describe("selection controller", () => {
     controller.detach();
   });
 
+  // @verifies glossa.page_translation.shortcut_selection.freeze_pointer
+  it("freezes page pointer preparation while preserving click selection for button text", () => {
+    document.body.innerHTML = `<button id="save">Save draft</button>`;
+    const button = document.querySelector<HTMLButtonElement>("#save")!;
+    const onWordSelected = vi.fn();
+    const onPointerDown = vi.fn();
+    const onMouseDown = vi.fn();
+    button.addEventListener("pointerdown", onPointerDown);
+    button.addEventListener("mousedown", onMouseDown);
+    installCaretPosition(button.firstChild as Text, 2);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected
+    });
+    controller.attach();
+
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    const pointerDown = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+    const mouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    button.dispatchEvent(pointerDown);
+    button.dispatchEvent(mouseDown);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(pointerDown.defaultPrevented).toBe(true);
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ surface: "Save" }));
+
+    controller.detach();
+  });
+
+  // @verifies glossa.page_translation.shortcut_selection.freeze_scroll
+  // @verifies glossa.page_translation.shortcut_selection.freeze_keys
+  it("freezes wheel, touch, and shortcut key events while the shortcut is held", () => {
+    document.body.innerHTML = `<main id="page">Readable content</main>`;
+    const page = document.querySelector<HTMLElement>("#page")!;
+    const onWheel = vi.fn();
+    const onTouchMove = vi.fn();
+    const onKey = vi.fn();
+    page.addEventListener("wheel", onWheel);
+    page.addEventListener("touchmove", onTouchMove);
+    page.addEventListener("keydown", onKey);
+    page.addEventListener("keyup", onKey);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected: vi.fn()
+    });
+    controller.attach();
+
+    const altDown = new KeyboardEvent("keydown", { key: "Alt", bubbles: true, cancelable: true });
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true });
+    const touchMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    const altUp = new KeyboardEvent("keyup", { key: "Alt", bubbles: true, cancelable: true });
+    page.dispatchEvent(altDown);
+    page.dispatchEvent(wheel);
+    page.dispatchEvent(touchMove);
+    page.dispatchEvent(altUp);
+
+    expect(altDown.defaultPrevented).toBe(true);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(touchMove.defaultPrevented).toBe(true);
+    expect(altUp.defaultPrevented).toBe(true);
+    expect(onWheel).not.toHaveBeenCalled();
+    expect(onTouchMove).not.toHaveBeenCalled();
+    expect(onKey).not.toHaveBeenCalled();
+
+    controller.detach();
+  });
+
+  // @verifies glossa.page_translation.shortcut_selection.strict_key_hold
+  it("leaves selection mode when another key joins a modifier-only shortcut", () => {
+    document.body.innerHTML = `<button id="save">Save draft</button>`;
+    const button = document.querySelector<HTMLButtonElement>("#save")!;
+    const onWordSelected = vi.fn();
+    const onButtonClick = vi.fn();
+    const onPageKey = vi.fn();
+    const onSelectionModeChange = vi.fn();
+    button.addEventListener("click", onButtonClick);
+    button.addEventListener("keydown", onPageKey);
+    installCaretPosition(button.firstChild as Text, 2);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected,
+      onSelectionModeChange
+    });
+    controller.attach();
+
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true, cancelable: true }));
+    const chordKey = new KeyboardEvent("keydown", { key: "v", altKey: true, bubbles: true, cancelable: true });
+    button.dispatchEvent(chordKey);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(chordKey.defaultPrevented).toBe(false);
+    expect(onPageKey).toHaveBeenCalledTimes(1);
+    expect(onWordSelected).not.toHaveBeenCalled();
+    expect(onButtonClick).toHaveBeenCalledTimes(1);
+    expect(onSelectionModeChange).toHaveBeenNthCalledWith(1, true);
+    expect(onSelectionModeChange).toHaveBeenNthCalledWith(2, false);
+
+    controller.detach();
+  });
+
+  // @verifies glossa.page_translation.shortcut_selection.focus_loss
+  it("leaves selection mode when the page loses focus during a shortcut hold", () => {
+    document.body.innerHTML = `<button id="save">Save draft</button>`;
+    const button = document.querySelector<HTMLButtonElement>("#save")!;
+    const onWordSelected = vi.fn();
+    const onButtonClick = vi.fn();
+    const onSelectionModeChange = vi.fn();
+    button.addEventListener("click", onButtonClick);
+    installCaretPosition(button.firstChild as Text, 2);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected,
+      onSelectionModeChange
+    });
+    controller.attach();
+
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true, cancelable: true }));
+    window.dispatchEvent(new Event("blur"));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(document.documentElement.dataset.glossaSelecting).toBeUndefined();
+    expect(onWordSelected).not.toHaveBeenCalled();
+    expect(onButtonClick).toHaveBeenCalledTimes(1);
+    expect(onSelectionModeChange).toHaveBeenNthCalledWith(1, true);
+    expect(onSelectionModeChange).toHaveBeenNthCalledWith(2, false);
+
+    controller.detach();
+  });
+
   it("reuses rendered token metadata when a gloss wrapper is clicked", () => {
     document.body.innerHTML = `
       <p>
