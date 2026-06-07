@@ -8,6 +8,8 @@
   --muted-soft: #76736c;
   --orange: #c65a1e;
   --orange-deep: #9f4315;
+  --accent: var(--orange);
+  --accent-deep: var(--orange-deep);
   --glossa-label-bg: #fff4c9;
   --glossa-label-ink: #1f2428;
   --glossa-rule: #d9d4c8;
@@ -52,7 +54,14 @@ body {
     18px 18px,
     26px 26px,
     auto;
-  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
 }
 
 body::before {
@@ -229,7 +238,7 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
   align-items: center;
-  width: min(82rem, calc(100vw - (var(--page-gutter) * 2)));
+  width: min(80rem, calc(100vw - (var(--page-gutter) * 2)));
   height: 100%;
   column-gap: clamp(2.6rem, 4.4vw, 5.2rem);
   transform: translateY(-2.8svh);
@@ -265,23 +274,23 @@ a {
 .product-copy h2,
 .closing-cta h2 {
   margin: 0;
-  font-family: "Songti SC", "Noto Serif SC", "SimSun", serif;
-  font-weight: 650;
+  font-family: Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", serif;
+  font-weight: 680;
   letter-spacing: 0;
 }
 
 .left-panel h1,
 .mobile-panel h1 {
   max-width: 9em;
-  font-size: clamp(3.45rem, 4.9vw, 5.2rem);
-  line-height: 1.16;
+  font-size: clamp(3.25rem, 4.4vw, 4.8rem);
+  line-height: 1.14;
 }
 
 .left-panel h2,
 .mobile-panel h2 {
   max-width: 9em;
-  font-size: clamp(2.65rem, 3.6vw, 4rem);
-  line-height: 1.2;
+  font-size: clamp(2.55rem, 3.32vw, 3.7rem);
+  line-height: 1.18;
 }
 
 .left-panel p,
@@ -290,9 +299,9 @@ a {
   margin: clamp(1.25rem, 2.8svh, 2rem) 0 0;
   color: var(--muted);
   font-family: "Songti SC", "Noto Serif SC", "SimSun", serif;
-  font-size: clamp(1.04rem, 1.12vw, 1.2rem);
+  font-size: clamp(1rem, 1.04vw, 1.12rem);
   font-weight: 400;
-  line-height: 1.86;
+  line-height: 1.82;
 }
 
 .right-stage {
@@ -304,7 +313,7 @@ a {
 
 .reading-demo {
   position: relative;
-  width: min(100%, 45.5rem);
+  width: min(100%, 42.5rem);
   margin-inline: auto;
   --gloss-progress: 0;
   --gloss-1: var(--gloss-progress);
@@ -366,11 +375,11 @@ a {
 
 .browser-url {
   justify-self: end;
-  width: min(24rem, 72%);
+  width: min(21rem, 66%);
   padding: 0.38rem 0.8rem;
-  border: 1px solid #eadfca;
+  border: 1px solid color-mix(in srgb, var(--glossa-rule) 84%, white);
   border-radius: 999px;
-  color: #786c5b;
+  color: var(--muted-soft);
   background: rgba(255, 255, 255, 0.74);
   font-family:
     ui-sans-serif,
@@ -385,8 +394,8 @@ a {
 
 .article-page {
   position: relative;
-  min-height: min(28.4rem, calc(100svh - var(--nav-height) - 5.2rem));
-  padding: clamp(2rem, 4.4svh, 2.9rem) clamp(2rem, 3.2vw, 2.8rem);
+  min-height: min(26.4rem, calc(100svh - var(--nav-height) - 5.8rem));
+  padding: clamp(2.1rem, 4svh, 2.65rem) clamp(2.1rem, 3vw, 2.55rem);
   background:
     linear-gradient(90deg, rgba(216, 203, 183, 0.36) 1px, transparent 1px) 0 0 /
       4.2rem 100%,
@@ -415,9 +424,19 @@ a {
   margin: 0;
   color: var(--ink);
   font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
-  font-size: clamp(1.05rem, 1.1vw, 1.2rem);
-  line-height: 2.12;
+  font-size: clamp(1.02rem, 1vw, 1.13rem);
+  line-height: 1.62;
   text-align: left;
+}
+
+.reading-line {
+  display: block;
+  min-height: calc(var(--demo-gloss-font-size) + 2.05em);
+  white-space: nowrap;
+}
+
+.reading-line + .reading-line {
+  margin-top: 0.18rem;
 }
 
 .gloss-token {
@@ -428,7 +447,7 @@ a {
   padding-block-start: calc(
     (var(--demo-gloss-font-size) + 8px) * var(--token-gloss-progress)
   );
-  margin-inline: 0.5px;
+  margin-inline: 0.08em;
   line-height: inherit;
   text-align: center;
   vertical-align: baseline;
@@ -554,7 +573,7 @@ a {
   right: clamp(1rem, 5%, 2rem);
   bottom: clamp(1rem, 6%, 2.2rem);
   z-index: 6;
-  width: min(22.2rem, 76%);
+  width: min(20.7rem, 72%);
   padding: 0.95rem 1rem 1.05rem;
   border: 1px solid var(--glossa-rule);
   border-radius: 8px;
@@ -634,7 +653,7 @@ a {
   margin-top: 0.85rem;
   padding: 0 0.9rem;
   border-radius: 6px;
-  background: var(--orange);
+  background: var(--accent);
   color: #fff8eb;
   font-size: 0.84rem;
   font-weight: 800;
@@ -654,8 +673,8 @@ a {
 
 .product-shell {
   display: grid;
-  grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 1.1fr);
-  gap: clamp(2.4rem, 5vw, 5.5rem);
+  grid-template-columns: minmax(18rem, 0.96fr) minmax(0, 1.04fr);
+  gap: clamp(2.2rem, 4.2vw, 4.8rem);
   align-items: start;
   width: min(var(--content-max), 100%);
   margin-inline: auto;
@@ -677,7 +696,7 @@ a {
   background-size:
     auto,
     20px 20px;
-  box-shadow: 0 16px 40px rgba(42, 35, 24, 0.11);
+  box-shadow: 0 12px 30px rgba(42, 35, 24, 0.09);
   font-family:
     ui-sans-serif,
     system-ui,
@@ -763,8 +782,8 @@ a {
 .settings-header-preview h3 {
   margin: 0.18rem 0 0;
   color: var(--ink);
-  font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
-  font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+  font-family: Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", serif;
+  font-size: clamp(1.22rem, 1.75vw, 1.62rem);
   line-height: 1.1;
 }
 
@@ -912,7 +931,7 @@ a {
 .product-copy h2,
 .closing-cta h2 {
   max-width: 11em;
-  font-size: clamp(2.8rem, 4.5vw, 5rem);
+  font-size: clamp(2.55rem, 3.9vw, 4.45rem);
   line-height: 1.18;
 }
 
@@ -922,8 +941,8 @@ a {
   margin: clamp(1.1rem, 2.2vw, 1.6rem) 0 0;
   color: var(--muted);
   font-family: "Songti SC", "Noto Serif SC", "SimSun", serif;
-  font-size: clamp(1.04rem, 1.18vw, 1.24rem);
-  line-height: 1.86;
+  font-size: clamp(1rem, 1.08vw, 1.16rem);
+  line-height: 1.82;
 }
 
 .feature-list {
@@ -997,15 +1016,15 @@ a {
   }
 
   .left-panel h1 {
-    font-size: clamp(3.25rem, 4.8vw, 4.8rem);
+    font-size: clamp(3.05rem, 4.45vw, 4.55rem);
   }
 
   .left-panel h2 {
-    font-size: clamp(2.7rem, 3.8vw, 4rem);
+    font-size: clamp(2.45rem, 3.35vw, 3.55rem);
   }
 
   .reading-copy {
-    font-size: clamp(1.08rem, 1.18vw, 1.25rem);
+    font-size: clamp(0.98rem, 1.06vw, 1.08rem);
   }
 }
 
@@ -1124,6 +1143,16 @@ a {
     max-width: 100%;
     font-size: clamp(1rem, 4.25vw, 1.18rem);
     line-height: 1.9;
+  }
+
+  .reading-line {
+    display: inline;
+    min-height: 0;
+    white-space: normal;
+  }
+
+  .reading-line + .reading-line {
+    margin-top: 0;
   }
 
   .gloss-token {
