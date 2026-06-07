@@ -1,4 +1,4 @@
-// @behavior glossa.page_translation.shortcut_selection Holding the configured shortcut while clicking an English page word selects that clicked word and its surrounding text for card creation.
+// @behavior glossa.page_translation.shortcut_selection Holding the configured shortcut freezes page interaction and lets clicking an English page word select that clicked word and its surrounding text for card creation.
 import { normalizeLemma } from "../core/state";
 import { isShortcutRelease, matchesShortcut } from "../shared/shortcut";
 import type { TokenCandidate } from "../shared/types";
@@ -28,6 +28,7 @@ export interface SelectionControllerOptions {
 export function createSelectionController(options: SelectionControllerOptions): SelectionController {
   let active = false;
   const doc = options.document;
+  const activeListenerOptions = { capture: true, passive: false };
 
   const setActive = (nextActive: boolean) => {
     if (active === nextActive) {
@@ -45,11 +46,23 @@ export function createSelectionController(options: SelectionControllerOptions): 
   const onKeyDown = (event: KeyboardEvent) => {
     if (matchesShortcut(event, options.shortcutKey)) {
       setActive(true);
+      consumeEvent(event);
+      return;
+    }
+    // @behavior glossa.page_translation.shortcut_selection.freeze_keys Shortcut key press and release events are consumed while shortcut selection mode is active.
+    if (active) {
+      // @behavior glossa.page_translation.shortcut_selection.strict_key_hold A keydown outside the configured shortcut exits selection mode so chorded shortcuts stay with the page.
+      setActive(false);
     }
   };
   const onKeyUp = (event: KeyboardEvent) => {
     if (active && isShortcutRelease(event, options.shortcutKey)) {
       setActive(false);
+      consumeEvent(event);
+      return;
+    }
+    if (active) {
+      consumeEvent(event);
     }
   };
   const onClick = (event: MouseEvent) => {
@@ -58,12 +71,10 @@ export function createSelectionController(options: SelectionControllerOptions): 
     }
     const element = event.target instanceof Element ? event.target : null;
     // @behavior glossa.page_translation.shortcut_selection.duplicate_prompt_controls Duplicate-card prompt controls receive clicks during shortcut selection mode.
-    if (element?.closest("[data-glossa-duplicate-card-prompt]")) {
+    if (isDuplicatePromptControl(element)) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
+    consumeEvent(event);
 
     const selection = element ? selectionFromClick(element, event) : undefined;
     if (selection) {
@@ -77,20 +88,77 @@ export function createSelectionController(options: SelectionControllerOptions): 
       }
     }
   };
+  const onPageInteraction = (event: Event) => {
+    if (!active) {
+      return;
+    }
+    const element = event.target instanceof Element ? event.target : null;
+    if (isDuplicatePromptControl(element)) {
+      return;
+    }
+    // @behavior glossa.page_translation.shortcut_selection.freeze_pointer Pointer preparation events are consumed while shortcut selection mode is active so page controls cannot act before the word click is selected.
+    consumeEvent(event);
+  };
+  const onPageScroll = (event: Event) => {
+    if (!active) {
+      return;
+    }
+    // @behavior glossa.page_translation.shortcut_selection.freeze_scroll Wheel and touch scrolling are consumed while shortcut selection mode is active.
+    consumeEvent(event);
+  };
+  const onFocusLoss = () => {
+    if (!active) {
+      return;
+    }
+    // @behavior glossa.page_translation.shortcut_selection.focus_loss Window or document focus loss exits selection mode because OS-level shortcuts can hide key releases from the page.
+    setActive(false);
+  };
 
   return {
     attach() {
       doc.addEventListener("keydown", onKeyDown, true);
       doc.addEventListener("keyup", onKeyUp, true);
       doc.addEventListener("click", onClick, true);
+      doc.addEventListener("pointerdown", onPageInteraction, activeListenerOptions);
+      doc.addEventListener("pointerup", onPageInteraction, activeListenerOptions);
+      doc.addEventListener("mousedown", onPageInteraction, activeListenerOptions);
+      doc.addEventListener("mouseup", onPageInteraction, activeListenerOptions);
+      doc.addEventListener("dblclick", onPageInteraction, activeListenerOptions);
+      doc.addEventListener("auxclick", onPageInteraction, activeListenerOptions);
+      doc.addEventListener("contextmenu", onPageInteraction, activeListenerOptions);
+      doc.addEventListener("wheel", onPageScroll, activeListenerOptions);
+      doc.addEventListener("touchmove", onPageScroll, activeListenerOptions);
+      doc.addEventListener("visibilitychange", onFocusLoss, true);
+      doc.defaultView?.addEventListener("blur", onFocusLoss, true);
     },
     detach() {
       doc.removeEventListener("keydown", onKeyDown, true);
       doc.removeEventListener("keyup", onKeyUp, true);
       doc.removeEventListener("click", onClick, true);
+      doc.removeEventListener("pointerdown", onPageInteraction, activeListenerOptions);
+      doc.removeEventListener("pointerup", onPageInteraction, activeListenerOptions);
+      doc.removeEventListener("mousedown", onPageInteraction, activeListenerOptions);
+      doc.removeEventListener("mouseup", onPageInteraction, activeListenerOptions);
+      doc.removeEventListener("dblclick", onPageInteraction, activeListenerOptions);
+      doc.removeEventListener("auxclick", onPageInteraction, activeListenerOptions);
+      doc.removeEventListener("contextmenu", onPageInteraction, activeListenerOptions);
+      doc.removeEventListener("wheel", onPageScroll, activeListenerOptions);
+      doc.removeEventListener("touchmove", onPageScroll, activeListenerOptions);
+      doc.removeEventListener("visibilitychange", onFocusLoss, true);
+      doc.defaultView?.removeEventListener("blur", onFocusLoss, true);
       setActive(false);
     }
   };
+}
+
+function isDuplicatePromptControl(element: Element | null): boolean {
+  return Boolean(element?.closest("[data-glossa-duplicate-card-prompt]"));
+}
+
+function consumeEvent(event: Event): void {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
 }
 
 function selectionFromClick(element: Element, event: MouseEvent): WordSelection | undefined {

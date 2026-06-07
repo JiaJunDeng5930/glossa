@@ -315,9 +315,14 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.lookup_order.gloss_cache_created_at|glossa.page_translation.lookup_order.gloss_cache_created_at.{}
 |glossa.page_translation.lookup_order.lexicon_hidden_after_cache|glossa.page_translation.lookup_order.lexicon_hidden_after_cache.{}
 |glossa.page_translation.lookup_order.session_interface|glossa.page_translation.lookup_order.session_interface.{}
-|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{duplicate_prompt_controls,selection_note}
+|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{duplicate_prompt_controls,focus_loss,freeze_keys,freeze_pointer,freeze_scroll,selection_note,strict_key_hold}
 |glossa.page_translation.shortcut_selection.duplicate_prompt_controls|glossa.page_translation.shortcut_selection.duplicate_prompt_controls.{}
+|glossa.page_translation.shortcut_selection.focus_loss|glossa.page_translation.shortcut_selection.focus_loss.{}
+|glossa.page_translation.shortcut_selection.freeze_keys|glossa.page_translation.shortcut_selection.freeze_keys.{}
+|glossa.page_translation.shortcut_selection.freeze_pointer|glossa.page_translation.shortcut_selection.freeze_pointer.{}
+|glossa.page_translation.shortcut_selection.freeze_scroll|glossa.page_translation.shortcut_selection.freeze_scroll.{}
 |glossa.page_translation.shortcut_selection.selection_note|glossa.page_translation.shortcut_selection.selection_note.{}
+|glossa.page_translation.shortcut_selection.strict_key_hold|glossa.page_translation.shortcut_selection.strict_key_hold.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
 |glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,gloss_cache_ttl,options_load,options_write,timeout_seconds}
 |glossa.settings_save.clear_gloss_cache|glossa.settings_save.clear_gloss_cache.{background_request}
