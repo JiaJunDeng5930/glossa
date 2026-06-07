@@ -1,5 +1,5 @@
 ---
-import "../styles/global.css";
+import globalCss from "../styles/global.css?raw";
 
 const repoUrl = "https://github.com/JiaJunDeng5930/glossa";
 ---
@@ -9,84 +9,121 @@ const repoUrl = "https://github.com/JiaJunDeng5930/glossa";
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Glossa AI 官网" />
+    <meta
+      name="description"
+      content="Glossa AI 是面向中文用户的 Chrome 英文阅读扩展，在网页生词上方显示中文释义，并支持 Alt 点击加入 Anki。"
+    />
     <link rel="icon" href="data:," />
-    <title>Glossa AI</title>
+    <title>Glossa AI - 英文长文，读得更顺</title>
+    <style is:inline set:html={globalCss}></style>
   </head>
   <body>
     <header class="site-nav" aria-label="主导航">
       <a class="nav-brand" href="#" aria-label="Glossa AI 首页">
-        <img class="nav-logo" src="/assets/logo.png" alt="" />
+        <img class="nav-logo" src="/assets/logo.png" alt="Glossa AI" />
       </a>
-      <nav>
-        <a class="nav-link download-pill" href={repoUrl} target="_blank" rel="noreferrer">下载</a>
+      <nav aria-label="站点导航">
+        <a class="nav-link" href="#workflow">工作方式</a>
+        <a class="nav-link" href="#anki">Anki 制卡</a>
+        <a class="nav-link" href={repoUrl} target="_blank" rel="noreferrer">GitHub</a>
+        <a class="nav-link download-pill" href={repoUrl} target="_blank" rel="noreferrer">获取 Glossa</a>
       </nav>
     </header>
 
     <main>
-      <section class="story story-desktop" id="features" aria-label="Glossa AI 阅读与制卡演示" data-story>
+      <section class="story story-desktop" id="workflow" aria-label="Glossa AI 滚动演示" data-story>
         <div class="stage">
           <div class="stage-shell">
             <div class="left-viewport">
               <div class="left-track" data-left-track>
                 <section class="left-panel hero-panel">
-                  <h1 class="brand-title">Glossa AI</h1>
-                  <p class="brand-subtitle">你阅读和学习英语的新方式</p>
-                  <div class="ink-scene" aria-hidden="true">
-                    <svg class="ink-line" viewBox="0 0 600 210">
-                      <path d="M12 50 C94 16 154 30 213 68 C270 106 324 111 383 154"></path>
-                    </svg>
-                    <img class="quill-image" src="/assets/quill.png" alt="" />
+                  <h1>英文长文，<br />读得更顺</h1>
+                  <p>
+                    Glossa 在网页里的生词上方显示中文释义，让你不断流也能读懂上下文。遇到值得记住的词，按住 Alt 点击即可加入 Anki。
+                  </p>
+                  <div class="hero-actions">
+                    <a class="primary-button" href={repoUrl} target="_blank" rel="noreferrer">获取 Glossa</a>
+                    <a class="text-link" href="#anki">查看工作方式</a>
                   </div>
                 </section>
 
                 <section class="left-panel">
-                  <h2>流畅阅读，<br />即时无障碍</h2>
+                  <h2>只在需要时<br />显示中文释义</h2>
                   <p>
-                    阅读英文文段的时候，Glossa 为您智能翻译生词。根据您的设置和历史记录筛选生词；使用 AI
-                    智能提供最符合语境的翻译。
+                    熟词保持安静，生词在原文上方轻轻出现。你看见的是文章本身，释义只在真正需要时补上。
                   </p>
                 </section>
 
                 <section class="left-panel">
-                  <h2>智能制卡，<br />巩固学习</h2>
-                  <p>长按 Alt 键并且点击您需要制卡的单词，让 AI 为您智能制作 Anki 卡片，学习您不会的生词。</p>
+                  <h2>按住 Alt，<br />把生词加入 Anki</h2>
+                  <p>
+                    选中值得记住的词，Glossa 生成卡片内容，连接你的长期记忆。
+                  </p>
                 </section>
               </div>
             </div>
 
             <div class="right-stage">
-              <article class="reading-demo" aria-label="英文阅读演示" data-reading-demo>
-                <p class="reading-copy">
-                  Glossa AI helps you read English with
-                  <span class="gloss-token gloss-1"><span class="gloss-label">自信</span><span class="source-word">confidence</span></span>
-                  by showing just the right Chinese glosses for words that
-                  <span class="gloss-token gloss-2"><span class="gloss-label">重要</span><span class="source-word">matter</span></span>.
-                  Each gloss appears in
-                  <span class="gloss-token gloss-3"><span class="gloss-label">语境</span><span class="source-word">context</span></span>,
-                  so you can grasp meaning without breaking your flow. For serious readers, this support becomes
-                  <span class="gloss-token gloss-4 card-target"><span class="gloss-label">必不可少</span><span class="source-word">indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span></span>
-                  when long articles introduce
-                  <span class="gloss-token gloss-5"><span class="gloss-label">陌生</span><span class="source-word">unfamiliar</span></span>
-                  vocabulary, subtle phrasing, and ideas that deserve careful attention.
-                </p>
+              <article class="reading-demo browser-demo" aria-label="Glossa AI 网页阅读演示" data-reading-demo>
+                <div class="browser-bar" aria-hidden="true">
+                  <span class="browser-dot"></span>
+                  <span class="browser-dot"></span>
+                  <span class="browser-dot"></span>
+                  <span class="browser-url">article.example.com/deep-reading</span>
+                </div>
+                <div class="article-page">
+                  <p class="article-kicker">Long-form reading</p>
+                  <p class="reading-copy">
+                    Glossa keeps the page quiet while you read. When a sentence depends on
+                    <span class="gloss-token gloss-1" data-glossa-token data-glossa-status="ready">
+                      <span class="gloss-label" data-glossa-token-label>语境</span>
+                      <span class="source-word" data-glossa-token-surface>context</span>
+                      <span class="gloss-width" data-glossa-token-width>语境</span>
+                    </span>,
+                    a compact gloss appears above the word. It helps you notice
+                    <span class="gloss-token gloss-2" data-glossa-token data-glossa-status="ready">
+                      <span class="gloss-label" data-glossa-token-label>细微</span>
+                      <span class="source-word" data-glossa-token-surface>subtle</span>
+                      <span class="gloss-width" data-glossa-token-width>细微</span>
+                    </span>
+                    meaning without leaving the page. For serious readers, this support becomes
+                    <span class="gloss-token gloss-3 card-target" data-glossa-token data-glossa-status="ready">
+                      <span class="gloss-label" data-glossa-token-label>不可或缺</span>
+                      <span class="source-word" data-glossa-token-surface>indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span>
+                      <span class="gloss-width" data-glossa-token-width>不可或缺</span>
+                    </span>
+                    when long articles introduce
+                    <span class="gloss-token gloss-4" data-glossa-token data-glossa-status="ready">
+                      <span class="gloss-label" data-glossa-token-label>生词</span>
+                      <span class="source-word" data-glossa-token-surface>unfamiliar</span>
+                      <span class="gloss-width" data-glossa-token-width>生词</span>
+                    </span>
+                    vocabulary and ideas that deserve careful
+                    <span class="gloss-token gloss-5" data-glossa-token data-glossa-status="ready">
+                      <span class="gloss-label" data-glossa-token-label>注意力</span>
+                      <span class="source-word" data-glossa-token-surface>attention</span>
+                      <span class="gloss-width" data-glossa-token-width>注意力</span>
+                    </span>.
+                  </p>
+                </div>
 
                 <div class="carding-layer" aria-hidden="true">
                   <img class="alt-key" src="/assets/alt-key.png" alt="" />
                   <div class="reading-mask"></div>
-                  <section class="anki-card" aria-label="Anki 卡片示意">
+                  <section class="anki-card" aria-label="Anki 卡片预览">
                     <div class="anki-title">Anki</div>
                     <div class="anki-row">
-                      <span>Front</span>
+                      <span>正面</span>
                       <strong>indispensable</strong>
                     </div>
                     <div class="anki-row">
-                      <span>Back</span>
-                      <p>不可或缺的；必不可少的</p>
+                      <span>背面</span>
+                      <p>不可或缺的</p>
                     </div>
-                    <div class="anki-example">
+                    <p class="anki-example">
                       For serious readers, this support becomes indispensable.
-                    </div>
+                    </p>
+                    <div class="anki-action">加入 Anki</div>
                   </section>
                 </div>
               </article>
@@ -95,102 +132,167 @@ const repoUrl = "https://github.com/JiaJunDeng5930/glossa";
         </div>
       </section>
 
-      <section class="mobile-story" aria-label="Glossa AI 移动端叙事">
+      <section class="mobile-story" aria-label="Glossa AI 移动端演示">
         <section class="mobile-panel hero-panel">
-          <h1 class="brand-title">Glossa AI</h1>
-          <p class="brand-subtitle">你阅读和学习英语的新方式</p>
-          <div class="ink-scene" aria-hidden="true">
-            <svg class="ink-line" viewBox="0 0 600 210">
-              <path d="M12 50 C94 16 154 30 213 68 C270 106 324 111 383 154"></path>
-            </svg>
-            <img class="quill-image" src="/assets/quill.png" alt="" />
+          <h1>英文长文，<br />读得更顺</h1>
+          <p>
+            Glossa 在网页里的生词上方显示中文释义，让你不断流也能读懂上下文。遇到值得记住的词，按住 Alt 点击即可加入 Anki。
+          </p>
+          <div class="hero-actions">
+            <a class="primary-button" href={repoUrl} target="_blank" rel="noreferrer">获取 Glossa</a>
+            <a class="text-link" href="#anki">查看工作方式</a>
           </div>
         </section>
 
-        <article class="reading-demo mobile-reading mobile-reading-plain" aria-label="英文阅读演示">
-          <p class="reading-copy">
-            Glossa AI helps you read English with
-            <span class="gloss-token gloss-1"><span class="gloss-label">自信</span><span class="source-word">confidence</span></span>
-            by showing just the right Chinese glosses for words that
-            <span class="gloss-token gloss-2"><span class="gloss-label">重要</span><span class="source-word">matter</span></span>.
-            Each gloss appears in
-            <span class="gloss-token gloss-3"><span class="gloss-label">语境</span><span class="source-word">context</span></span>,
-            so you can grasp meaning without breaking your flow. For serious readers, this support becomes
-            <span class="gloss-token gloss-4 card-target"><span class="gloss-label">必不可少</span><span class="source-word">indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span></span>
-            when long articles introduce
-            <span class="gloss-token gloss-5"><span class="gloss-label">陌生</span><span class="source-word">unfamiliar</span></span>
-            vocabulary, subtle phrasing, and ideas that deserve careful attention.
-          </p>
-        </article>
-
-        <section class="mobile-panel">
-          <h2>流畅阅读，<br />即时无障碍</h2>
-          <p>
-            阅读英文文段的时候，Glossa 为您智能翻译生词。根据您的设置和历史记录筛选生词；使用 AI
-            智能提供最符合语境的翻译。
-          </p>
-        </section>
-
-        <article class="reading-demo mobile-reading mobile-reading-gloss" aria-label="英文翻译演示">
-          <p class="reading-copy">
-            Glossa AI helps you read English with
-            <span class="gloss-token gloss-1"><span class="gloss-label">自信</span><span class="source-word">confidence</span></span>
-            by showing just the right Chinese glosses for words that
-            <span class="gloss-token gloss-2"><span class="gloss-label">重要</span><span class="source-word">matter</span></span>.
-            Each gloss appears in
-            <span class="gloss-token gloss-3"><span class="gloss-label">语境</span><span class="source-word">context</span></span>,
-            so you can grasp meaning without breaking your flow. For serious readers, this support becomes
-            <span class="gloss-token gloss-4 card-target"><span class="gloss-label">必不可少</span><span class="source-word">indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span></span>
-            when long articles introduce
-            <span class="gloss-token gloss-5"><span class="gloss-label">陌生</span><span class="source-word">unfamiliar</span></span>
-            vocabulary, subtle phrasing, and ideas that deserve careful attention.
-          </p>
-        </article>
-
-        <section class="mobile-panel">
-          <h2>智能制卡，<br />巩固学习</h2>
-          <p>长按 Alt 键并且点击您需要制卡的单词，让 AI 为您智能制作 Anki 卡片，学习您不会的生词。</p>
-        </section>
-
-        <article class="reading-demo mobile-reading mobile-reading-card" aria-label="Anki 制卡演示">
-          <div class="mobile-card-reading-shell">
+        <article class="reading-demo browser-demo mobile-reading mobile-reading-plain" aria-label="网页阅读演示">
+          <div class="article-page">
             <p class="reading-copy">
-              Glossa AI helps you read English with
-              <span class="gloss-token gloss-1"><span class="gloss-label">自信</span><span class="source-word">confidence</span></span>
-              by showing just the right Chinese glosses for words that
-              <span class="gloss-token gloss-2"><span class="gloss-label">重要</span><span class="source-word">matter</span></span>.
-              Each gloss appears in
-              <span class="gloss-token gloss-3"><span class="gloss-label">语境</span><span class="source-word">context</span></span>,
-              so you can grasp meaning without breaking your flow. For serious readers, this support becomes
-              <span class="gloss-token gloss-4 card-target"><span class="gloss-label">必不可少</span><span class="source-word">indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span></span>
-              when long articles introduce
-              <span class="gloss-token gloss-5"><span class="gloss-label">陌生</span><span class="source-word">unfamiliar</span></span>
-              vocabulary, subtle phrasing, and ideas that deserve careful attention.
+              Glossa keeps the page quiet while you read. When a sentence depends on
+              <span class="gloss-token gloss-1" data-glossa-token><span class="gloss-label" data-glossa-token-label>语境</span><span class="source-word" data-glossa-token-surface>context</span><span class="gloss-width" data-glossa-token-width>语境</span></span>,
+              a compact gloss appears above the word. It helps you notice subtle meaning without leaving the page.
             </p>
+          </div>
+        </article>
 
+        <section class="mobile-panel">
+          <h2>只在需要时<br />显示中文释义</h2>
+          <p>
+            熟词保持安静，生词在原文上方轻轻出现。你看见的是文章本身，释义只在真正需要时补上。
+          </p>
+        </section>
+
+        <article class="reading-demo browser-demo mobile-reading mobile-reading-gloss" aria-label="中文释义演示">
+          <div class="article-page">
+            <p class="reading-copy">
+              Glossa keeps the page quiet while you read. When a sentence depends on
+              <span class="gloss-token gloss-1" data-glossa-token><span class="gloss-label" data-glossa-token-label>语境</span><span class="source-word" data-glossa-token-surface>context</span><span class="gloss-width" data-glossa-token-width>语境</span></span>,
+              a compact gloss appears above the word. It helps you notice
+              <span class="gloss-token gloss-2" data-glossa-token><span class="gloss-label" data-glossa-token-label>细微</span><span class="source-word" data-glossa-token-surface>subtle</span><span class="gloss-width" data-glossa-token-width>细微</span></span>
+              meaning without leaving the page.
+            </p>
+          </div>
+        </article>
+
+        <section class="mobile-panel">
+          <h2>按住 Alt，<br />把生词加入 Anki</h2>
+          <p>
+            选中值得记住的词，Glossa 生成卡片内容，连接你的长期记忆。
+          </p>
+        </section>
+
+        <article class="reading-demo browser-demo mobile-reading mobile-reading-card" aria-label="Anki 制卡演示">
+          <div class="mobile-card-reading-shell">
+            <div class="article-page">
+              <p class="reading-copy">
+                For serious readers, this support becomes
+                <span class="gloss-token gloss-3 card-target" data-glossa-token><span class="gloss-label" data-glossa-token-label>不可或缺</span><span class="source-word" data-glossa-token-surface>indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span><span class="gloss-width" data-glossa-token-width>不可或缺</span></span>
+                when long articles introduce unfamiliar vocabulary.
+              </p>
+            </div>
             <div class="carding-layer" aria-hidden="true">
               <img class="alt-key" src="/assets/alt-key.png" alt="" />
               <div class="reading-mask"></div>
             </div>
           </div>
 
-          <section class="anki-card" aria-label="Anki 卡片示意">
+          <section class="anki-card" aria-label="Anki 卡片预览">
             <div class="anki-title">Anki</div>
             <div class="anki-row">
-              <span>Front</span>
+              <span>正面</span>
               <strong>indispensable</strong>
             </div>
             <div class="anki-row">
-              <span>Back</span>
-              <p>不可或缺的；必不可少的</p>
+              <span>背面</span>
+              <p>不可或缺的</p>
             </div>
-            <div class="anki-example">
+            <p class="anki-example">
               For serious readers, this support becomes indispensable.
-            </div>
+            </p>
+            <div class="anki-action">加入 Anki</div>
           </section>
         </article>
       </section>
+
+      <section class="product-section" id="anki" aria-label="Glossa AI 设置与 Anki 支持">
+        <div class="product-shell">
+          <div class="settings-preview" aria-label="Glossa AI 设置预览">
+            <section class="settings-block">
+              <div>
+                <h3>AI 设置</h3>
+                <p>选择用于释义和制卡的服务。</p>
+              </div>
+              <div class="field-row">
+                <span>Provider</span>
+                <strong>OpenAI Responses</strong>
+              </div>
+              <div class="field-row">
+                <span>请求超时</span>
+                <strong>30 秒</strong>
+              </div>
+              <div class="field-row prompt-row">
+                <span>释义提示词</span>
+                <strong>按上下文输出简短中文释义</strong>
+              </div>
+            </section>
+
+            <section class="settings-block">
+              <div>
+                <h3>Anki 设置</h3>
+                <p>连接本机 AnkiConnect。</p>
+              </div>
+              <div class="field-row">
+                <span>Endpoint</span>
+                <strong>http://localhost:8765</strong>
+              </div>
+              <div class="field-row">
+                <span>牌组</span>
+                <strong>English Reading</strong>
+              </div>
+              <button class="secondary-button" type="button">测试连接</button>
+            </section>
+
+            <section class="settings-block compact-settings">
+              <div>
+                <h3>释义外观</h3>
+                <p>标签颜色、字号、透明度都可以调整。</p>
+              </div>
+              <div class="swatch-row">
+                <span class="swatch swatch-label"></span>
+                <span class="swatch swatch-success"></span>
+                <span class="swatch swatch-error"></span>
+              </div>
+            </section>
+          </div>
+
+          <div class="product-copy">
+            <h2>为认真阅读和长期记忆设计</h2>
+            <p>
+              你可以设置 AI 服务、释义样式、已掌握词库和 Anki 连接。Glossa 把页面阅读、词义判断和制卡流程放在同一个轻量扩展里。
+            </p>
+            <ul class="feature-list" aria-label="Glossa AI 特性">
+              <li>中文释义贴在原文上方</li>
+              <li>熟词过滤和本地设置保存</li>
+              <li>Alt 点击创建 Anki 卡片</li>
+              <li>自定义释义与制卡提示词</li>
+            </ul>
+
+            <div class="closing-cta">
+              <h2>开始用 Glossa 阅读英文</h2>
+              <p>开源 Chrome 扩展，适合长文阅读、英语学习和 Anki 复习流。</p>
+              <div class="hero-actions">
+                <a class="primary-button" href={repoUrl} target="_blank" rel="noreferrer">获取 Glossa</a>
+                <a class="text-link" href={repoUrl} target="_blank" rel="noreferrer">查看 GitHub</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <footer class="site-footer">
+      <span>© 2026 Glossa AI</span>
+      <a href={repoUrl} target="_blank" rel="noreferrer">GitHub</a>
+    </footer>
 
     <script>
       const story = document.querySelector("[data-story]");

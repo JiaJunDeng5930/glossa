@@ -1,18 +1,23 @@
-@import "tailwindcss";
-
 :root {
   --paper: #f4eddd;
+  --paper-soft: #fbf7ed;
+  --paper-card: #fffdf7;
   --paper-fiber: rgba(60, 44, 25, 0.08);
   --ink: #14110d;
   --muted: #40372d;
-  --orange: #c75a1f;
+  --muted-soft: #756754;
+  --orange: #c65a1e;
   --orange-deep: #963d12;
   --glossa-label-bg: #fff4c9;
   --glossa-label-ink: #1f2428;
   --glossa-rule: #d8cbb7;
+  --glossa-success: #25784a;
+  --glossa-error: #b43b32;
   --content-max: 86rem;
   --page-gutter: clamp(1.25rem, 4.4vw, 5rem);
-  --nav-height: clamp(3.5rem, 11.111svh, 6.25rem);
+  --nav-height: clamp(4rem, 11.111svh, 6.25rem);
+  --demo-gloss-font-size: 12px;
+  --demo-gloss-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * {
@@ -30,8 +35,8 @@ body {
   overflow-x: hidden;
   color: var(--ink);
   background:
-    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.36), transparent 28%),
-    radial-gradient(circle at 78% 16%, rgba(174, 142, 98, 0.1), transparent 31%),
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.42), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(198, 90, 30, 0.06), transparent 30%),
     repeating-linear-gradient(102deg, rgba(87, 62, 34, 0.022) 0 1px, transparent 1px 10px),
     var(--paper);
   font-family: "Times New Roman", "Songti SC", "SimSun", serif;
@@ -43,7 +48,7 @@ body::before {
   z-index: -1;
   pointer-events: none;
   content: "";
-  opacity: 0.32;
+  opacity: 0.3;
   background-image:
     radial-gradient(circle at 12px 16px, var(--paper-fiber) 0 0.6px, transparent 0.9px),
     radial-gradient(circle at 52px 44px, rgba(255, 255, 255, 0.72) 0 0.7px, transparent 1px);
@@ -55,6 +60,11 @@ a {
   text-decoration: none;
 }
 
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .site-nav {
   position: fixed;
   inset: 0 0 auto;
@@ -64,7 +74,8 @@ a {
   align-items: center;
   height: var(--nav-height);
   padding-inline: max(var(--page-gutter), calc((100vw - var(--content-max)) / 2));
-  background: transparent;
+  background: linear-gradient(180deg, rgba(244, 237, 221, 0.94), rgba(244, 237, 221, 0.72) 72%, transparent);
+  backdrop-filter: blur(8px);
 }
 
 .nav-brand {
@@ -75,7 +86,7 @@ a {
 
 .nav-logo {
   display: block;
-  width: clamp(7rem, 11vw, 10rem);
+  width: clamp(7rem, 10.5vw, 9.6rem);
   height: auto;
 }
 
@@ -83,7 +94,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: clamp(1.35rem, 2.1vw, 2.35rem);
+  gap: clamp(1rem, 1.8vw, 2rem);
 }
 
 .nav-link {
@@ -92,23 +103,57 @@ a {
   justify-content: center;
   min-width: max-content;
   min-height: 2.35rem;
-  font-family: "KaiTi", "STKaiti", "Songti SC", serif;
-  font-size: clamp(1rem, 1.25vw, 1.28rem);
-  font-weight: 300;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-size: clamp(0.9rem, 0.94vw, 1rem);
+  font-weight: 650;
   line-height: 1;
 }
 
-.download-pill {
-  min-width: 5.7rem;
-  min-height: 2.52rem;
-  padding: 0 1.35rem;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #d97734, var(--orange));
+.download-pill,
+.primary-button {
+  min-width: max-content;
+  border: 1px solid color-mix(in srgb, var(--orange-deep) 38%, var(--orange));
+  border-radius: 8px;
+  background: linear-gradient(180deg, #d77731, var(--orange));
   color: #fff8eb;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: clamp(0.9rem, 1vw, 1rem);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 24px rgba(150, 61, 18, 0.16);
+}
+
+.download-pill {
+  min-height: 2.42rem;
+  padding: 0 1rem;
+}
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0 1.35rem;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 3rem;
+  color: var(--orange-deep);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-size: 0.96rem;
   font-weight: 750;
-  box-shadow: inset 0 0 0 1px rgba(121, 48, 12, 0.12);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.95rem 1.25rem;
+  margin-top: clamp(1.55rem, 3svh, 2.3rem);
 }
 
 .mobile-story {
@@ -132,11 +177,11 @@ a {
 
 .stage-shell {
   display: grid;
-  grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+  grid-template-columns: minmax(0, 0.44fr) minmax(0, 0.56fr);
   align-items: center;
   width: min(var(--content-max), calc(100vw - (var(--page-gutter) * 2)));
   height: 100%;
-  column-gap: clamp(2.4rem, 5vw, 6.4rem);
+  column-gap: clamp(2.5rem, 4.8vw, 5.8rem);
 }
 
 .left-viewport {
@@ -159,81 +204,44 @@ a {
 
 .left-panel {
   height: 33.3333%;
-  padding-right: 1rem;
+  padding-right: clamp(0rem, 1.2vw, 1rem);
 }
 
-.brand-title {
+.left-panel h1,
+.left-panel h2,
+.mobile-panel h1,
+.mobile-panel h2,
+.product-copy h2,
+.closing-cta h2 {
   margin: 0;
-  font-family: "Kunstler Script", "French Script MT", "Gabriola", cursive;
-  font-size: clamp(4.7rem, 7vw, 7.55rem);
-  font-weight: 400;
-  line-height: 0.88;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
-.brand-subtitle {
-  font-family: "FZShuTi", "FZSTK", "STXingkai", "KaiTi", "STKaiti", serif;
-}
-
-.brand-subtitle {
-  margin: 1rem 0 0 clamp(0.6rem, 8vw, 4.6rem);
-  font-size: clamp(1.12rem, 1.45vw, 1.55rem);
+  font-family: "FZShuTi", "FZSTK", "STXingkai", "KaiTi", "STKaiti", "Songti SC", serif;
   font-weight: 300;
-  line-height: 1.45;
+  letter-spacing: 0;
 }
 
-.ink-scene {
-  position: relative;
-  width: min(30rem, 100%);
-  height: clamp(8.4rem, 17svh, 13.2rem);
-  margin: clamp(0.9rem, 2svh, 1.35rem) 0 0 clamp(0.6rem, 8vw, 4.6rem);
-}
-
-.ink-line {
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.ink-line path {
-  fill: none;
-  stroke: #14110d;
-  stroke-width: 1.85;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.quill-image {
-  position: absolute;
-  left: min(17rem, calc(100% - 8.7rem));
-  bottom: clamp(2.2rem, 5.2svh, 4.1rem);
-  width: clamp(7.2rem, 10vw, 9.7rem);
-  height: auto;
-  transform: rotate(-8deg);
-  transform-origin: 13% 90%;
+.left-panel h1,
+.mobile-panel h1 {
+  max-width: 9em;
+  font-size: clamp(4.2rem, 6.1vw, 6.9rem);
+  line-height: 1.08;
 }
 
 .left-panel h2,
 .mobile-panel h2 {
-  margin: 0 0 clamp(1.45rem, 3.4svh, 2.35rem);
-  font-family: "FZShuTi", "FZSTK", "STXingkai", "KaiTi", "STKaiti", serif;
-  font-size: clamp(3.1rem, 4.85vw, 5.15rem);
-  font-weight: 300;
-  line-height: 1.23;
-  letter-spacing: 0;
+  max-width: 9em;
+  font-size: clamp(3.15rem, 4.5vw, 5rem);
+  line-height: 1.22;
 }
 
 .left-panel p,
 .mobile-panel p {
   max-width: 35rem;
-  margin: 0;
+  margin: clamp(1.25rem, 2.8svh, 2rem) 0 0;
+  color: var(--muted);
   font-family: "KaiTi", "STKaiti", "SimKai", "Songti SC", serif;
-  font-size: clamp(1.12rem, 1.45vw, 1.5rem);
+  font-size: clamp(1.13rem, 1.35vw, 1.42rem);
   font-weight: 400;
-  line-height: 1.92;
+  line-height: 1.9;
 }
 
 .right-stage {
@@ -245,10 +253,7 @@ a {
 
 .reading-demo {
   position: relative;
-  display: flex;
-  align-items: center;
-  width: min(100%, 49rem);
-  min-height: min(36rem, calc(100svh - var(--nav-height) - 4rem));
+  width: min(100%, 50rem);
   margin-inline: auto;
   --gloss-progress: 0;
   --gloss-1: var(--gloss-progress);
@@ -262,14 +267,88 @@ a {
   --card-progress: 0;
 }
 
+.browser-demo {
+  border: 1px solid color-mix(in srgb, var(--glossa-rule) 76%, white);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 251, 242, 0.94)),
+    var(--paper-card);
+  box-shadow:
+    0 22px 60px rgba(42, 35, 24, 0.11),
+    0 2px 0 rgba(255, 255, 255, 0.7) inset;
+  overflow: hidden;
+}
+
+.browser-bar {
+  display: grid;
+  grid-template-columns: 0.7rem 0.7rem 0.7rem 1fr;
+  align-items: center;
+  gap: 0.52rem;
+  min-height: 3rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--glossa-rule) 72%, white);
+  background: rgba(255, 253, 247, 0.84);
+}
+
+.browser-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #d9b889;
+}
+
+.browser-dot:first-child {
+  background: #d77731;
+}
+
+.browser-dot:nth-child(2) {
+  background: #e0bd65;
+}
+
+.browser-dot:nth-child(3) {
+  background: #80a576;
+}
+
+.browser-url {
+  justify-self: end;
+  width: min(24rem, 72%);
+  padding: 0.38rem 0.8rem;
+  border: 1px solid #eadfca;
+  border-radius: 999px;
+  color: #786c5b;
+  background: rgba(255, 255, 255, 0.74);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+.article-page {
+  position: relative;
+  min-height: min(33.5rem, calc(100svh - var(--nav-height) - 5rem));
+  padding: clamp(2.4rem, 5.5svh, 4rem) clamp(2rem, 4vw, 3.3rem);
+  background:
+    linear-gradient(90deg, rgba(216, 203, 183, 0.36) 1px, transparent 1px) 0 0 / 4.2rem 100%,
+    linear-gradient(rgba(255, 253, 247, 0.94), rgba(255, 252, 246, 0.94));
+}
+
+.article-kicker {
+  margin: 0 0 1.4rem;
+  color: #857563;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .reading-copy {
   position: relative;
-  max-width: 46rem;
-  margin: 0 auto;
+  max-width: 44rem;
+  margin: 0;
   color: var(--ink);
   font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
-  font-size: clamp(1.45rem, 1.55vw, 2rem);
-  line-height: 1.86;
+  font-size: clamp(1.42rem, 1.5vw, 1.9rem);
+  line-height: 1.92;
   text-wrap: pretty;
 }
 
@@ -277,8 +356,9 @@ a {
   position: relative;
   display: inline-block;
   min-width: max-content;
-  padding-block-start: 20px;
-  margin: 0 0.03em;
+  max-width: max-content;
+  padding-block-start: calc(var(--demo-gloss-font-size) + 8px);
+  margin-inline: 1px;
   line-height: inherit;
   text-align: center;
   vertical-align: baseline;
@@ -310,31 +390,44 @@ a {
   position: absolute;
   top: 0;
   left: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 1.02rem;
+  display: block;
   padding: 1px 6px 2px;
   border: 1px solid color-mix(in srgb, var(--orange) 45%, var(--glossa-label-bg));
   border-radius: 4px;
   background: color-mix(in srgb, var(--glossa-label-bg) 94%, transparent);
   color: var(--glossa-label-ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 12px;
+  font-family: var(--demo-gloss-font-family);
+  font-size: var(--demo-gloss-font-size);
   font-weight: 700;
   line-height: 1.15;
+  white-space: nowrap;
   box-shadow: 0 1px 2px rgba(42, 35, 24, 0.16);
   opacity: var(--token-gloss-progress);
-  transform: translate(-50%, calc(0.18rem * (1 - var(--token-gloss-progress))));
+  pointer-events: none;
+  transform: translate(-50%, calc(0.12rem * (1 - var(--token-gloss-progress))));
 }
 
 .source-word {
-  display: inline-block;
+  display: inline;
   line-height: inherit;
   text-decoration: underline;
-  text-decoration-color: rgb(199 90 31 / calc(0.65 * var(--token-gloss-progress)));
+  text-decoration-color: rgb(198 90 30 / calc(0.72 * var(--token-gloss-progress)));
+  text-decoration-style: dotted;
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
+}
+
+.gloss-width {
+  display: block;
+  height: 0;
+  overflow: hidden;
+  padding-inline: 6px;
+  visibility: hidden;
+  font-family: var(--demo-gloss-font-family);
+  font-size: var(--demo-gloss-font-size);
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .card-target .source-word {
@@ -347,27 +440,27 @@ a {
   position: absolute;
   left: 68%;
   top: 72%;
-  z-index: 6;
-  width: clamp(1.65rem, 2.35vw, 2.2rem);
+  z-index: 8;
+  width: clamp(1.55rem, 2vw, 2rem);
   height: auto;
   opacity: var(--click-progress);
-  transform: translate(calc(-0.9rem * (1 - var(--click-progress))), calc(-0.72rem * (1 - var(--click-progress))));
+  transform: translate(calc(-0.8rem * (1 - var(--click-progress))), calc(-0.68rem * (1 - var(--click-progress))));
   pointer-events: none;
 }
 
 .carding-layer {
   position: absolute;
-  inset: 0;
+  inset: 3rem 0 0;
   pointer-events: none;
 }
 
 .alt-key {
   position: absolute;
-  top: 0.1rem;
-  left: clamp(1.1rem, 7%, 3rem);
-  z-index: 4;
+  top: clamp(1rem, 5%, 2rem);
+  left: clamp(1rem, 6%, 2.4rem);
+  z-index: 5;
   display: block;
-  width: clamp(5.1rem, 7.8vw, 6.8rem);
+  width: clamp(4.6rem, 6.7vw, 6.1rem);
   height: auto;
   opacity: var(--alt-progress);
   transform: translateY(calc(-0.25rem * (1 - var(--alt-progress))));
@@ -375,67 +468,280 @@ a {
 
 .reading-mask {
   position: absolute;
-  inset: 4rem 0.4rem 2.4rem -0.4rem;
+  inset: 0;
   z-index: 2;
-  border-radius: 5px;
-  background: rgba(9, 9, 9, calc(0.43 * var(--mask-progress)));
+  background: rgba(9, 9, 9, calc(0.34 * var(--mask-progress)));
 }
 
 .anki-card {
   position: absolute;
-  right: clamp(0rem, 3vw, 2rem);
-  bottom: clamp(0.7rem, 4svh, 2rem);
-  z-index: 5;
-  width: min(33rem, 82%);
-  padding: 1.12rem 1.2rem 1.22rem;
+  right: clamp(1rem, 5%, 2rem);
+  bottom: clamp(1rem, 6%, 2.2rem);
+  z-index: 6;
+  width: min(23rem, 78%);
+  padding: 1rem 1.05rem 1.1rem;
   border: 1px solid var(--glossa-rule);
-  border-radius: 6px;
+  border-radius: 8px;
   background:
-    linear-gradient(rgba(255, 253, 247, 0.96), rgba(255, 250, 240, 0.92)),
-    radial-gradient(circle at 30% 20%, rgba(31, 36, 40, 0.05) 0 1px, transparent 1px);
+    linear-gradient(#fffdf7, #fffaf0),
+    radial-gradient(circle at 30% 20%, rgba(31, 36, 40, 0.045) 0 1px, transparent 1px);
   background-size: auto, 19px 19px;
-  box-shadow: 0 10px 24px rgba(42, 35, 24, 0.14);
+  box-shadow: 0 14px 32px rgba(42, 35, 24, 0.18);
   opacity: var(--card-progress);
-  transform: translateY(calc(1.1rem * (1 - var(--card-progress))));
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transform: translateY(calc(1rem * (1 - var(--card-progress))));
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
 }
 
 .anki-title {
-  padding-bottom: 0.7rem;
+  padding-bottom: 0.65rem;
   border-bottom: 1px solid var(--glossa-rule);
-  font-size: 1.16rem;
-  font-weight: 800;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 850;
 }
 
 .anki-row {
   display: grid;
-  grid-template-columns: 5.2rem 1fr;
-  gap: 1rem;
-  padding: 0.82rem 0;
+  grid-template-columns: 4.1rem 1fr;
+  gap: 0.8rem;
+  padding: 0.74rem 0;
   border-bottom: 1px solid var(--glossa-rule);
 }
 
 .anki-row span {
   color: #655947;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
+  font-weight: 650;
 }
 
 .anki-row strong {
-  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
-  font-weight: 750;
+  color: var(--ink);
+  font-size: clamp(1.15rem, 1.8vw, 1.45rem);
+  font-weight: 780;
+}
+
+.anki-row p,
+.anki-example {
+  margin: 0;
 }
 
 .anki-row p {
-  margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
-  font-size: 1.08rem;
+  color: var(--ink);
+  font-size: 1rem;
 }
 
 .anki-example {
-  padding-top: 0.85rem;
+  padding-top: 0.8rem;
   color: #2c251d;
-  font-size: 0.96rem;
-  line-height: 1.45;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.anki-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  margin-top: 0.85rem;
+  padding: 0 0.9rem;
+  border-radius: 6px;
+  background: var(--orange);
+  color: #fff8eb;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.product-section {
+  padding: clamp(5rem, 9vw, 8rem) var(--page-gutter);
+  border-top: 1px solid color-mix(in srgb, var(--glossa-rule) 72%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 247, 0.55), rgba(244, 237, 221, 0.24)),
+    transparent;
+}
+
+.product-shell {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(2.4rem, 5vw, 5.5rem);
+  align-items: start;
+  width: min(var(--content-max), 100%);
+  margin-inline: auto;
+}
+
+.settings-preview {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settings-block {
+  padding: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--glossa-rule) 84%, white);
+  border-radius: 8px;
+  background: rgba(255, 253, 247, 0.86);
+  box-shadow: 0 12px 30px rgba(42, 35, 24, 0.08);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+}
+
+.settings-block h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.settings-block p {
+  margin: 0.3rem 0 0.9rem;
+  color: var(--muted-soft);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 6.8rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 2.55rem;
+  padding: 0 0.78rem;
+  border: 1px solid #eadfca;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.field-row + .field-row,
+.field-row + .secondary-button {
+  margin-top: 0.6rem;
+}
+
+.field-row span {
+  color: var(--muted-soft);
+  font-size: 0.8rem;
+}
+
+.field-row strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-row {
+  grid-template-columns: 6.8rem minmax(0, 1fr);
+}
+
+.secondary-button {
+  min-height: 2.4rem;
+  padding: 0 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--orange) 36%, var(--glossa-rule));
+  border-radius: 6px;
+  background: rgba(255, 244, 201, 0.58);
+  color: var(--orange-deep);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.compact-settings {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.compact-settings p {
+  margin-bottom: 0;
+}
+
+.swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.44rem;
+}
+
+.swatch {
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid rgba(42, 35, 24, 0.18);
+  border-radius: 50%;
+}
+
+.swatch-label {
+  background: var(--glossa-label-bg);
+}
+
+.swatch-success {
+  background: #ddf3df;
+}
+
+.swatch-error {
+  background: #f7d4d2;
+}
+
+.product-copy {
+  padding-top: clamp(0rem, 2.4vw, 1.4rem);
+}
+
+.product-copy h2,
+.closing-cta h2 {
+  max-width: 11em;
+  font-size: clamp(2.8rem, 4.5vw, 5rem);
+  line-height: 1.18;
+}
+
+.product-copy > p,
+.closing-cta p {
+  max-width: 40rem;
+  margin: clamp(1.1rem, 2.2vw, 1.6rem) 0 0;
+  color: var(--muted);
+  font-family: "KaiTi", "STKaiti", "SimKai", "Songti SC", serif;
+  font-size: clamp(1.1rem, 1.35vw, 1.38rem);
+  line-height: 1.9;
+}
+
+.feature-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1.3rem;
+  max-width: 41rem;
+  margin: clamp(1.6rem, 3vw, 2.3rem) 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+}
+
+.feature-list li {
+  position: relative;
+  padding-left: 1.3rem;
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.feature-list li::before {
+  position: absolute;
+  left: 0;
+  color: var(--orange);
+  content: "✓";
+  font-weight: 850;
+}
+
+.closing-cta {
+  margin-top: clamp(2.8rem, 5vw, 4.6rem);
+  padding-top: clamp(2.1rem, 4vw, 3.2rem);
+  border-top: 1px solid var(--glossa-rule);
+}
+
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  width: min(var(--content-max), calc(100vw - (var(--page-gutter) * 2)));
+  margin-inline: auto;
+  padding: 1.6rem 0 2rem;
+  color: var(--muted-soft);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-size: 0.84rem;
 }
 
 @media (min-width: 1024px) and (min-height: 600px) {
@@ -444,39 +750,59 @@ a {
   }
 }
 
+@media (max-width: 1160px) and (min-width: 1024px) {
+  .stage-shell {
+    grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr);
+    column-gap: 2.2rem;
+  }
+
+  .left-panel h1 {
+    font-size: clamp(3.6rem, 5.4vw, 5.2rem);
+  }
+
+  .left-panel h2 {
+    font-size: clamp(3rem, 4.2vw, 4.3rem);
+  }
+
+  .reading-copy {
+    font-size: clamp(1.24rem, 1.35vw, 1.55rem);
+  }
+}
+
 @media (max-width: 1023px), (max-height: 599px) {
   :root {
     --page-gutter: clamp(1rem, 5vw, 2rem);
+    --nav-height: 3.7rem;
   }
 
   .site-nav {
     position: sticky;
+    min-height: var(--nav-height);
     height: auto;
-    min-height: 3.45rem;
-    grid-template-columns: 1fr auto;
     padding: 0.55rem var(--page-gutter);
-    background: var(--paper);
+    background: rgba(244, 237, 221, 0.96);
   }
 
   .site-nav nav {
-    flex-wrap: wrap;
-    gap: 0.55rem clamp(0.62rem, 2.8vw, 1rem);
+    gap: 0.55rem 0.78rem;
   }
 
   .nav-link {
-    min-height: 2.1rem;
-    font-size: clamp(0.9rem, 4vw, 1.08rem);
+    min-height: 2rem;
+    font-size: clamp(0.82rem, 3.2vw, 0.96rem);
+  }
+
+  .site-nav nav .nav-link:not(.download-pill) {
+    display: none;
   }
 
   .nav-logo {
-    width: clamp(5.6rem, 30vw, 7.4rem);
+    width: clamp(5.8rem, 31vw, 7.4rem);
   }
 
   .download-pill {
-    min-width: 4.2rem;
-    min-height: 2.2rem;
-    padding-inline: 0.85rem;
-    color: #fff8eb;
+    min-height: 2.12rem;
+    padding-inline: 0.78rem;
   }
 
   .story-desktop {
@@ -489,7 +815,7 @@ a {
     display: block;
     width: min(44rem, calc(100vw - (var(--page-gutter) * 2)));
     margin-inline: auto;
-    padding: clamp(1.8rem, 8vw, 4rem) 0 4rem;
+    padding: clamp(2.2rem, 9vw, 4.4rem) 0 clamp(3rem, 11vw, 5rem);
   }
 
   .mobile-panel {
@@ -497,41 +823,46 @@ a {
     padding: clamp(2.2rem, 10vw, 4.6rem) 0;
   }
 
-  .brand-title {
-    font-size: clamp(3.1rem, 12vw, 4.8rem);
-  }
-
-  .brand-subtitle {
-    margin-left: 0.35rem;
-    font-size: clamp(1.05rem, 4.6vw, 1.28rem);
-  }
-
-  .ink-scene {
-    width: min(30rem, 100%);
-    height: clamp(9.5rem, 32vw, 12.6rem);
-    margin-left: 0.35rem;
-  }
-
-  .quill-image {
-    left: min(17rem, calc(100% - 7.7rem));
-    bottom: clamp(2.8rem, 10vw, 3.8rem);
-    width: clamp(6.5rem, 23vw, 8.4rem);
+  .mobile-panel h1 {
+    font-size: clamp(3.1rem, 13vw, 4.9rem);
   }
 
   .mobile-panel h2 {
-    font-size: clamp(2.6rem, 11vw, 4rem);
+    font-size: clamp(2.55rem, 11vw, 4rem);
   }
 
   .mobile-panel p {
-    font-size: clamp(1.06rem, 4.5vw, 1.32rem);
+    max-width: 100%;
+    font-size: clamp(1.05rem, 4.5vw, 1.3rem);
+  }
+
+  .hero-actions {
+    margin-top: 1.25rem;
+  }
+
+  .primary-button,
+  .text-link {
+    min-height: 2.7rem;
   }
 
   .mobile-reading {
     display: block;
     width: 100%;
-    min-height: 0;
     margin: 1rem 0 clamp(2.6rem, 10vw, 4rem);
     --gloss-progress: 1;
+  }
+
+  .browser-demo {
+    border-radius: 8px;
+  }
+
+  .browser-bar {
+    display: none;
+  }
+
+  .article-page {
+    min-height: 0;
+    padding: clamp(1.4rem, 7vw, 2.2rem) clamp(1rem, 5vw, 1.6rem);
   }
 
   .mobile-reading-plain {
@@ -542,14 +873,15 @@ a {
     padding-top: 0;
   }
 
-  .mobile-reading-plain .gloss-label {
+  .mobile-reading-plain .gloss-label,
+  .mobile-reading-plain .gloss-width {
     display: none;
   }
 
   .reading-copy {
     max-width: 100%;
-    font-size: clamp(1.05rem, 4.6vw, 1.34rem);
-    line-height: 2.05;
+    font-size: clamp(1.04rem, 4.6vw, 1.34rem);
+    line-height: 2.04;
   }
 
   .gloss-token {
@@ -557,9 +889,6 @@ a {
   }
 
   .gloss-label {
-    top: 0;
-    min-height: 1.02rem;
-    padding: 1px 5px 2px;
     font-size: 11px;
     transform: translate(-50%, 0);
   }
@@ -575,12 +904,15 @@ a {
 
   .mobile-card-reading-shell {
     position: relative;
-    margin-top: 3.55rem;
+    margin-top: 0;
+    overflow: hidden;
+    border-radius: 8px;
   }
 
-  .mobile-card-reading-shell .reading-copy {
+  .mobile-card-reading-shell .article-page {
     position: relative;
     z-index: 1;
+    padding-top: 4.6rem;
   }
 
   .mobile-card-reading-shell .carding-layer {
@@ -589,19 +921,17 @@ a {
   }
 
   .mobile-card-reading-shell .alt-key {
-    top: -3.25rem;
-    left: 0.4rem;
-    width: 4.95rem;
+    top: 0.8rem;
+    left: 0.8rem;
+    width: 4.35rem;
   }
 
   .mobile-card-reading-shell .reading-mask {
     inset: 0;
-    height: auto;
-    background: rgba(9, 9, 9, calc(0.4 * var(--mask-progress)));
   }
 
   .word-pointer {
-    width: 1.55rem;
+    width: 1.45rem;
   }
 
   .mobile-reading-card .anki-card {
@@ -610,28 +940,49 @@ a {
     bottom: auto;
     width: 100%;
     margin-top: 1.05rem;
-    padding: 0.95rem 1rem 1.05rem;
     opacity: 1;
     transform: none;
   }
 
-  .anki-row {
-    grid-template-columns: 4.2rem 1fr;
-    gap: 0.8rem;
+  .product-section {
+    padding: clamp(3.6rem, 12vw, 5rem) var(--page-gutter);
+  }
+
+  .product-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-preview {
+    order: 2;
+  }
+
+  .product-copy {
+    order: 1;
+    padding-top: 0;
+  }
+
+  .product-copy h2,
+  .closing-cta h2 {
+    max-width: 9em;
+    font-size: clamp(2.5rem, 11vw, 4rem);
+  }
+
+  .feature-list {
+    grid-template-columns: 1fr;
+  }
+
+  .field-row {
+    grid-template-columns: 5.6rem minmax(0, 1fr);
   }
 }
 
-@media (max-width: 360px) {
-  .site-nav nav {
-    gap: 0.45rem 0.48rem;
+@media (max-width: 420px) {
+  .compact-settings {
+    grid-template-columns: 1fr;
   }
 
-  .nav-link {
-    font-size: 0.86rem;
-  }
-
-  .download-pill {
-    min-width: 3.9rem;
-    padding-inline: 0.7rem;
+  .site-footer {
+    flex-direction: column;
+    gap: 0.6rem;
   }
 }
