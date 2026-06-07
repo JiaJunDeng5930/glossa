@@ -17,7 +17,9 @@
   --page-gutter: clamp(1.25rem, 4.4vw, 5rem);
   --nav-height: clamp(4rem, 11.111svh, 6.25rem);
   --demo-gloss-font-size: 12px;
-  --demo-gloss-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --demo-gloss-font-family:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
 }
 
 * {
@@ -35,10 +37,21 @@ body {
   overflow-x: hidden;
   color: var(--ink);
   background:
-    radial-gradient(circle at 10% 20%, rgba(31, 36, 40, 0.035) 0 1px, transparent 1px),
-    radial-gradient(circle at 78% 12%, rgba(31, 36, 40, 0.028) 0 1px, transparent 1px),
+    radial-gradient(
+      circle at 10% 20%,
+      rgba(31, 36, 40, 0.035) 0 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      circle at 78% 12%,
+      rgba(31, 36, 40, 0.028) 0 1px,
+      transparent 1px
+    ),
     linear-gradient(180deg, var(--paper-soft) 0%, var(--paper) 100%);
-  background-size: 18px 18px, 26px 26px, auto;
+  background-size:
+    18px 18px,
+    26px 26px,
+    auto;
   font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
@@ -50,8 +63,16 @@ body::before {
   content: "";
   opacity: 0.26;
   background-image:
-    radial-gradient(circle at 12px 16px, var(--paper-fiber) 0 0.6px, transparent 0.9px),
-    radial-gradient(circle at 52px 44px, rgba(255, 255, 255, 0.72) 0 0.7px, transparent 1px);
+    radial-gradient(
+      circle at 12px 16px,
+      var(--paper-fiber) 0 0.6px,
+      transparent 0.9px
+    ),
+    radial-gradient(
+      circle at 52px 44px,
+      rgba(255, 255, 255, 0.72) 0 0.7px,
+      transparent 1px
+    );
   background-size: 68px 62px;
 }
 
@@ -73,8 +94,16 @@ a {
   grid-template-columns: 1fr auto;
   align-items: center;
   height: var(--nav-height);
-  padding-inline: max(var(--page-gutter), calc((100vw - var(--content-max)) / 2));
-  background: linear-gradient(180deg, rgba(248, 247, 242, 0.94), rgba(248, 247, 242, 0.74) 72%, transparent);
+  padding-inline: max(
+    var(--page-gutter),
+    calc((100vw - var(--content-max)) / 2)
+  );
+  background: linear-gradient(
+    180deg,
+    rgba(248, 247, 242, 0.94),
+    rgba(248, 247, 242, 0.74) 72%,
+    transparent
+  );
   backdrop-filter: blur(8px);
 }
 
@@ -104,7 +133,14 @@ a {
   min-width: max-content;
   min-height: 2.35rem;
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
   font-size: clamp(0.9rem, 0.94vw, 1rem);
   font-weight: 650;
   line-height: 1;
@@ -133,7 +169,14 @@ a {
   justify-content: center;
   min-height: 3rem;
   padding: 0 1.35rem;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
   font-size: 0.98rem;
   font-weight: 800;
 }
@@ -143,7 +186,14 @@ a {
   align-items: center;
   min-height: 3rem;
   color: var(--orange-deep);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
   font-size: 0.96rem;
   font-weight: 750;
 }
@@ -272,7 +322,11 @@ a {
   border: 1px solid color-mix(in srgb, var(--glossa-rule) 82%, white);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 253, 247, 0.98)),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.8),
+      rgba(255, 253, 247, 0.98)
+    ),
     var(--paper-card);
   box-shadow:
     0 20px 46px rgba(42, 35, 24, 0.1),
@@ -318,7 +372,13 @@ a {
   border-radius: 999px;
   color: #786c5b;
   background: rgba(255, 255, 255, 0.74);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-size: 0.76rem;
   text-align: center;
 }
@@ -328,14 +388,21 @@ a {
   min-height: min(28.4rem, calc(100svh - var(--nav-height) - 5.2rem));
   padding: clamp(2rem, 4.4svh, 2.9rem) clamp(2rem, 3.2vw, 2.8rem);
   background:
-    linear-gradient(90deg, rgba(216, 203, 183, 0.36) 1px, transparent 1px) 0 0 / 4.2rem 100%,
+    linear-gradient(90deg, rgba(216, 203, 183, 0.36) 1px, transparent 1px) 0 0 /
+      4.2rem 100%,
     linear-gradient(rgba(255, 253, 247, 0.94), rgba(255, 252, 246, 0.94));
 }
 
 .article-kicker {
   margin: 0 0 1.25rem;
   color: #857563;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-size: 0.78rem;
   font-weight: 750;
   letter-spacing: 0;
@@ -362,7 +429,9 @@ a {
   display: inline-block;
   min-width: max-content;
   max-width: max-content;
-  padding-block-start: calc((var(--demo-gloss-font-size) + 7px) * var(--token-gloss-progress));
+  padding-block-start: calc(
+    (var(--demo-gloss-font-size) + 8px) * var(--token-gloss-progress)
+  );
   margin-inline: 0.5px;
   line-height: inherit;
   text-align: center;
@@ -397,7 +466,8 @@ a {
   left: 50%;
   display: block;
   padding: 1px 6px 2px;
-  border: 1px solid color-mix(in srgb, var(--orange) 45%, var(--glossa-label-bg));
+  border: 1px solid
+    color-mix(in srgb, var(--orange) 45%, var(--glossa-label-bg));
   border-radius: 4px;
   background: color-mix(in srgb, var(--glossa-label-bg) 94%, transparent);
   color: var(--glossa-label-ink);
@@ -416,7 +486,9 @@ a {
   display: inline;
   line-height: inherit;
   text-decoration: underline;
-  text-decoration-color: rgb(198 90 30 / calc(0.72 * var(--token-gloss-progress)));
+  text-decoration-color: rgb(
+    198 90 30 / calc(0.72 * var(--token-gloss-progress))
+  );
   text-decoration-style: dotted;
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
@@ -449,7 +521,10 @@ a {
   width: clamp(1.4rem, 1.65vw, 1.72rem);
   height: auto;
   opacity: var(--click-progress);
-  transform: translate(calc(-0.8rem * (1 - var(--click-progress))), calc(-0.68rem * (1 - var(--click-progress))));
+  transform: translate(
+    calc(-0.8rem * (1 - var(--click-progress))),
+    calc(-0.68rem * (1 - var(--click-progress)))
+  );
   pointer-events: none;
 }
 
@@ -489,12 +564,25 @@ a {
   border-radius: 8px;
   background:
     linear-gradient(#fffdf7, #fffaf0),
-    radial-gradient(circle at 30% 20%, rgba(31, 36, 40, 0.045) 0 1px, transparent 1px);
-  background-size: auto, 19px 19px;
+    radial-gradient(
+      circle at 30% 20%,
+      rgba(31, 36, 40, 0.045) 0 1px,
+      transparent 1px
+    );
+  background-size:
+    auto,
+    19px 19px;
   box-shadow: 0 12px 28px rgba(31, 36, 40, 0.16);
   opacity: var(--card-progress);
   transform: translateY(calc(1rem * (1 - var(--card-progress))));
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
 }
 
 .anki-title {
@@ -560,7 +648,11 @@ a {
   padding: clamp(5rem, 9vw, 8rem) var(--page-gutter);
   border-top: 1px solid color-mix(in srgb, var(--glossa-rule) 72%, transparent);
   background:
-    linear-gradient(180deg, rgba(255, 253, 247, 0.55), rgba(244, 237, 221, 0.24)),
+    linear-gradient(
+      180deg,
+      rgba(255, 253, 247, 0.62),
+      rgba(244, 242, 236, 0.28)
+    ),
     transparent;
 }
 
@@ -575,16 +667,149 @@ a {
 
 .settings-preview {
   display: grid;
-  gap: 0.9rem;
+  grid-template-columns: minmax(8.5rem, 0.36fr) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--glossa-rule);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.58), rgba(255, 253, 247, 0.9)),
+    radial-gradient(
+      circle at 20% 15%,
+      rgba(31, 36, 40, 0.045) 0 1px,
+      transparent 1px
+    );
+  background-size:
+    auto,
+    20px 20px;
+  box-shadow: 0 16px 40px rgba(42, 35, 24, 0.11);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
+}
+
+.settings-rail-preview {
+  display: grid;
+  align-content: start;
+  gap: 1.4rem;
+  min-width: 0;
+  padding: 1.2rem 1rem;
+  border-right: 1px solid var(--glossa-rule);
+  background: rgba(255, 253, 247, 0.58);
+}
+
+.settings-logo {
+  display: block;
+  width: min(7.6rem, 100%);
+  height: auto;
+}
+
+.settings-rail-preview nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.settings-rail-preview span {
+  display: flex;
+  align-items: center;
+  min-height: 2.1rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.settings-rail-preview span:nth-child(3) {
+  border-color: var(--glossa-rule);
+  background: rgba(255, 253, 247, 0.82);
+  color: var(--orange);
+}
+
+.settings-workspace-preview {
+  min-width: 0;
+  background:
+    linear-gradient(rgba(255, 253, 247, 0.9), rgba(255, 250, 240, 0.82)),
+    radial-gradient(
+      circle at 15% 20%,
+      rgba(31, 36, 40, 0.035) 0 1px,
+      transparent 1px
+    );
+  background-size:
+    auto,
+    18px 18px;
+}
+
+.settings-header-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--glossa-rule);
+  background: rgba(255, 253, 247, 0.78);
+}
+
+.settings-header-preview p {
+  margin: 0;
+  color: var(--muted-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.settings-header-preview h3 {
+  margin: 0.18rem 0 0;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
+  font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+  line-height: 1.1;
+}
+
+.save-button-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.3rem;
+  min-width: 4.6rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--orange);
+  border-radius: 6px;
+  background: var(--orange);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 800;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 8px 18px rgba(198, 90, 30, 0.18);
+}
+
+.settings-grid-preview {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
 }
 
 .settings-block {
   padding: 1.1rem;
   border: 1px solid color-mix(in srgb, var(--glossa-rule) 84%, white);
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(255, 253, 247, 0.86);
-  box-shadow: 0 12px 30px rgba(42, 35, 24, 0.08);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.82);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
 }
 
 .settings-block h3 {
@@ -608,7 +833,7 @@ a {
   align-items: center;
   min-height: 2.55rem;
   padding: 0 0.78rem;
-  border: 1px solid #eadfca;
+  border: 1px solid var(--glossa-rule);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.68);
 }
@@ -641,7 +866,7 @@ a {
   padding: 0 0.8rem;
   border: 1px solid color-mix(in srgb, var(--orange) 36%, var(--glossa-rule));
   border-radius: 6px;
-  background: rgba(255, 244, 201, 0.58);
+  background: rgba(255, 253, 247, 0.72);
   color: var(--orange-deep);
   font: inherit;
   font-size: 0.82rem;
@@ -700,9 +925,9 @@ a {
   max-width: 40rem;
   margin: clamp(1.1rem, 2.2vw, 1.6rem) 0 0;
   color: var(--muted);
-  font-family: "KaiTi", "STKaiti", "SimKai", "Songti SC", serif;
-  font-size: clamp(1.1rem, 1.35vw, 1.38rem);
-  line-height: 1.9;
+  font-family: "Songti SC", "Noto Serif SC", "SimSun", serif;
+  font-size: clamp(1.04rem, 1.18vw, 1.24rem);
+  line-height: 1.86;
 }
 
 .feature-list {
@@ -713,7 +938,14 @@ a {
   margin: clamp(1.6rem, 3vw, 2.3rem) 0 0;
   padding: 0;
   list-style: none;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
 }
 
 .feature-list li {
@@ -745,7 +977,14 @@ a {
   margin-inline: auto;
   padding: 1.6rem 0 2rem;
   color: var(--muted-soft);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
   font-size: 0.84rem;
 }
 
@@ -961,6 +1200,34 @@ a {
 
   .settings-preview {
     order: 2;
+    grid-template-columns: 1fr;
+  }
+
+  .settings-rail-preview {
+    gap: 0.8rem;
+    padding: 1rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--glossa-rule);
+  }
+
+  .settings-logo {
+    width: 6.4rem;
+  }
+
+  .settings-rail-preview nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .settings-rail-preview span {
+    justify-content: center;
+    min-height: 1.95rem;
+    padding-inline: 0.35rem;
+    font-size: 0.78rem;
+  }
+
+  .settings-header-preview,
+  .settings-grid-preview {
+    padding: 0.9rem;
   }
 
   .product-copy {
