@@ -420,10 +420,6 @@ a {
   text-align: left;
 }
 
-.copy-line {
-  display: contents;
-}
-
 .gloss-token {
   position: relative;
   display: inline-block;
