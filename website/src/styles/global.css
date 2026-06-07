@@ -293,12 +293,11 @@ a {
   position: relative;
   width: min(100%, 44rem);
   margin-inline: auto;
-  --gloss-progress: 0;
-  --gloss-1: var(--gloss-progress);
-  --gloss-2: var(--gloss-progress);
-  --gloss-3: var(--gloss-progress);
-  --gloss-4: var(--gloss-progress);
-  --gloss-5: var(--gloss-progress);
+  --glossa-font-family: var(--demo-gloss-font-family);
+  --glossa-font-size: var(--demo-gloss-font-size);
+  --glossa-bg-color: var(--glossa-label-bg);
+  --glossa-bg-alpha: 94%;
+  --glossa-text-color: var(--glossa-label-ink);
   --alt-progress: 0;
   --mask-progress: 0;
   --click-progress: 0;
@@ -395,90 +394,62 @@ a {
   text-align: left;
 }
 
-.gloss-token {
+.reading-demo [data-glossa-token] {
   position: relative;
   display: inline-block;
   min-width: max-content;
   max-width: max-content;
-  padding-block-start: calc(
-    (var(--demo-gloss-font-size) + 8px) * var(--token-gloss-progress)
-  );
+  padding-block-start: calc(var(--glossa-font-size) + 8px);
   margin-inline: 1px;
   line-height: inherit;
   text-align: center;
   vertical-align: baseline;
   white-space: nowrap;
-  --token-gloss-progress: var(--gloss-progress);
 }
 
-.gloss-1 {
-  --token-gloss-progress: var(--gloss-1);
-}
-
-.gloss-2 {
-  --token-gloss-progress: var(--gloss-2);
-}
-
-.gloss-3 {
-  --token-gloss-progress: var(--gloss-3);
-}
-
-.gloss-4 {
-  --token-gloss-progress: var(--gloss-4);
-}
-
-.gloss-5 {
-  --token-gloss-progress: var(--gloss-5);
-}
-
-.gloss-label {
+.reading-demo [data-glossa-token-label] {
   position: absolute;
   top: 0;
   left: 50%;
   display: block;
   padding: 1px 6px 2px;
   border: 1px solid
-    color-mix(in srgb, var(--accent) 48%, var(--glossa-label-bg));
+    color-mix(in srgb, var(--accent) 45%, var(--glossa-bg-color));
   border-radius: 4px;
-  background: color-mix(in srgb, var(--glossa-label-bg) 94%, transparent);
-  color: var(--glossa-label-ink);
-  font-family: var(--demo-gloss-font-family);
-  font-size: var(--demo-gloss-font-size);
+  background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
+  color: var(--glossa-text-color);
+  font-family: var(--glossa-font-family);
+  font-size: var(--glossa-font-size);
   font-weight: 700;
   line-height: 1.15;
   white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(25, 29, 32, 0.14);
-  opacity: var(--token-gloss-progress);
+  box-shadow: 0 1px 2px rgba(42, 35, 24, 0.16);
   pointer-events: none;
-  transform: translate(-50%, calc(0.12rem * (1 - var(--token-gloss-progress))));
+  transform: translateX(-50%);
 }
 
-.source-word {
+.reading-demo [data-glossa-token-surface] {
   display: inline;
   line-height: inherit;
   text-decoration: underline;
-  text-decoration-color: rgb(
-    214 83 29 / calc(0.72 * var(--token-gloss-progress))
-  );
   text-decoration-style: dotted;
-  text-decoration-thickness: 1px;
   text-underline-offset: 4px;
 }
 
-.gloss-width {
+.reading-demo [data-glossa-token-width] {
   display: block;
   height: 0;
   overflow: hidden;
-  padding-inline: calc(6px * var(--token-gloss-progress));
+  padding-inline: 6px;
   visibility: hidden;
-  font-family: var(--demo-gloss-font-family);
-  font-size: calc(var(--demo-gloss-font-size) * var(--token-gloss-progress));
+  font-family: var(--glossa-font-family);
+  font-size: var(--glossa-font-size);
   font-weight: 700;
   line-height: 1.15;
   white-space: nowrap;
 }
 
-.card-target .source-word {
+.card-target [data-glossa-token-surface] {
   position: relative;
   z-index: 3;
   background: rgba(255, 228, 137, calc(0.88 * var(--click-progress)));
@@ -1040,7 +1011,6 @@ a {
     display: block;
     width: 100%;
     margin: 1rem 0 clamp(2.6rem, 10vw, 4rem);
-    --gloss-progress: 1;
   }
 
   .browser-demo {
@@ -1056,17 +1026,13 @@ a {
     padding: clamp(1.4rem, 7vw, 2.2rem) clamp(1rem, 5vw, 1.6rem);
   }
 
-  .mobile-reading-plain {
-    --gloss-progress: 0;
-  }
-
   .reading-copy {
     max-width: 100%;
     font-size: clamp(1rem, 4.25vw, 1.18rem);
     line-height: 1.9;
   }
 
-  .gloss-label {
+  .reading-demo [data-glossa-token-label] {
     font-size: 11px;
     transform: translate(-50%, 0);
   }
