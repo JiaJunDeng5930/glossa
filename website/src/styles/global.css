@@ -394,6 +394,10 @@ a {
   text-align: left;
 }
 
+.reading-copy + .reading-copy {
+  margin-top: 1.05rem;
+}
+
 .reading-demo [data-glossa-token] {
   position: relative;
   display: inline-block;
