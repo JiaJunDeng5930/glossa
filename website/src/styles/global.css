@@ -790,6 +790,9 @@ a {
 }
 
 .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 2.28rem;
   padding: 0 0.8rem;
   border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--glossa-rule));
@@ -970,6 +973,7 @@ a {
   }
 
   .story-desktop {
+    display: none;
     height: 0;
     padding: 0;
     overflow: hidden;
