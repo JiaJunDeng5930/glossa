@@ -3,9 +3,9 @@ import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey } from "../core/state";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { createOptionsMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
-import { defaultEndpointForProvider, mergeStoredSettings, settingsOverrides, type StoredGlossaSettings } from "../shared/settings";
+import { defaultEndpointForProvider } from "../shared/settings";
 import { formatShortcutFromEvent } from "../shared/shortcut";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AiSettings, type BackgroundResponseMessage, type ErrorService, type GlossaSettings, type KnownWordListId, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, KNOWN_WORD_LIST_IDS, type AiSettings, type BackgroundResponseMessage, type ErrorService, type GlossaSettings, type KnownWordListId, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import { createExtensionStorage } from "../storage/db";
 
@@ -139,49 +139,11 @@ document.addEventListener("keyup", (event) => {
 
 form.addEventListener("input", () => updatePreview(readFormSettings()));
 
-async function loadSettings(): Promise<void> {
-  const settings = await chromeLocalGet<StoredGlossaSettings>("settings").then((value) => mergeStoredSettings(value));
-  setInput("shortcutKey", settings.shortcutKey);
-  shortcutCapture.textContent = settings.shortcutKey;
-  setInput("translateShortcutKey", settings.translateShortcutKey);
-  translateShortcutCapture.textContent = settings.translateShortcutKey;
-  setChecked("autoTranslateEnabled", settings.autoTranslateEnabled);
-  setInput("learningWindowDays", String(settings.learningWindowDays));
-  setInput("glossCacheTtlHours", String(msToHours(settings.glossCacheTtlMs)));
-  setInput("knownWordList", settings.knownWordList);
-  setInput("glossTextColor", settings.appearance.textColor);
-  setInput("glossBackgroundColor", settings.appearance.backgroundColor);
-  setInput("cardSuccessBackgroundColor", settings.appearance.cardSuccessBackgroundColor);
-  setInput("cardErrorBackgroundColor", settings.appearance.cardErrorBackgroundColor);
-  setInput("glossBackgroundOpacity", String(settings.appearance.backgroundOpacity));
-  setInput("glossFontFamily", settings.appearance.fontFamily);
-  setInput("glossFontSize", String(settings.appearance.fontSize));
-  setInput("provider", settings.ai.provider);
-  setInput("aiEndpoint", settings.ai.endpoint);
-  setInput("apiKey", settings.ai.apiKey ?? "");
-  setInput("reasoningEffort", settings.ai.reasoningEffort);
-  setInput("aiRequestTimeoutSeconds", String(msToSeconds(settings.ai.requestTimeoutMs)));
-  setInput("modelVersion", settings.modelVersion);
-  setInput("ankiEndpoint", settings.anki.endpoint);
-  setInput("ankiRequestTimeoutSeconds", String(msToSeconds(settings.anki.requestTimeoutMs)));
-  setInput("duplicatePromptSeconds", String(msToSeconds(settings.anki.duplicatePromptMs)));
-  setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
-  setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
-  setAnkiSelectsEnabled(false);
-  setInput("glossPrompt", settings.prompts.gloss);
-  setInput("ankiPrompt", settings.prompts.ankiCard);
-  updatePreview(settings);
-  void refreshKnownWords();
-  void refreshAnkiOptions(settings, { reportStatus: false });
-}
-
-async function saveSettings(settings: GlossaSettings): Promise<void> {
-  await chromeLocalSet("settings", settingsOverrides(settings));
-}
-
 function readFormSettings(): GlossaSettings {
   const provider = readInput("provider") as AiSettings["provider"];
   const apiKey = readInput("apiKey").trim();
+  // @constraint glossa.settings_save.options_write.font_size_bounds Saved gloss font size is clamped to the supported options-page range.
+  const fontSize = Math.max(9, Math.min(24, Number(readInput("glossFontSize")) || DEFAULT_SETTINGS.appearance.fontSize));
   return {
     shortcutKey: readInput("shortcutKey").trim() || DEFAULT_SETTINGS.shortcutKey,
     translateShortcutKey: readInput("translateShortcutKey").trim() || DEFAULT_SETTINGS.translateShortcutKey,
@@ -198,7 +160,7 @@ function readFormSettings(): GlossaSettings {
       cardErrorBackgroundColor: readInput("cardErrorBackgroundColor") || DEFAULT_SETTINGS.appearance.cardErrorBackgroundColor,
       backgroundOpacity: clamp(Number(readInput("glossBackgroundOpacity")) || DEFAULT_SETTINGS.appearance.backgroundOpacity, 0.2, 1),
       fontFamily: readInput("glossFontFamily") || DEFAULT_SETTINGS.appearance.fontFamily,
-      fontSize: Math.max(9, Math.min(24, Number(readInput("glossFontSize")) || DEFAULT_SETTINGS.appearance.fontSize))
+      fontSize
     },
     prompts: {
       gloss: readInput("glossPrompt").trim() || DEFAULT_SETTINGS.prompts.gloss,
@@ -467,7 +429,7 @@ function readKnownWordList(): KnownWordListId {
 }
 
 function isKnownWordList(value: unknown): value is KnownWordListId {
-  return typeof value === "string" && KNOWN_WORD_LISTS.some((item) => item.id === value);
+  return typeof value === "string" && (KNOWN_WORD_LIST_IDS as readonly string[]).includes(value);
 }
 
 async function runConnectionTest(
@@ -715,28 +677,47 @@ function hexToRgb(hex: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
-function chromeLocalGet<T>(key: string): Promise<T | undefined> {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(key, (result) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      resolve(result[key] as T | undefined);
-    });
-  });
+// @behavior glossa.settings_save.options_load Options page loading reads normalized settings through extension storage before populating controls.
+async function loadSettings(): Promise<void> {
+  // @constraint glossa.settings_save.options_load.storage_read Options page settings reads delegate storage and Chrome runtime errors to the shared storage API.
+  const settings = await extensionStorage.settings.get();
+  setInput("shortcutKey", settings.shortcutKey);
+  shortcutCapture.textContent = settings.shortcutKey;
+  setInput("translateShortcutKey", settings.translateShortcutKey);
+  translateShortcutCapture.textContent = settings.translateShortcutKey;
+  setChecked("autoTranslateEnabled", settings.autoTranslateEnabled);
+  setInput("learningWindowDays", String(settings.learningWindowDays));
+  setInput("glossCacheTtlHours", String(msToHours(settings.glossCacheTtlMs)));
+  setInput("knownWordList", settings.knownWordList);
+  setInput("glossTextColor", settings.appearance.textColor);
+  setInput("glossBackgroundColor", settings.appearance.backgroundColor);
+  setInput("cardSuccessBackgroundColor", settings.appearance.cardSuccessBackgroundColor);
+  setInput("cardErrorBackgroundColor", settings.appearance.cardErrorBackgroundColor);
+  setInput("glossBackgroundOpacity", String(settings.appearance.backgroundOpacity));
+  setInput("glossFontFamily", settings.appearance.fontFamily);
+  setInput("glossFontSize", String(settings.appearance.fontSize));
+  setInput("provider", settings.ai.provider);
+  setInput("aiEndpoint", settings.ai.endpoint);
+  // @constraint glossa.settings_save.options_load.api_key_field The options page writes the stored API key only into the API key input control.
+  setInput("apiKey", settings.ai.apiKey ?? "");
+  setInput("reasoningEffort", settings.ai.reasoningEffort);
+  setInput("aiRequestTimeoutSeconds", String(msToSeconds(settings.ai.requestTimeoutMs)));
+  setInput("modelVersion", settings.modelVersion);
+  setInput("ankiEndpoint", settings.anki.endpoint);
+  setInput("ankiRequestTimeoutSeconds", String(msToSeconds(settings.anki.requestTimeoutMs)));
+  setInput("duplicatePromptSeconds", String(msToSeconds(settings.anki.duplicatePromptMs)));
+  setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
+  setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
+  setAnkiSelectsEnabled(false);
+  setInput("glossPrompt", settings.prompts.gloss);
+  setInput("ankiPrompt", settings.prompts.ankiCard);
+  updatePreview(settings);
+  void refreshKnownWords();
+  void refreshAnkiOptions(settings, { reportStatus: false });
 }
 
-function chromeLocalSet<T>(key: string, value: T): Promise<void> {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set({ [key]: value }, () => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      resolve();
-    });
-  });
+// @behavior glossa.settings_save.options_write Options page saving writes normalized settings through extension storage.
+async function saveSettings(settings: GlossaSettings): Promise<void> {
+  // @constraint glossa.settings_save.options_write.storage_write Options page settings writes delegate storage and Chrome runtime errors to the shared storage API.
+  await extensionStorage.settings.set(settings);
 }

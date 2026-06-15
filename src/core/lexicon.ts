@@ -1,40 +1,40 @@
 // @behavior glossa.word_memory.known_word_filter Configured known-word lists load into normalized entries for vocabulary filtering.
-import type { KnownWordListId } from "../shared/types";
+import { KNOWN_WORD_LIST_IDS, type KnownWordListId } from "../shared/types";
 import { normalizeLemma } from "./state";
 
 export const KNOWN_WORD_LISTS = [
   {
-    id: "junior-high",
+    id: KNOWN_WORD_LIST_IDS[0],
     label: "初中课标词汇",
     file: "assets/known-wordlists/junior-high.txt"
   },
   {
-    id: "senior-high",
+    id: KNOWN_WORD_LIST_IDS[1],
     label: "高中课标词汇",
     file: "assets/known-wordlists/senior-high.txt"
   },
   {
-    id: "cet4",
+    id: KNOWN_WORD_LIST_IDS[2],
     label: "四级 4535 词",
     file: "assets/known-wordlists/cet4.txt"
   },
   {
-    id: "cet6",
+    id: KNOWN_WORD_LIST_IDS[3],
     label: "六级 2219 词",
     file: "assets/known-wordlists/cet6.txt"
   },
   {
-    id: "toefl",
+    id: KNOWN_WORD_LIST_IDS[4],
     label: "托福 4510 词",
     file: "assets/known-wordlists/toefl.txt"
   },
   {
-    id: "gre",
+    id: KNOWN_WORD_LIST_IDS[5],
     label: "GRE 7728 词",
     file: "assets/known-wordlists/gre.txt"
   },
   {
-    id: "coca-20000",
+    id: KNOWN_WORD_LIST_IDS[6],
     label: "COCA 20000 高频词",
     file: "assets/known-wordlists/coca-20000.txt"
   }

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { scanDocumentText, scanDocumentTextInChunks } from "../../src/content/scanner";
+import { scanDocumentTextInChunks, type ScanChunk, type ScanChunkOptions, type ScanStats } from "../../src/content/scanner";
 
 // @verifies glossa.page_translation.candidate_scan
 describe("content scanner", () => {
-  it("extracts English word candidates with sentence context and skips inert text", () => {
+  it("extracts English word candidates with sentence context and skips inert text", async () => {
     document.body.innerHTML = `
       <main>
         <p>Press the submit button to finish. The archive is ready.</p>
@@ -14,7 +14,7 @@ describe("content scanner", () => {
       </main>
     `;
 
-    const result = scanDocumentText(document, new Set(["the", "to", "is"]));
+    const result = await scanDocumentText(document, new Set(["the", "to", "is"]));
 
     expect(result.sentences.map((sentence) => sentence.text)).toEqual([
       "Press the submit button to finish.",
@@ -32,7 +32,7 @@ describe("content scanner", () => {
     expect(result.stats.rejectedBySubtree).toBeGreaterThan(0);
   });
 
-  it("skips hidden, editable, code, no-translate and extension-owned text", () => {
+  it("skips hidden, editable, code, no-translate and extension-owned text", async () => {
     document.body.innerHTML = `
       <main>
         <p>Visible quarry emerges slowly.</p>
@@ -45,30 +45,30 @@ describe("content scanner", () => {
       </main>
     `;
 
-    const result = scanDocumentText(document, new Set());
+    const result = await scanDocumentText(document, new Set());
 
     expect(result.sentences.map((sentence) => sentence.text)).toEqual(["Visible quarry emerges slowly."]);
     expect(result.tokens.map((token) => token.surface)).toEqual(["Visible", "quarry", "emerges", "slowly"]);
   });
 
-  it("rejects code-like shapes and limits repeated lemmas", () => {
+  it("rejects code-like shapes and limits repeated lemmas", async () => {
     document.body.innerHTML = `
       <main>
         <p>API clients use obscure obscure quarry words.</p>
       </main>
     `;
 
-    const result = scanDocumentText(document, new Set(["use"]));
+    const result = await scanDocumentText(document, new Set(["use"]));
 
     expect(result.tokens.map((token) => token.surface)).toEqual(["clients", "obscure", "quarry", "words"]);
     expect(result.stats.rejectedByShape).toBe(1);
     expect(result.stats.rejectedByFrequency).toBe(1);
   });
 
-  it("attaches source identity to each token", () => {
+  it("attaches source identity to each token", async () => {
     document.body.innerHTML = "<main><p>Submit archive entries carefully.</p></main>";
 
-    const result = scanDocumentText(document, new Set(), { scanVersion: 7 });
+    const result = await scanDocumentText(document, new Set(), { scanVersion: 7 });
     const token = result.tokens.find((item) => item.surface === "Submit");
 
     expect(token).toMatchObject({
@@ -80,7 +80,7 @@ describe("content scanner", () => {
     expect(token?.sourceFingerprint).toMatch(/^\d+:\d+:[a-z0-9]+$/);
   });
 
-  it("scans readable text inside open shadow roots", () => {
+  it("scans readable text inside open shadow roots", async () => {
     document.body.innerHTML = "<main><article id=\"host\"></article></main>";
     const host = document.querySelector("#host")!;
     const shadow = host.attachShadow({ mode: "open" });
@@ -88,12 +88,12 @@ describe("content scanner", () => {
     paragraph.textContent = "Shadow archive appears clearly.";
     shadow.append(paragraph);
 
-    const result = scanDocumentText(document, new Set());
+    const result = await scanDocumentText(document, new Set());
 
     expect(result.tokens.map((token) => token.surface)).toEqual(["Shadow", "archive", "appears", "clearly"]);
   });
 
-  it("keeps renderable tokens only when their ranges intersect the viewport", () => {
+  it("keeps renderable tokens only when their ranges intersect the viewport", async () => {
     document.body.innerHTML = "<main><p>Visible archive appears. Hidden quarry appears.</p></main>";
     const originalGetClientRects = Range.prototype.getClientRects;
     Range.prototype.getClientRects = function () {
@@ -109,7 +109,7 @@ describe("content scanner", () => {
     };
 
     try {
-      const result = scanDocumentText(document, new Set(), {
+      const result = await scanDocumentText(document, new Set(), {
         requireRenderableRange: true,
         requireViewportRange: true
       });
@@ -122,7 +122,7 @@ describe("content scanner", () => {
   });
 
   // @verifies glossa.page_translation.candidate_scan.overflow_clip
-  it("clips viewport token eligibility through overflow ancestors", () => {
+  it("clips viewport token eligibility through overflow ancestors", async () => {
     document.body.innerHTML = `
       <main>
         <section id="scroller" style="height: 100px; overflow: auto;">
@@ -159,7 +159,7 @@ describe("content scanner", () => {
     };
 
     try {
-      const result = scanDocumentText(document, new Set(), {
+      const result = await scanDocumentText(document, new Set(), {
         requireRenderableRange: true,
         requireViewportRange: true
       });
@@ -173,7 +173,7 @@ describe("content scanner", () => {
   });
 
   // @verifies glossa.page_translation.candidate_scan.overflow_clip.shadow_host
-  it("clips shadow-root token eligibility through overflow ancestors outside the host", () => {
+  it("clips shadow-root token eligibility through overflow ancestors outside the host", async () => {
     document.body.innerHTML = `
       <main>
         <section id="scroller" style="height: 100px; overflow: auto;">
@@ -213,7 +213,7 @@ describe("content scanner", () => {
     };
 
     try {
-      const result = scanDocumentText(document, new Set(), {
+      const result = await scanDocumentText(document, new Set(), {
         requireRenderableRange: true,
         requireViewportRange: true
       });
@@ -250,3 +250,21 @@ describe("content scanner", () => {
     expect(stats.candidateWords).toBe(8);
   });
 });
+
+async function scanDocumentText(
+  doc: Document,
+  knownWords: ReadonlySet<string>,
+  options: ScanChunkOptions = {}
+): Promise<{ sentences: ScanChunk["sentences"]; tokens: ScanChunk["tokens"]; stats: ScanStats }> {
+  const sentences: ScanChunk["sentences"] = [];
+  const tokens: ScanChunk["tokens"] = [];
+  const stats = await scanDocumentTextInChunks(doc, knownWords, {
+    ...options,
+    maxTokensPerChunk: Number.MAX_SAFE_INTEGER,
+    maxChunkDelayMs: Number.MAX_SAFE_INTEGER
+  }, (chunk) => {
+    sentences.push(...chunk.sentences);
+    tokens.push(...chunk.tokens);
+  });
+  return { sentences, tokens, stats };
+}

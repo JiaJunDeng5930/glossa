@@ -56,13 +56,17 @@ export interface GlossCacheEntry extends GlossItem {
   createdAt: number;
 }
 
+// @constraint glossa.extension_contracts.message_envelopes.sources Runtime envelopes use extension-owned message sources.
 export type MessageSource = "content-script" | "service-worker" | "options";
-export type MessageTarget = MessageSource;
+// @constraint glossa.extension_contracts.message_envelopes.version Runtime envelopes use the current protocol version literal.
 export type MessageVersion = 1;
+// @constraint glossa.extension_contracts.message_envelopes.error_payload.reason Runtime error payload reasons use the shared diagnostic reason set.
 export type ErrorReason = "network" | "timeout" | "unauthorized" | "not-found" | "service-error" | "invalid-response" | "runtime";
+// @constraint glossa.extension_contracts.message_envelopes.error_payload.service Runtime error payload services identify the failing integration surface.
 export type ErrorService = "ai" | "anki" | "runtime";
 
-export interface MessageEnvelope<TType extends string, TSource extends MessageSource, TTarget extends MessageTarget, TPayload> {
+// @constraint glossa.extension_contracts.message_envelopes.envelope_shape Runtime envelopes carry type, version, request id, source, target, creation time, and payload.
+export interface MessageEnvelope<TType extends string, TSource extends MessageSource, TTarget extends MessageSource, TPayload> {
   type: TType;
   version: MessageVersion;
   requestId: string;
@@ -72,35 +76,28 @@ export interface MessageEnvelope<TType extends string, TSource extends MessageSo
   payload: TPayload;
 }
 
-export interface GlossRequestPayload {
-  pageUrl: string;
-  sentences: SentenceCandidate[];
-}
-
-export interface GlossResponsePayload {
-  items: GlossItem[];
-}
-
-export interface GlossScanPayload {
-  scanId: string;
-  pageUrl: string;
-  sentences: SentenceCandidate[];
-}
-
 export interface GlossScanStartPayload {
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_start.scan_id Start messages identify the scan session.
   scanId: string;
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_start.page_url Start messages identify the scanned page URL.
   pageUrl: string;
 }
 
 export interface GlossScanChunkPayload {
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk.scan_id Chunk messages identify their scan session.
   scanId: string;
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk.chunk_id Chunk messages identify their backpressure unit.
   chunkId: string;
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk.chunk_index Chunk messages carry their zero-based order within the scan.
   chunkIndex: number;
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk.page_url Chunk messages identify the page URL used by lookup and traces.
   pageUrl: string;
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk.sentences Chunk messages carry the sentence candidates for that batch.
   sentences: SentenceCandidate[];
 }
 
 export interface GlossScanEndPayload {
+  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_end.payload_scan_id End messages identify the scan session to finish.
   scanId: string;
 }
 
@@ -146,7 +143,6 @@ export interface UserWordClickPayload {
 
 export interface WordClickedOkPayload {
   noteId?: number;
-  noteIds?: number[];
 }
 
 export interface WordCardDuplicatePayload {
@@ -176,9 +172,6 @@ export interface ErrorPayload {
   status?: number;
 }
 
-export type GlossRequestMessage = MessageEnvelope<"gloss.request", "content-script", "service-worker", GlossRequestPayload>;
-export type GlossResponseMessage = MessageEnvelope<"gloss.response", "service-worker", "content-script", GlossResponsePayload>;
-export type GlossScanMessage = GlossPortMessage<"gloss.scan", GlossScanPayload>;
 export type GlossScanStartMessage = GlossPortMessage<"gloss.scan.start", GlossScanStartPayload>;
 export type GlossScanChunkMessage = GlossPortMessage<"gloss.scan.chunk", GlossScanChunkPayload>;
 export type GlossScanEndMessage = GlossPortMessage<"gloss.scan.end", GlossScanEndPayload>;
@@ -197,7 +190,8 @@ export type GlossCacheClearedMessage = MessageEnvelope<"gloss.cache.cleared", "s
 export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
 export type OptionsErrorMessage = MessageEnvelope<"error", "service-worker", "options", ErrorPayload>;
 
-export type GlossPortInboundMessage = GlossScanMessage | GlossScanStartMessage | GlossScanChunkMessage | GlossScanEndMessage;
+// @constraint glossa.extension_contracts.message_envelopes.gloss_port_inbound Gloss ports accept start, chunk, and end messages from content scan sessions.
+export type GlossPortInboundMessage = GlossScanStartMessage | GlossScanChunkMessage | GlossScanEndMessage;
 export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage | GlossChunkAckMessage;
 
 export type ContentToBackgroundMessage = UserWordClickMessage | SettingsGetMessage;
@@ -208,7 +202,10 @@ export type BackgroundResponseMessage = WordClickedOkMessage | WordCardDuplicate
 
 export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
-export type KnownWordListId = "junior-high" | "senior-high" | "cet4" | "cet6" | "toefl" | "gre" | "coca-20000";
+// @constraint glossa.word_memory.known_word_filter.ids Known-word filter ids are the shared source of truth for settings validation and lexicon metadata.
+export const KNOWN_WORD_LIST_IDS = ["junior-high", "senior-high", "cet4", "cet6", "toefl", "gre", "coca-20000"] as const;
+// @constraint glossa.word_memory.known_word_filter.id_type The known-word filter id type is derived from the shared id tuple.
+export type KnownWordListId = typeof KNOWN_WORD_LIST_IDS[number];
 
 export const GLOSS_TARGET_LANG = "zh-CN";
 

@@ -2,23 +2,24 @@
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { GLOSS_TARGET_LANG, type AnkiCard, type AnkiCardOutput, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
 
-export interface GlossBackendInput {
-  settings: GlossaSettings;
-  sentence: string;
-  tokens: TokenCandidate[];
-}
-
+// @constraint glossa.ai_requests.glossa_backend.gloss_frame.output_items Gloss frame responses return gloss items keyed to requested tokens.
 export interface GlossBackendOutput {
+  // @constraint glossa.ai_requests.glossa_backend.gloss_frame.output_items.items Gloss frame response items contain the glosses accepted by shared output validation.
   items: GlossItem[];
 }
 
+// @constraint glossa.ai_requests.glossa_backend.gloss_frame.input_item Each gloss frame input item carries one sentence-grounded token lookup.
 export interface GlossFrameItem {
+  // @constraint glossa.ai_requests.glossa_backend.gloss_frame.input_item.sentence Each gloss frame item carries the source sentence that grounds the token.
   sentence: string;
+  // @constraint glossa.ai_requests.glossa_backend.gloss_frame.input_item.token Each gloss frame item carries one token candidate from that sentence.
   token: TokenCandidate;
 }
 
 export interface GlossFrameBackendInput {
+  // @constraint glossa.ai_requests.glossa_backend.gloss_frame.input_settings Gloss frame inputs carry the active settings used for provider selection and request shaping.
   settings: GlossaSettings;
+  // @constraint glossa.ai_requests.glossa_backend.gloss_frame.input_items Gloss frame inputs batch sentence-grounded token items for one provider request.
   items: GlossFrameItem[];
 }
 
@@ -30,7 +31,6 @@ export interface AnkiCardInput {
 
 // @intent glossa.ai_requests.backend_interface The AI backend interface is the active boundary for gloss and card generation providers.
 export interface AiBackend {
-  gloss(input: GlossBackendInput): Promise<GlossBackendOutput>;
   glossFrame(input: GlossFrameBackendInput): Promise<GlossBackendOutput>;
   ankiCard(input: AnkiCardInput): Promise<AnkiCardOutput>;
 }
@@ -38,28 +38,6 @@ export interface AiBackend {
 // @behavior glossa.ai_requests.glossa_backend Non-OpenAI providers send generation tasks to configured glossa-backend endpoints.
 export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
   return {
-    async gloss(input) {
-      if (isOpenAiProvider(input.settings.ai.provider)) {
-        const output = await callOpenAiForTask(fetchImpl, input.settings, glossSystemInstruction(), {
-          task: "gloss",
-          prompt: input.settings.prompts.gloss,
-          targetLang: GLOSS_TARGET_LANG,
-          sentence: input.sentence,
-          tokens: input.tokens
-        });
-        return parseJsonOutput(output, validateGlossBackendOutput);
-      }
-      // @behavior glossa.ai_requests.glossa_backend.gloss The glossa-backend gloss request posts one sentence, token list, target language, prompts, and version inputs.
-      return postJson(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/gloss`, {
-        sentence: input.sentence,
-        tokens: input.tokens,
-        targetLang: GLOSS_TARGET_LANG,
-        prompt: input.settings.prompts.gloss,
-        reasoningEffort: input.settings.ai.reasoningEffort,
-        promptVersion: input.settings.promptVersion,
-        modelVersion: input.settings.modelVersion
-      }, undefined, input.settings.ai.requestTimeoutMs, validateGlossBackendOutput);
-    },
     async glossFrame(input) {
       if (isOpenAiProvider(input.settings.ai.provider)) {
         const output = await callOpenAiForTask(fetchImpl, input.settings, glossSystemInstruction(), {
@@ -313,20 +291,20 @@ function validateOpenAiCompletionResponse(value: unknown): OpenAiCompletionRespo
   };
 }
 
-// @constraint glossa.ai_requests.glossa_backend.gloss.validation Gloss backend responses must expose an items array before gloss items are accepted.
+// @constraint glossa.ai_requests.glossa_backend.gloss_frame.validation Gloss backend responses must expose an items array before gloss items are accepted.
 function validateGlossBackendOutput(value: unknown): GlossBackendOutput {
   assertRecord(value);
-  // @constraint glossa.ai_requests.glossa_backend.gloss.validation.items Gloss backend responses must expose items as an array.
+  // @constraint glossa.ai_requests.glossa_backend.gloss_frame.validation.items Gloss backend responses must expose items as an array.
   if (!Array.isArray(value.items)) {
     throw invalidResponseShape();
   }
   return { items: value.items.map(validateGlossItem) };
 }
 
-// @constraint glossa.ai_requests.glossa_backend.gloss.item_validation Gloss items must carry token id, target text, display text, and optional phrase text.
+// @constraint glossa.ai_requests.glossa_backend.gloss_frame.item_validation Gloss items must carry token id, target text, display text, and optional phrase text.
 function validateGlossItem(value: unknown): GlossItem {
   assertRecord(value);
-  // @constraint glossa.ai_requests.glossa_backend.gloss.item_validation.fields Gloss item fields must preserve string token id, target text, display text, and optional phrase.
+  // @constraint glossa.ai_requests.glossa_backend.gloss_frame.item_validation.fields Gloss item fields must preserve string token id, target text, display text, and optional phrase.
   if (
     typeof value.tokenId !== "string"
     || typeof value.targetText !== "string"

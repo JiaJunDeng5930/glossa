@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createAiBackend } from "../../src/background/ai";
-import { DEFAULT_SETTINGS, type GlossaSettings } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, type GlossaSettings, type TokenCandidate } from "../../src/shared/types";
 
 describe("AI backend adapters", () => {
   // @verifies glossa.ai_requests.openai.responses
@@ -13,11 +13,7 @@ describe("AI backend adapters", () => {
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
     const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
 
-    await createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: []
-    });
+    await createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
 
     expect(fetchImpl).toHaveBeenCalledWith("https://api.openai.com/v1/responses", expect.objectContaining({
       body: expect.stringContaining("\"reasoning\":{\"effort\":\"high\"}")
@@ -34,11 +30,9 @@ describe("AI backend adapters", () => {
     }));
     const settings = settingsFor("openai-chat-completions", "https://api.openai.com/v1/chat/completions", "low");
 
-    const result = await createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: [{ id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }]
-    });
+    const result = await createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings, [
+      { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
+    ]));
 
     const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
     const body = JSON.parse(calls[0]![1].body as string) as {
@@ -72,27 +66,6 @@ describe("AI backend adapters", () => {
     expect(calls[0]![0]).toBe("https://ai.example.test/gloss");
     expect(body.items).toHaveLength(1);
     expect(body.targetLang).toBe("zh-CN");
-    expect(result.items[0]).toMatchObject({ display: "提交" });
-  });
-
-  // @verifies glossa.ai_requests.glossa_backend.gloss
-  it("sends single gloss requests to the glossa backend", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({
-      items: [{ tokenId: "t1", targetText: "submit", display: "提交" }]
-    }));
-    const settings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
-
-    const result = await createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: [{ id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }]
-    });
-
-    const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
-    const body = JSON.parse(calls[0]![1].body as string) as { sentence: string; tokens: unknown[]; targetLang: string };
-    expect(calls[0]![0]).toBe("https://ai.example.test/gloss");
-    expect(body).toMatchObject({ sentence: "Submit the form.", targetLang: "zh-CN" });
-    expect(body.tokens).toHaveLength(1);
     expect(result.items[0]).toMatchObject({ display: "提交" });
   });
 
@@ -149,11 +122,7 @@ describe("AI backend adapters", () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "bad key" }, 401));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
 
-    await expect(createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: []
-    })).rejects.toMatchObject({
+    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "unauthorized", service: "ai", status: 401 }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -164,11 +133,7 @@ describe("AI backend adapters", () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "missing" }, 404));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: []
-    })).rejects.toMatchObject({
+    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "not-found", service: "ai", status: 404 }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -182,11 +147,7 @@ describe("AI backend adapters", () => {
     });
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: []
-    })).rejects.toMatchObject({
+    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "network", service: "ai" }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -205,11 +166,7 @@ describe("AI backend adapters", () => {
     });
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    const result = await createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: []
-    });
+    const result = await createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
 
     expect(result.items).toEqual([]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -220,11 +177,7 @@ describe("AI backend adapters", () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "not json" }));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
 
-    await expect(createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: []
-    })).rejects.toMatchObject({
+    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -235,11 +188,7 @@ describe("AI backend adapters", () => {
     const fetchImpl = vi.fn(async () => textResponse("not json"));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: []
-    })).rejects.toMatchObject({
+    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -252,11 +201,9 @@ describe("AI backend adapters", () => {
     }));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).gloss({
-      settings,
-      sentence: "Submit the form.",
-      tokens: [{ id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }]
-    })).rejects.toMatchObject({
+    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings, [
+      { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
+    ]))).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -291,11 +238,7 @@ describe("AI backend adapters", () => {
       }));
       const settings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
 
-      const request = createAiBackend(fetchImpl as never).gloss({
-        settings,
-        sentence: "Submit the form.",
-        tokens: []
-      });
+      const request = createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
       const assertion = expect(request).rejects.toMatchObject({
         payload: { service: "ai" }
       });
@@ -329,11 +272,7 @@ describe("AI backend adapters", () => {
         }
       };
 
-      const request = createAiBackend(fetchImpl as never).gloss({
-        settings,
-        sentence: "Submit the form.",
-        tokens: []
-      });
+      const request = createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
       const assertion = expect(request).rejects.toMatchObject({
         payload: { service: "ai" }
       });
@@ -363,6 +302,16 @@ function settingsFor(
       apiKey: "test-key",
       reasoningEffort
     }
+  };
+}
+
+function glossFrameInput(settings: GlossaSettings, tokens: TokenCandidate[] = []) {
+  return {
+    settings,
+    items: tokens.map((token) => ({
+      sentence: "Submit the form.",
+      token
+    }))
   };
 }
 

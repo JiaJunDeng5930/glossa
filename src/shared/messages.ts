@@ -1,4 +1,5 @@
 // @constraint glossa.extension_contracts.message_envelopes Runtime requests, responses, and gloss-port traffic use versioned envelopes and nested payload structure checks before payloads are accepted.
+import { KNOWN_WORD_LIST_IDS } from "./types";
 import type {
   AiProvider,
   BackgroundResponseMessage,
@@ -10,12 +11,11 @@ import type {
   GlossChunkAckPayload,
   GlossDonePayload,
   GlossItem,
-  GlossScanChunkPayload,
-  GlossScanEndPayload,
   GlossPortInboundMessage,
   GlossPortOutboundMessage,
   GlossPortErrorPayload,
-  GlossScanPayload,
+  GlossScanChunkPayload,
+  GlossScanEndPayload,
   GlossScanStartPayload,
   GlossTokenPayload,
   GlossTokenStatus,
@@ -55,7 +55,6 @@ type BackgroundPayloadByType = {
 };
 
 type GlossPortPayloadByType = {
-  "gloss.scan": GlossScanPayload;
   "gloss.scan.start": GlossScanStartPayload;
   "gloss.scan.chunk": GlossScanChunkPayload;
   "gloss.scan.end": GlossScanEndPayload;
@@ -223,12 +222,6 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
 
 export function validateGlossPortInbound(value: unknown): GlossPortInboundMessage {
   const message = validateGlossPortEnvelope(value);
-  if (message.type === "gloss.scan") {
-    if (!isGlossScanPayload(message.payload)) {
-      throw new Error("Malformed gloss.scan payload");
-    }
-    return message as GlossPortInboundMessage;
-  }
   // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_start Gloss scan start messages must identify the scan and page before background lookup accepts them.
   if (message.type === "gloss.scan.start") {
     const payload = requirePlainPayload(message.payload);
@@ -399,15 +392,6 @@ function isUserWordClickPayload(value: unknown): value is UserWordClickPayload {
     && (value.allowDuplicateCard === undefined || typeof value.allowDuplicateCard === "boolean");
 }
 
-function isGlossScanPayload(value: unknown): value is GlossScanPayload {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return typeof value.scanId === "string"
-    && typeof value.pageUrl === "string"
-    && isSentenceCandidateArray(value.sentences);
-}
-
 function isGlossScanChunkPayload(value: unknown): value is GlossScanChunkPayload {
   if (!isPlainObject(value)) {
     return false;
@@ -494,8 +478,7 @@ function isWordClickedOkPayload(value: unknown): value is WordClickedOkPayload {
   if (!isPlainObject(value)) {
     return false;
   }
-  return (value.noteId === undefined || isFiniteNumber(value.noteId))
-    && (value.noteIds === undefined || isFiniteNumberArray(value.noteIds));
+  return value.noteId === undefined || isFiniteNumber(value.noteId);
 }
 
 function isWordCardDuplicatePayload(value: unknown): value is WordCardDuplicatePayload {
@@ -569,10 +552,6 @@ function isAnkiSettings(value: unknown): value is GlossaSettings["anki"] {
     && isFiniteNumber(value.duplicatePromptMs);
 }
 
-function isFiniteNumberArray(value: unknown): value is number[] {
-  return Array.isArray(value) && value.every(isFiniteNumber);
-}
-
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -606,11 +585,5 @@ function isReasoningEffort(value: unknown): value is ReasoningEffort {
 }
 
 function isKnownWordListId(value: unknown): value is KnownWordListId {
-  return value === "junior-high"
-    || value === "senior-high"
-    || value === "cet4"
-    || value === "cet6"
-    || value === "toefl"
-    || value === "gre"
-    || value === "coca-20000";
+  return typeof value === "string" && (KNOWN_WORD_LIST_IDS as readonly string[]).includes(value);
 }

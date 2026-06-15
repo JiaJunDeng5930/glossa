@@ -39,7 +39,7 @@ test("content bundle waits for manual activation before requesting glosses", asy
   });
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "手动");
-  expect(await sentMessageTypes(page)).toContain("gloss.scan");
+  expect(await sentMessageTypes(page)).toContain("gloss.scan.chunk");
 });
 
 // @verifies glossa.page_translation.activation
@@ -71,9 +71,9 @@ test("content bundle toggles page translation with the configured shortcut", asy
   await pressTranslationShortcut(page);
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
-  expect(await sentMessageTypes(page)).toContain("gloss.scan");
+  expect(await sentMessageTypes(page)).toContain("gloss.scan.chunk");
 
-  const scanCount = (await sentMessageTypes(page)).filter((type) => type === "gloss.scan").length;
+  const scanCount = (await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk").length;
 
   await pressTranslationShortcut(page);
 
@@ -85,13 +85,13 @@ test("content bundle toggles page translation with the configured shortcut", asy
   });
   await page.waitForTimeout(250);
 
-  expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan")).toHaveLength(scanCount);
+  expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk")).toHaveLength(scanCount);
   await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
 
   await pressTranslationShortcut(page);
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
-  expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan").length).toBe(scanCount + 1);
+  expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk").length).toBe(scanCount + 1);
 });
 
 // @verifies glossa.page_translation.activation
@@ -186,7 +186,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
   await expect(page.locator("#glossa-overlay")).toHaveCSS("--glossa-font-size", "18px");
   await page.waitForFunction(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
-    return sent.some((message) => message.type === "gloss.scan");
+    return sent.some((message) => message.type === "gloss.scan.chunk");
   });
   await page.keyboard.down("Alt");
   await expect(page.locator("#glossa-overlay")).toHaveAttribute("data-glossa-selecting", "true");
@@ -197,7 +197,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
   expect(await page.evaluate(() => Reflect.get(window, "buttonClicks"))).toBe(0);
   messages.push(...await page.evaluate(() => Reflect.get(window, "__glossaMessages") as unknown[]));
   expect(messages).toEqual(expect.arrayContaining([
-    expect.objectContaining({ type: "gloss.scan" }),
+    expect.objectContaining({ type: "gloss.scan.chunk" }),
     expect.objectContaining({ type: "word.clicked" })
   ]));
   await page.waitForFunction(() => {
@@ -932,7 +932,7 @@ test("content bundle resolves pending glosses after external page mutations", as
   });
   await page.waitForFunction(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
-    return sent.filter((message) => message.type === "gloss.scan").length > 1;
+    return sent.filter((message) => message.type === "gloss.scan.chunk").length > 1;
   });
   await page.evaluate(() => {
     (Reflect.get(window, "__resolvePendingAfterMutation") as () => void)();
@@ -998,7 +998,7 @@ test("content bundle leaves hidden tokens as original page text", async ({ page 
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
   await page.waitForFunction(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
-    return sent.some((message) => message.type === "gloss.scan");
+    return sent.some((message) => message.type === "gloss.scan.chunk");
   });
 
   await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
@@ -1006,6 +1006,7 @@ test("content bundle leaves hidden tokens as original page text", async ({ page 
 });
 
 // @verifies glossa.extension_contracts.restart_continuity
+// @verifies glossa.page_translation.gloss_session_error
 test("content bundle stops quietly when gloss messaging sees an invalidated extension context", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -1044,7 +1045,7 @@ test("content bundle handles invalidated extension context during word click", a
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
   await page.waitForFunction(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
-    return sent.some((message) => message.type === "gloss.scan");
+    return sent.some((message) => message.type === "gloss.scan.chunk");
   });
 
   await page.keyboard.down("Alt");
@@ -1437,7 +1438,7 @@ test("content bundle defers chunk outcomes until a large text-node scan finishes
   const scannedTokenCount = await page.evaluate(() => {
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string; payload?: { sentences?: Array<{ tokens?: unknown[] }> } }>;
     return sent
-      .filter((message) => message.type === "gloss.scan")
+      .filter((message) => message.type === "gloss.scan.chunk")
       .reduce((total, message) => total + (message.payload?.sentences ?? []).reduce((innerTotal, sentence) => {
         return innerTotal + (sentence.tokens?.length ?? 0);
       }, 0), 0);
@@ -1809,20 +1810,9 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
                 if (Reflect.get(window, "__glossaSuppressChunkAck") !== true) {
                   emit(glossChunkAck(message.payload.scanId, message.payload.chunkId, acceptedTokens));
                 }
-                const legacyScan = {
-                  type: "gloss.scan",
-                  version: 1,
-                  createdAt: Date.now(),
-                  payload: {
-                    scanId: message.payload.scanId,
-                    pageUrl: "https://example.test",
-                    sentences: message.payload.sentences
-                  }
-                };
-                sent.push(legacyScan);
                 const responder = Reflect.get(window, "__glossaOnScan");
                 if (typeof responder === "function") {
-                  responder(legacyScan, emit);
+                  responder(message, emit);
                 }
               }
               if (message.type === "gloss.scan.end" && message.payload?.scanId) {

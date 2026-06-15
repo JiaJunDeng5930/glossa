@@ -131,20 +131,6 @@ describe("extension message envelopes", () => {
     expect(() => validateContentMessage(malformed)).toThrow("Malformed word.clicked payload");
   });
 
-  it("validates gloss scan port messages", () => {
-    const message = createGlossPortMessage("gloss.scan", {
-      scanId: "scan-1",
-      pageUrl: "https://example.test/path",
-      sentences: []
-    });
-
-    expect(validateGlossPortInbound(message)).toMatchObject({
-      type: "gloss.scan",
-      version: 1,
-      payload: { scanId: "scan-1", pageUrl: "https://example.test/path", sentences: [] }
-    });
-  });
-
   it("validates chunked gloss scan port messages", () => {
     const start = createGlossPortMessage("gloss.scan.start", {
       scanId: "scan-1",
@@ -252,10 +238,10 @@ describe("extension message envelopes", () => {
       sentence: "Create archive card.",
       token: { id: "t1", sentenceId: "s1", surface: "archive", lemma: "archive", startOffset: 7, endOffset: 14 }
     });
-    const clickResponse = createBackgroundResponse(clickRequest, "word.clicked.ok", { noteIds: [123] });
+    const clickResponse = createBackgroundResponse(clickRequest, "word.clicked.ok", { noteId: 123 });
     const malformedClickResponse = {
       ...clickResponse,
-      payload: { noteIds: ["123"] }
+      payload: { noteId: "123" }
     };
 
     expect(() => validateBackgroundResponse(malformedSettingsResponse, settingsRequest)).toThrow("Malformed settings.response payload");

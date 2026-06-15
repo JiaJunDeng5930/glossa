@@ -134,10 +134,10 @@ async function handleWordClicked(
   if (createdNoteIds.length === 0) {
     return { kind: "created", payload: {} };
   }
-  // @behavior glossa.card_creation.note_request.response_payload Successful card creation returns the first note id and the complete note id list.
+  // @behavior glossa.card_creation.note_request.response_payload Successful card creation returns the first note id after settled Anki writes.
   const [noteId] = createdNoteIds as [number, ...number[]];
-  // @behavior glossa.card_creation.note_request.response_payload.created_ids Successful card creation returns the created note id list after settled Anki writes.
-  return { kind: "created", payload: { noteId, noteIds: createdNoteIds } };
+  // @behavior glossa.card_creation.note_request.response_payload.first_note Content success payloads expose the first created Anki note id.
+  return { kind: "created", payload: { noteId } };
 }
 
 interface CreateNotesResult {
