@@ -140,31 +140,9 @@ chrome.runtime.onConnect.addListener((port) => {
         safePost(port, createGlossPortMessage("gloss.done", { scanId: message.payload.scanId }));
         return;
       }
-      trace({
-        component: "service-worker",
-        operation: message.type,
-        result: "ok",
-        url: message.payload.pageUrl,
-        details: {
-          scanId: message.payload.scanId,
-          sentences: message.payload.sentences.length
-        }
-      });
-      const settings = await storage.settings.get();
-      await glossResolver.resolve(message.payload.pageUrl, message.payload.sentences, settings, Date.now(), {
-        emit(outcome) {
-          safePost(port, createGlossPortMessage("gloss.token", {
-            ...outcome,
-            scanId: message.payload.scanId
-          }));
-        },
-        isActive() {
-          return active;
-        }
-      });
-      safePost(port, createGlossPortMessage("gloss.done", { scanId: message.payload.scanId }));
     })().catch((error) => {
       const scanId = scanIdFrom(rawMessage);
+      // @constraint glossa.page_translation.gloss_session_error Gloss session failures emit a diagnostic trace and a gloss error payload for the active scan.
       trace({
         component: "service-worker",
         operation: "gloss.session",

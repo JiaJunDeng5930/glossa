@@ -1,7 +1,7 @@
 // @behavior requirements Requirement comments define a source-local requirement tree, direct verification references, and a synchronized AGENTS.md retrieval index.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import ts from "typescript";
 
 type RequirementTag = "@behavior" | "@constraint" | "@intent" | "@verifies";
@@ -95,7 +95,6 @@ interface SourceAnalysis {
   typeMembers: TypeMemberFact[];
 }
 
-const TAGS = ["@behavior", "@constraint", "@intent", "@verifies"] as const;
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 const GENERATED_DIRS = new Set([".git", "node_modules", "dist", "coverage", "playwright-report", "test-results", "worktree-glossa"]);
 const INDEX_START = "<!-- BEGIN AGENTS_MD_REQUIREMENT_INDEX -->";
@@ -320,7 +319,7 @@ function parseRequirements(file: SourceFile, diagnostics: Diagnostic[]): Require
     const body = normalizeCommentText(file.text.slice(range.pos, range.end));
     const matches = [...body.matchAll(/@(behavior|constraint|intent|verifies)\s+/g)];
     if (matches.length === 0) continue;
-    const line = offsetLine(file.text, range.pos);
+    const line = lineOf(source, range.pos);
     if (matches.length > 1) {
       diagnostics.push({ file: file.path, line, rule: "multiple-requirement-tags", message: "requirement comments must contain exactly one tag" });
       continue;
@@ -409,7 +408,7 @@ function bindRequirements(files: SourceFile[], comments: RequirementComment[], d
       const beforeFirstCode = file.text.slice(comment.end, firstCodeStart);
       // @behavior requirements.comment_binding.first_declaration A first requirement comment directly above the first declaration binds that declaration.
       if (comment.end <= firstCodeStart && onlyWhitespaceAndComments(beforeComment) && hasImportStatement(beforeFirstCode)) {
-        comment.target = { kind: "file", start: 0, end: file.text.length, line: 1, endLine: offsetLine(file.text, file.text.length), isFile: true };
+        comment.target = { kind: "file", start: 0, end: file.text.length, line: 1, endLine: lineOf(analysis.source, file.text.length), isFile: true };
         continue;
       }
       const target = nodes.find((node) => comment.end <= node.start && onlyWhitespaceAndComments(file.text.slice(comment.end, node.start)));
@@ -431,8 +430,8 @@ function collectBindableNodes(source: ts.SourceFile): BoundTarget[] {
       kind,
       start: node.getStart(source),
       end: node.getEnd(),
-      line: offsetLine(source.text, node.getStart(source)),
-      endLine: offsetLine(source.text, node.getEnd()),
+      line: lineOf(source, node.getStart(source)),
+      endLine: lineOf(source, node.getEnd()),
       isFile: false,
     });
   };
@@ -467,8 +466,8 @@ function collectTypeMemberFacts(source: ts.SourceFile): TypeMemberFact[] {
   const visit = (node: ts.Node): void => {
     if (ts.isPropertySignature(node) || ts.isMethodSignature(node) || ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node)) {
       facts.push({
-        startLine: offsetLine(source.text, node.getStart(source)),
-        endLine: offsetLine(source.text, node.getEnd()),
+        startLine: lineOf(source, node.getStart(source)),
+        endLine: lineOf(source, node.getEnd()),
         exported: isExportedTypeMember(node),
         implicitPublic: isImplicitPublicClassMember(node)
       });
@@ -1063,13 +1062,9 @@ function normalizePath(path: string): string {
   return relative(".", path).split(sep).join("/");
 }
 
-// @constraint requirements.diagnostic_output.line_numbers Source locations use one-based line numbers derived from character offsets.
-function offsetLine(text: string, offset: number): number {
-  let line = 1;
-  for (let index = 0; index < offset; index += 1) {
-    if (text.charCodeAt(index) === 10) line += 1;
-  }
-  return line;
+// @constraint requirements.diagnostic_output.line_numbers Source locations use TypeScript one-based line numbers derived from character offsets.
+function lineOf(source: ts.SourceFile, offset: number): number {
+  return source.getLineAndCharacterOfPosition(offset).line + 1;
 }
 
 // @behavior requirements.diagnostic_output.comment_locations Requirement comment failures report their source file and line.

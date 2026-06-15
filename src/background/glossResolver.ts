@@ -16,7 +16,7 @@ import type { ErrorPayload, GlossaSettings, GlossCacheEntry, GlossItem, GlossTok
 import { GLOSS_TARGET_LANG } from "../shared/types";
 
 export interface GlossResolver {
-  resolve(pageUrl: string, sentences: SentenceCandidate[], settings: GlossaSettings, now: number, sink: GlossResolverSink): Promise<void>;
+  // @constraint glossa.page_translation.lookup_order.session_interface Gloss resolver callers create explicit sessions before streaming scan chunks and finishing.
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
 }
 
@@ -277,14 +277,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     };
   };
 
-  return {
-    createSession,
-    async resolve(pageUrl, sentences, settings, now, sink) {
-      const session = createSession(pageUrl, settings, now, sink);
-      await session.acceptChunk("legacy", 0, sentences);
-      await session.finish();
-    }
-  };
+  return { createSession };
 }
 
 async function resolveToken(input: {

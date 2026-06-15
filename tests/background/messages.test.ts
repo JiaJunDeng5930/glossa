@@ -15,7 +15,6 @@ describe("background message handler", () => {
   // @verifies glossa.card_creation.note_request.ids
   // @verifies glossa.card_creation.note_request.empty_result
   // @verifies glossa.card_creation.note_request.response_payload
-  // @verifies glossa.card_creation.note_request.response_payload.created_ids
   // @verifies glossa.card_creation.duplicate_gate.record_key
   // @verifies glossa.card_creation.duplicate_gate.record_lang
   // @verifies glossa.card_creation.duplicate_gate.record_lemma
@@ -38,7 +37,6 @@ describe("background message handler", () => {
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
         cards: [
@@ -52,7 +50,7 @@ describe("background message handler", () => {
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
     const response = await handler(message);
 
-    expect(response).toMatchObject({ type: "word.clicked.ok", requestId: message.requestId, payload: { noteId: 42, noteIds: [42, 43] } });
+    expect(response).toMatchObject({ type: "word.clicked.ok", requestId: message.requestId, payload: { noteId: 42 } });
     expect(anki.createNote).toHaveBeenCalledTimes(2);
     expect(await storage.lexicon.get("en:submit")).toMatchObject({
       state: "learning_active",
@@ -77,7 +75,6 @@ describe("background message handler", () => {
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
         cards: [
@@ -101,7 +98,7 @@ describe("background message handler", () => {
     firstNote.resolve(42);
     secondNote.resolve(43);
 
-    await expect(response).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42, noteIds: [42, 43] } });
+    await expect(response).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
   });
 
   // @verifies glossa.card_creation.note_request.settled_result
@@ -119,7 +116,6 @@ describe("background message handler", () => {
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
         cards: [
@@ -160,7 +156,6 @@ describe("background message handler", () => {
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
         cards: [
@@ -200,7 +195,6 @@ describe("background message handler", () => {
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
     };
@@ -236,7 +230,6 @@ describe("background message handler", () => {
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
     };
@@ -255,7 +248,7 @@ describe("background message handler", () => {
     expect(anki.createNote).toHaveBeenCalledTimes(1);
     note.resolve(42);
 
-    await expect(first).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42, noteIds: [42] } });
+    await expect(first).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
     await expect(second).resolves.toMatchObject({
       type: "word.card.duplicate",
       requestId: secondMessage.requestId,
@@ -284,7 +277,7 @@ describe("background message handler", () => {
       sentence: "A submit button finishes the form.",
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
-    const ai = { gloss: vi.fn(), glossFrame: vi.fn(), ankiCard: vi.fn() };
+    const ai = { glossFrame: vi.fn(), ankiCard: vi.fn() };
     const anki = { createNote: vi.fn() };
 
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
@@ -311,7 +304,6 @@ describe("background message handler", () => {
       allowDuplicateCard: true
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
     };
@@ -320,7 +312,7 @@ describe("background message handler", () => {
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
     const response = await handler(message);
 
-    expect(response).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42, noteIds: [42] } });
+    expect(response).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
     expect(await storage.cardedWords.get("en:submit")).toMatchObject({ createdAt: 1_000 });
   });
 
@@ -340,7 +332,6 @@ describe("background message handler", () => {
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
     const ai = {
-      gloss: vi.fn(),
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
     };
@@ -389,7 +380,7 @@ describe("background message handler", () => {
       sentence: "A submit button finishes the form.",
       token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
     });
-    const ai = { gloss: vi.fn(), glossFrame: vi.fn(), ankiCard: vi.fn() };
+    const ai = { glossFrame: vi.fn(), ankiCard: vi.fn() };
     const anki = { createNote: vi.fn(async () => 42) };
 
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });

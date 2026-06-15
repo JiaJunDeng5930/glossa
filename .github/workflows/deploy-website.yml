@@ -29,19 +29,10 @@ jobs:
       PAGES_BRANCH: ${{ github.head_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: website/package-lock.json
-      - run: npm ci
-        working-directory: website
-      - run: npm run build
-        working-directory: website
       - uses: cloudflare/wrangler-action@v3
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy website/dist --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ env.PAGES_BRANCH }}
+          command: pages deploy website/public --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ env.PAGES_BRANCH }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}

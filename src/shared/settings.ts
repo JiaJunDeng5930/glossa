@@ -1,6 +1,7 @@
 // @behavior glossa.settings_save.default_overrides Saved settings contain only normalized values that differ from the current defaults.
 import {
   DEFAULT_SETTINGS,
+  KNOWN_WORD_LIST_IDS,
   type AiSettings,
   type AnkiSettings,
   type AppearanceSettings,
@@ -129,5 +130,5 @@ function positiveNumber(value: unknown, fallback: number): number {
 }
 
 function isKnownWordList(value: unknown): value is KnownWordListId {
-  return typeof value === "string" && ["junior-high", "senior-high", "cet4", "cet6", "toefl", "gre", "coca-20000"].includes(value);
+  return typeof value === "string" && (KNOWN_WORD_LIST_IDS as readonly string[]).includes(value);
 }

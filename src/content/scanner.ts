@@ -17,15 +17,13 @@ export interface ScannedSentence extends SentenceCandidate {
   tokens: ScannedToken[];
 }
 
-export interface ScanResult {
-  sentences: ScannedSentence[];
-  tokens: ScannedToken[];
-  stats: ScanStats;
-}
-
+// @constraint glossa.page_translation.candidate_scan.chunk_contract Scan chunks contain the chunk index plus the sentence and token candidates emitted for that batch.
 export interface ScanChunk {
+  // @constraint glossa.page_translation.candidate_scan.chunk_contract.index Scan chunks expose their zero-based batch index.
   chunkIndex: number;
+  // @constraint glossa.page_translation.candidate_scan.chunk_contract.sentences Scan chunks carry the sentence candidates produced in that batch.
   sentences: ScannedSentence[];
+  // @constraint glossa.page_translation.candidate_scan.chunk_contract.tokens Scan chunks carry the token candidates produced in that batch.
   tokens: ScannedToken[];
 }
 
@@ -88,104 +86,14 @@ const SKIPPED_SELECTOR = [
   "#glossa-overlay"
 ].join(",");
 
-export function scanDocumentText(
-  doc: Document,
-  knownWords: ReadonlySet<string>,
-  options: ScanOptions = {}
-): ScanResult {
-  const stats = createScanStats();
-  const textNodes = doc.body ? collectTextNodes(doc.body, stats) : [];
-  const sentences: ScannedSentence[] = [];
-  const tokens: ScannedToken[] = [];
-  const lemmaCounts = new Map<string, number>();
-  let sentenceIndex = 0;
-  const scanVersion = options.scanVersion ?? 0;
-  const maxOccurrencesPerLemma = options.maxOccurrencesPerLemma ?? 1;
-  const minWordLength = options.minWordLength ?? 3;
-  const minContextChars = options.minContextChars ?? 12;
-
-  for (const textNode of textNodes) {
-    stats.scannedTextNodes += 1;
-    const text = textNode.nodeValue ?? "";
-    for (const sentenceMatch of text.matchAll(SENTENCE_RE)) {
-      const raw = sentenceMatch[0];
-      const trimmed = raw.trim();
-      if (trimmed.length === 0) {
-        stats.rejectedByText += 1;
-        continue;
-      }
-      if (trimmed.length < minContextChars) {
-        stats.rejectedByText += 1;
-        continue;
-      }
-      const leading = raw.length - raw.trimStart().length;
-      const sentenceStart = (sentenceMatch.index ?? 0) + leading;
-      const sentenceId = `s${sentenceIndex++}`;
-      const sentenceTokens: ScannedToken[] = [];
-
-      for (const wordMatch of trimmed.matchAll(WORD_RE)) {
-        const surface = wordMatch[0];
-        if (!isEligibleSurface(surface, minWordLength)) {
-          stats.rejectedByShape += 1;
-          continue;
-        }
-        const lemma = normalizeLemma(surface);
-        if (isKnownLemma(knownWords, lemma)) {
-          stats.rejectedByKnownWord += 1;
-          continue;
-        }
-        const count = lemmaCounts.get(lemma) ?? 0;
-        if (count >= maxOccurrencesPerLemma) {
-          stats.rejectedByFrequency += 1;
-          continue;
-        }
-        const startOffset = wordMatch.index ?? 0;
-        const endOffset = startOffset + surface.length;
-        const nodeStartOffset = sentenceStart + startOffset;
-        const nodeEndOffset = sentenceStart + endOffset;
-        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset, options.requireViewportRange === true)) {
-          stats.rejectedByVisibility += 1;
-          continue;
-        }
-        const sourceFingerprint = createSourceFingerprint(text, nodeStartOffset, nodeEndOffset);
-        const token: ScannedToken = {
-          id: createTokenId(textNode, surface, lemma, sentenceStart, sourceFingerprint),
-          sentenceId,
-          surface,
-          lemma,
-          startOffset,
-          endOffset,
-          textNode,
-          nodeStartOffset,
-          nodeEndOffset,
-          sentenceText: trimmed,
-          sourceText: surface,
-          sourceFingerprint,
-          scanVersion
-        };
-        sentenceTokens.push(token);
-        tokens.push(token);
-        lemmaCounts.set(lemma, count + 1);
-        stats.candidateWords += 1;
-      }
-
-      sentences.push({
-        id: sentenceId,
-        text: trimmed,
-        tokens: sentenceTokens
-      });
-    }
-  }
-
-  return { sentences, tokens, stats };
-}
-
+// @constraint glossa.page_translation.candidate_scan.chunk_stream Chunk scanning streams DOM-grounded candidates and returns aggregate scan stats.
 export async function scanDocumentTextInChunks(
   doc: Document,
   knownWords: ReadonlySet<string>,
   options: ScanChunkOptions,
   onChunk: (chunk: ScanChunk) => Promise<boolean | void> | boolean | void
 ): Promise<ScanStats> {
+  // @constraint glossa.page_translation.candidate_scan.chunk_stream.stats Chunk scanning returns one aggregate stats object for the full document scan.
   const stats = createScanStats();
   const textNodes = doc.body ? collectTextNodes(doc.body, stats) : [];
   const lemmaCounts = new Map<string, number>();
