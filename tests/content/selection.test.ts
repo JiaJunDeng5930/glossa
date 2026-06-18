@@ -266,6 +266,34 @@ describe("selection controller", () => {
     controller.detach();
   });
 
+  // @verifies glossa.page_translation.shortcut_selection.chord_modifier_release
+  it("leaves combination selection when a chord modifier is released", () => {
+    document.body.innerHTML = `<button id="save">Save draft</button>`;
+    const button = document.querySelector<HTMLButtonElement>("#save")!;
+    const onWordSelected = vi.fn();
+    const onButtonClick = vi.fn();
+    button.addEventListener("click", onButtonClick);
+    installCaretPosition(button.firstChild as Text, 2);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt+V",
+      onWordSelected
+    });
+    controller.attach();
+
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "v", altKey: true, bubbles: true, cancelable: true }));
+    const altUp = new KeyboardEvent("keyup", { key: "Alt", bubbles: true, cancelable: true });
+    button.dispatchEvent(altUp);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(altUp.defaultPrevented).toBe(true);
+    expect(onWordSelected).not.toHaveBeenCalled();
+    expect(onButtonClick).toHaveBeenCalledTimes(1);
+
+    controller.detach();
+  });
+
   it("ignores plain-text clicks that resolve outside an English word", () => {
     document.body.innerHTML = `<p id="target">Save  draft</p>`;
     const target = document.querySelector<HTMLParagraphElement>("#target")!;
