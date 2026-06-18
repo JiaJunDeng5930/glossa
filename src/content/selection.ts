@@ -54,7 +54,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
     }
     // @behavior glossa.page_translation.shortcut_selection.freeze_keys Shortcut key press and release events are consumed while shortcut selection mode is active.
     if (active) {
-      // @behavior glossa.page_translation.shortcut_selection.strict_key_hold A keydown outside the configured shortcut exits selection mode so chorded shortcuts stay with the page.
+      // @behavior glossa.page_translation.shortcut_selection.strict_key_hold A keydown outside the configured shortcut exits selection mode so page-owned chorded shortcuts stay with the page.
       setActive(false);
     }
   };

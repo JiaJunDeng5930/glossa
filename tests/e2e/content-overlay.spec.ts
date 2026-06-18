@@ -94,6 +94,40 @@ test("content bundle toggles page translation with the configured shortcut", asy
   expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk").length).toBe(scanCount + 1);
 });
 
+// @verifies glossa.page_translation.shortcut_selection.plugin_shortcut_chord
+test("content bundle keeps plugin shortcut chords while exiting selection mode", async ({ page }) => {
+  await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Alt+G",
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const shortcutToken = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "shortcut");
+      if (shortcutToken) {
+        emit(glossToken(message.payload.scanId, shortcutToken.id, "ready", { tokenId: shortcutToken.id, targetText: shortcutToken.surface, display: "??" }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "??");
+
+  await page.keyboard.down("Alt");
+  await expect(page.locator("#glossa-overlay")).toHaveAttribute("data-glossa-selecting", "true");
+  await page.keyboard.press("KeyG");
+
+  await expect(page.locator("#glossa-overlay")).not.toHaveAttribute("data-glossa-selecting", "true");
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await page.keyboard.up("Alt");
+});
+
 // @verifies glossa.page_translation.activation
 test("content bundle drops pending shortcut glosses after translation is toggled off", async ({ page }) => {
   await page.setContent("<main><p>Pending archive appears here.</p></main>");
