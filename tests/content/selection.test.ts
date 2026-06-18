@@ -7,6 +7,7 @@ describe("selection controller", () => {
   afterEach(() => {
     Reflect.deleteProperty(document, "caretPositionFromPoint");
     Reflect.deleteProperty(document, "caretRangeFromPoint");
+    vi.restoreAllMocks();
   });
 
   it("enters selection mode while the shortcut is held and captures word clicks", () => {
@@ -111,6 +112,33 @@ describe("selection controller", () => {
     expect(onWheel).not.toHaveBeenCalled();
     expect(onTouchMove).not.toHaveBeenCalled();
     expect(onKey).not.toHaveBeenCalled();
+
+    controller.detach();
+  });
+
+  // @verifies glossa.page_translation.shortcut_selection.freeze_scroll.lifecycle
+  it("attaches scroll blockers only while selection mode is active", () => {
+    const addSpy = vi.spyOn(document, "addEventListener");
+    const removeSpy = vi.spyOn(document, "removeEventListener");
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected: vi.fn()
+    });
+    controller.attach();
+
+    expect(addSpy).not.toHaveBeenCalledWith("wheel", expect.any(Function), expect.objectContaining({ passive: false }));
+    expect(addSpy).not.toHaveBeenCalledWith("touchmove", expect.any(Function), expect.objectContaining({ passive: false }));
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true, cancelable: true }));
+
+    expect(addSpy).toHaveBeenCalledWith("wheel", expect.any(Function), expect.objectContaining({ passive: false }));
+    expect(addSpy).toHaveBeenCalledWith("touchmove", expect.any(Function), expect.objectContaining({ passive: false }));
+
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true, cancelable: true }));
+
+    expect(removeSpy).toHaveBeenCalledWith("wheel", expect.any(Function), expect.objectContaining({ passive: false }));
+    expect(removeSpy).toHaveBeenCalledWith("touchmove", expect.any(Function), expect.objectContaining({ passive: false }));
 
     controller.detach();
   });

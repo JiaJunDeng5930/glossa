@@ -27,6 +27,7 @@ export interface SelectionControllerOptions {
 
 export function createSelectionController(options: SelectionControllerOptions): SelectionController {
   let active = false;
+  let scrollBlockersAttached = false;
   const doc = options.document;
   const activeListenerOptions = { capture: true, passive: false };
 
@@ -36,8 +37,10 @@ export function createSelectionController(options: SelectionControllerOptions): 
     }
     active = nextActive;
     if (active) {
+      attachScrollBlockers();
       doc.documentElement.dataset.glossaSelecting = "true";
     } else {
+      detachScrollBlockers();
       delete doc.documentElement.dataset.glossaSelecting;
     }
     options.onSelectionModeChange?.(active);
@@ -106,6 +109,23 @@ export function createSelectionController(options: SelectionControllerOptions): 
     // @behavior glossa.page_translation.shortcut_selection.freeze_scroll Wheel and touch scrolling are consumed while shortcut selection mode is active.
     consumeEvent(event);
   };
+  // @constraint glossa.page_translation.shortcut_selection.freeze_scroll.lifecycle Scroll-blocking listeners are registered only while shortcut selection mode is active.
+  function attachScrollBlockers(): void {
+    if (scrollBlockersAttached) {
+      return;
+    }
+    doc.addEventListener("wheel", onPageScroll, activeListenerOptions);
+    doc.addEventListener("touchmove", onPageScroll, activeListenerOptions);
+    scrollBlockersAttached = true;
+  }
+  function detachScrollBlockers(): void {
+    if (!scrollBlockersAttached) {
+      return;
+    }
+    doc.removeEventListener("wheel", onPageScroll, activeListenerOptions);
+    doc.removeEventListener("touchmove", onPageScroll, activeListenerOptions);
+    scrollBlockersAttached = false;
+  }
   const onFocusLoss = () => {
     if (!active) {
       return;
@@ -126,8 +146,6 @@ export function createSelectionController(options: SelectionControllerOptions): 
       doc.addEventListener("dblclick", onPageInteraction, activeListenerOptions);
       doc.addEventListener("auxclick", onPageInteraction, activeListenerOptions);
       doc.addEventListener("contextmenu", onPageInteraction, activeListenerOptions);
-      doc.addEventListener("wheel", onPageScroll, activeListenerOptions);
-      doc.addEventListener("touchmove", onPageScroll, activeListenerOptions);
       doc.addEventListener("visibilitychange", onFocusLoss, true);
       doc.defaultView?.addEventListener("blur", onFocusLoss, true);
     },
@@ -142,8 +160,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
       doc.removeEventListener("dblclick", onPageInteraction, activeListenerOptions);
       doc.removeEventListener("auxclick", onPageInteraction, activeListenerOptions);
       doc.removeEventListener("contextmenu", onPageInteraction, activeListenerOptions);
-      doc.removeEventListener("wheel", onPageScroll, activeListenerOptions);
-      doc.removeEventListener("touchmove", onPageScroll, activeListenerOptions);
+      detachScrollBlockers();
       doc.removeEventListener("visibilitychange", onFocusLoss, true);
       doc.defaultView?.removeEventListener("blur", onFocusLoss, true);
       setActive(false);

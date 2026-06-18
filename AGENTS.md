@@ -320,7 +320,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.shortcut_selection.focus_loss|glossa.page_translation.shortcut_selection.focus_loss.{}
 |glossa.page_translation.shortcut_selection.freeze_keys|glossa.page_translation.shortcut_selection.freeze_keys.{}
 |glossa.page_translation.shortcut_selection.freeze_pointer|glossa.page_translation.shortcut_selection.freeze_pointer.{}
-|glossa.page_translation.shortcut_selection.freeze_scroll|glossa.page_translation.shortcut_selection.freeze_scroll.{}
+|glossa.page_translation.shortcut_selection.freeze_scroll|glossa.page_translation.shortcut_selection.freeze_scroll.{lifecycle}
+|glossa.page_translation.shortcut_selection.freeze_scroll.lifecycle|glossa.page_translation.shortcut_selection.freeze_scroll.lifecycle.{}
 |glossa.page_translation.shortcut_selection.selection_note|glossa.page_translation.shortcut_selection.selection_note.{}
 |glossa.page_translation.shortcut_selection.strict_key_hold|glossa.page_translation.shortcut_selection.strict_key_hold.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
