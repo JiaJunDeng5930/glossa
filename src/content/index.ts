@@ -575,6 +575,7 @@ async function boot(): Promise<void> {
     if (!(event instanceof KeyboardEvent)) {
       return;
     }
+    // @behavior glossa.page_translation.shortcut_selection.plugin_shortcut_chord A Glossa shortcut chord keeps its extension action while shortcut selection mode exits through its own key listener afterward.
     if (matchesShortcut(event, settings?.translateShortcutKey ?? "Alt+G")) {
       event.preventDefault();
       event.stopPropagation();
