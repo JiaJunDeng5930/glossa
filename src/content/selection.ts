@@ -60,6 +60,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
   };
   const onKeyUp = (event: KeyboardEvent) => {
     if (active && isShortcutRelease(event, options.shortcutKey)) {
+      // @behavior glossa.page_translation.shortcut_selection.chord_modifier_release Releasing any key in a configured selection chord exits selection mode so page input is not frozen after a partial chord release.
       setActive(false);
       consumeEvent(event);
       return;

@@ -51,7 +51,12 @@ export function isShortcutRelease(event: KeyboardEvent, shortcut: string): boole
     return false;
   }
   const key = normalizeKey(event.key);
-  return key === parsed.key || key === parsed.modifierOnly;
+  return key === parsed.key
+    || key === parsed.modifierOnly
+    || (key === "Ctrl" && parsed.ctrl)
+    || (key === "Alt" && parsed.alt)
+    || (key === "Shift" && parsed.shift)
+    || (key === "Meta" && parsed.meta);
 }
 
 function parseShortcut(shortcut: string): {
