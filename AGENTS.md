@@ -8,6 +8,7 @@ Glossa is a Chrome Manifest V3 extension built with TypeScript, esbuild, native 
 - `src/background/*`: message orchestration, AI calls, AnkiConnect calls, cache lookup, and vocabulary state persistence. Service worker code persists task state and cache results.
 - `src/core/*`: vocabulary state machine, lemma normalization, known-word-list loading, and cache key construction.
 - `src/storage/db.ts`: minimal wrapper for `chrome.storage.local` settings and IndexedDB-backed lexicon, cache, and carded-word stores.
+- `src/onboarding/*`: first-run extension page opened after a fresh install. Each step teaches one action or setting, then writes completed setup choices through shared settings storage.
 - `src/options/*`: settings UI for shortcut, known-word filter, AI endpoint, OpenAI Responses API key, AnkiConnect endpoint, prompts, and connection checks.
 - `src/popup/*`: action popup menu. The translate button sends a tab message that activates content translation for the current page.
 - `src/shared/shortcut.ts`: shared shortcut capture and matching rules for options and content selection mode.
@@ -64,7 +65,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |binding:one_requirement_comment_per_code_unit
 |inner_details:descendant_ids_near_inner_code_units
 |tags:{@behavior,@constraint,@intent,@verifies}
-|glossa|glossa.{ai_requests,cache_identity,card_creation,extension_contracts,extension_storage,failure_reporting,page_translation,settings_save,shortcuts,translation_start_popup,word_memory}
+|glossa|glossa.{ai_requests,cache_identity,card_creation,extension_contracts,extension_storage,failure_reporting,onboarding,page_translation,settings_save,shortcuts,translation_start_popup,word_memory}
 |glossa.ai_requests|glossa.ai_requests.{backend_interface,failure,glossa_backend,openai,reasoning_effort}
 |glossa.ai_requests.backend_interface|glossa.ai_requests.backend_interface.{json_helper}
 |glossa.ai_requests.backend_interface.json_helper|glossa.ai_requests.backend_interface.json_helper.{}
@@ -278,6 +279,12 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.failure_reporting|glossa.failure_reporting.{trace_privacy,user_copy}
 |glossa.failure_reporting.trace_privacy|glossa.failure_reporting.trace_privacy.{}
 |glossa.failure_reporting.user_copy|glossa.failure_reporting.user_copy.{}
+|glossa.onboarding|glossa.onboarding.{ai_check,anki_check,install_open,settings_save,single_topic}
+|glossa.onboarding.ai_check|glossa.onboarding.ai_check.{}
+|glossa.onboarding.anki_check|glossa.onboarding.anki_check.{}
+|glossa.onboarding.install_open|glossa.onboarding.install_open.{}
+|glossa.onboarding.settings_save|glossa.onboarding.settings_save.{}
+|glossa.onboarding.single_topic|glossa.onboarding.single_topic.{}
 |glossa.page_translation|glossa.page_translation.{activation,candidate_scan,gloss_session_error,inline_rendering,lookup_order,shortcut_selection,token_geometry}
 |glossa.page_translation.activation|glossa.page_translation.activation.{lifecycle_cleanup,observer_cleanup,popup_message,settings_error_response,settings_failure,settings_request,stop_cleanup}
 |glossa.page_translation.activation.lifecycle_cleanup|glossa.page_translation.activation.lifecycle_cleanup.{}

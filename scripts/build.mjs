@@ -9,6 +9,7 @@ const dist = resolve(root, "dist");
 const watch = process.argv.includes("--watch");
 
 await rm(dist, { recursive: true, force: true });
+await mkdir(resolve(dist, "onboarding"), { recursive: true });
 await mkdir(resolve(dist, "options"), { recursive: true });
 await mkdir(resolve(dist, "popup"), { recursive: true });
 await mkdir(resolve(dist, "assets"), { recursive: true });
@@ -17,6 +18,7 @@ const context = await esbuild.context({
   entryPoints: {
     content: resolve(root, "src/content/index.ts"),
     background: resolve(root, "src/background/index.ts"),
+    onboarding: resolve(root, "src/onboarding/onboarding.ts"),
     options: resolve(root, "src/options/options.ts"),
     popup: resolve(root, "src/popup/popup.ts")
   },
@@ -58,9 +60,11 @@ if (watch) {
 
 async function copyStaticFiles() {
   await mkdir(dist, { recursive: true });
+  await mkdir(resolve(dist, "onboarding"), { recursive: true });
   await mkdir(resolve(dist, "options"), { recursive: true });
   await mkdir(resolve(dist, "popup"), { recursive: true });
   await copyFile(resolve(root, "manifest.json"), resolve(dist, "manifest.json"));
+  await copyFile(resolve(root, "src/onboarding/onboarding.html"), resolve(dist, "onboarding/onboarding.html"));
   await copyFile(resolve(root, "src/options/options.html"), resolve(dist, "options/options.html"));
   await copyFile(resolve(root, "src/popup/popup.html"), resolve(dist, "popup/popup.html"));
   await rm(resolve(dist, "assets"), { recursive: true, force: true });
@@ -116,6 +120,7 @@ function createStaticCopyScheduler(onFailure) {
 function watchStaticFiles(onChange) {
   const watchers = [
     watchStaticPath(root, false, (filename) => filename === "manifest.json", onChange),
+    watchStaticPath(resolve(root, "src/onboarding"), false, (filename) => filename === "onboarding.html", onChange),
     watchStaticPath(resolve(root, "src/options"), false, (filename) => filename === "options.html", onChange),
     watchStaticPath(resolve(root, "src/popup"), false, (filename) => filename === "popup.html", onChange),
     watchStaticPath(resolve(root, "src/shared"), false, (filename) => filename === "theme.json", onChange),
