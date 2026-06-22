@@ -20,6 +20,7 @@ const handleMessage = createBackgroundMessageHandler({
   anki
 });
 
+// @behavior glossa.onboarding.install_open.listener The service worker registers the onboarding install hook during background startup.
 chrome.runtime.onInstalled.addListener(openOnboardingAfterInstall);
 
 chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse) => {

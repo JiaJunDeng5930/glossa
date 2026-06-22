@@ -20,9 +20,11 @@ import { createExtensionStorage } from "../storage/db";
 
 const storage = createExtensionStorage();
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
+// @constraint glossa.onboarding.step_collection Onboarding step state comes from the page's data-step sections.
 const steps = Array.from(document.querySelectorAll<HTMLElement>("[data-step]"));
 const progress = document.querySelector<HTMLElement>("#progress")!;
 const continueButton = document.querySelector<HTMLButtonElement>("#continue")!;
+// @constraint glossa.onboarding.status_output Onboarding status state is written to the shared status output element.
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
 const knownWordListSelect = form.elements.namedItem("knownWordList") as HTMLSelectElement;
@@ -94,6 +96,7 @@ async function continueOnboarding(): Promise<void> {
 // @constraint glossa.onboarding.single_topic Only the current onboarding step is visible so each page presents one action or setting.
 function showStep(index: number): void {
   currentStep = index;
+  // @constraint glossa.onboarding.single_topic.visibility_write Step rendering hides every inactive page section.
   steps.forEach((step, stepIndex) => {
     step.hidden = stepIndex !== index;
   });
@@ -119,6 +122,7 @@ function updatePreview(nextSettings: GlossaSettings): void {
 async function refreshAnkiOptions(nextSettings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
   setTestState(refreshAnkiButton, "loading");
   setAnkiSelectsEnabled(false);
+  // @behavior glossa.onboarding.anki_refresh.failure_state Anki refresh failures keep configured defaults visible and mark refresh as an error state.
   try {
     const catalog = await loadAnkiCatalog(nextSettings.anki.endpoint, nextSettings.anki.requestTimeoutMs);
     const deck = pickExistingValue(nextSettings.anki.deck, catalog.decks);
@@ -146,5 +150,6 @@ function setAnkiSelectsEnabled(enabled: boolean): void {
 // @behavior glossa.onboarding.status_state Onboarding status output marks AI and Anki successes as success and other visible messages as errors.
 function setStatus(value: string): void {
   statusOutput.value = value;
+  // @behavior glossa.onboarding.status_state.dataset Onboarding status output stores a success state for successful AI or Anki checks and an error state for other messages.
   statusOutput.dataset.state = value === "AI 连接成功" || value === "Anki 已连接" ? "success" : value ? "error" : "";
 }
