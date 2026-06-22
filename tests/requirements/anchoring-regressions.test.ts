@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { fixtureEnv } from "./fixtureEnv";
 
 const TOOL = resolve("tools/requirements/src/main.ts");
 const TSX = resolve("node_modules/tsx/dist/cli.mjs");
@@ -140,11 +141,11 @@ function runTool(cwd: string, args: string[]): string {
   return execFileSync(process.execPath, [TSX, TOOL, ...args], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, TMPDIR: "/tmp" },
+    env: fixtureEnv({ TMPDIR: "/tmp" }),
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
 function runGit(cwd: string, args: string[]): string {
-  return execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8" });
+  return execFileSync("git", ["-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8", env: fixtureEnv() });
 }

@@ -613,8 +613,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |requirements.source_snapshot.staged.missing_blobs|requirements.source_snapshot.staged.missing_blobs.{}
 |requirements.source_snapshot.staged_dispatch|requirements.source_snapshot.staged_dispatch.{}
 |requirements.source_snapshot.worktree|requirements.source_snapshot.worktree.{}
-|requirements.test_config|requirements.test_config.{browser,requirement_node}
+|requirements.test_config|requirements.test_config.{browser,git_env_isolation,requirement_node}
 |requirements.test_config.browser|requirements.test_config.browser.{}
+|requirements.test_config.git_env_isolation|requirements.test_config.git_env_isolation.{}
 |requirements.test_config.requirement_node|requirements.test_config.requirement_node.{exec_helpers}
 |requirements.test_config.requirement_node.exec_helpers|requirements.test_config.requirement_node.exec_helpers.{}
 <!-- END AGENTS_MD_REQUIREMENT_INDEX -->

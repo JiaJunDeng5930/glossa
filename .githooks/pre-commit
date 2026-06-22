@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
+unset $(git rev-parse --local-env-vars)
+
 npm run req:check:staged
 npm run req:check:all
 npm run typecheck
