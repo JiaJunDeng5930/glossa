@@ -18,7 +18,7 @@
 }
 
 body {
-  width: 360px;
+  width: 300px;
   margin: 0;
   background:
     radial-gradient(circle at 12% 18%, rgba(31, 36, 40, 0.05) 0 1px, transparent 1px),
@@ -30,8 +30,8 @@ body {
 
 .popup-menu {
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 10px;
+  padding: 12px;
   background:
     linear-gradient(rgba(255, 253, 247, 0.96), rgba(255, 249, 238, 0.92)),
     radial-gradient(circle at 30% 20%, rgba(31, 36, 40, 0.05) 0 1px, transparent 1px);
@@ -40,15 +40,15 @@ body {
 
 .popup-header {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   align-items: start;
-  padding-bottom: 14px;
-  border-bottom: 3px double var(--ink);
+  padding-bottom: 10px;
+  border-bottom: 2px double var(--ink);
 }
 
 .brand-logo {
   display: block;
-  width: 154px;
+  width: 118px;
   height: auto;
   border-radius: 4px;
 }
@@ -65,9 +65,9 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  min-height: 92px;
-  padding: 14px;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px;
   border: 1px solid var(--rule-strong);
   border-radius: 6px;
   background: rgba(255, 253, 247, 0.7);
@@ -75,30 +75,30 @@ body {
 
 .page-state strong {
   margin-top: 3px;
-  font: 750 22px/1.2 ui-sans-serif, system-ui, sans-serif;
+  font: 750 18px/1.2 ui-sans-serif, system-ui, sans-serif;
 }
 
 .proof-mark {
-  width: 54px;
-  height: 54px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border: 2px solid var(--green);
   border-radius: 50%;
   color: var(--green);
-  font: 800 18px/1 Georgia, "Times New Roman", serif;
+  font: 800 14px/1 Georgia, "Times New Roman", serif;
 }
 
 button {
   width: 100%;
-  min-height: 50px;
+  min-height: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   border: 1px solid var(--rule-strong);
   border-radius: 6px;
-  padding: 11px 14px;
+  padding: 9px 12px;
   color: var(--ink);
   background: rgba(255, 253, 247, 0.78);
   font: inherit;
@@ -119,17 +119,17 @@ button svg,
 }
 
 .primary-command {
-  min-height: 64px;
+  min-height: 50px;
   border-color: var(--accent);
   color: #ffffff;
   background: var(--accent);
-  font-size: 20px;
+  font-size: 17px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 8px 20px rgba(var(--glossa-theme-accent-rgb), 0.18);
 }
 
 .secondary-command {
   justify-content: space-between;
-  padding-inline: 16px;
+  padding-inline: 12px;
 }
 
 .secondary-command::after {
@@ -171,7 +171,7 @@ output:not(:empty) {
 .shortcut-note {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding-top: 4px;
   border-top: 1px dotted var(--rule-strong);
   color: var(--ink-soft);
@@ -180,19 +180,19 @@ output:not(:empty) {
 .shortcut-keys {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 kbd {
-  min-width: 32px;
+  min-width: 28px;
   display: inline-grid;
   place-items: center;
-  min-height: 30px;
-  padding: 3px 8px;
+  min-height: 26px;
+  padding: 2px 7px;
   border: 1px solid var(--rule-strong);
   border-radius: 6px;
   background: var(--paper);
   color: var(--ink);
-  font: 700 16px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   box-shadow: inset 0 -1px 0 rgba(31, 36, 40, 0.09);
 }

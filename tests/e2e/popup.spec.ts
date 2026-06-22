@@ -11,6 +11,7 @@ async function loadPopup(page: Page): Promise<void> {
 // @verifies glossa.translation_start_popup
 test("popup translate button activates the current tab", async ({ page }) => {
   await loadPopup(page);
+  await expect.poll(async () => page.evaluate(() => document.body.getBoundingClientRect().width)).toBe(300);
   await page.evaluate(() => {
     const sent: unknown[] = [];
     Reflect.set(window, "__glossaTabMessages", sent);
