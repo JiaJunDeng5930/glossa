@@ -3,6 +3,7 @@ import { createAnkiClient } from "./anki";
 import { createAiBackend } from "./ai";
 import { createGlossResolver } from "./glossResolver";
 import { createBackgroundMessageHandler } from "./messages";
+import { openOnboardingAfterInstall } from "./onboarding";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createBackgroundResponse, createGlossPortMessage, MESSAGE_VERSION, validateGlossPortInbound, validateRuntimeMessage } from "../shared/messages";
@@ -18,6 +19,8 @@ const handleMessage = createBackgroundMessageHandler({
   ai,
   anki
 });
+
+chrome.runtime.onInstalled.addListener(openOnboardingAfterInstall);
 
 chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse) => {
   void (async () => {
