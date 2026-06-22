@@ -315,6 +315,28 @@ describe("selection controller", () => {
     controller.detach();
   });
 
+  // @verifies glossa.page_translation.shortcut_selection.word_boundary
+  it("ignores plain-text clicks that resolve at a word end boundary", () => {
+    document.body.innerHTML = `<p id="target">Save  draft</p>`;
+    const target = document.querySelector<HTMLParagraphElement>("#target")!;
+    const onWordSelected = vi.fn();
+    installCaretPosition(target.firstChild as Text, 4);
+
+    const controller = createSelectionController({
+      document,
+      shortcutKey: "Alt",
+      onWordSelected
+    });
+    controller.attach();
+
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(onWordSelected).not.toHaveBeenCalled();
+
+    controller.detach();
+  });
+
   it("ignores plain-text clicks when the browser cannot resolve a text point", () => {
     document.body.innerHTML = `<p id="target">Save draft</p>`;
     const target = document.querySelector<HTMLParagraphElement>("#target")!;

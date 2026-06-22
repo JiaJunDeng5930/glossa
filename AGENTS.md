@@ -293,7 +293,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.onboarding|glossa.onboarding.{ai_check,anki_check,anki_refresh,install_open,settings_save,single_topic,status_output,status_state,step_collection}
 |glossa.onboarding.ai_check|glossa.onboarding.ai_check.{}
 |glossa.onboarding.anki_check|glossa.onboarding.anki_check.{}
-|glossa.onboarding.anki_refresh|glossa.onboarding.anki_refresh.{failure_state}
+|glossa.onboarding.anki_refresh|glossa.onboarding.anki_refresh.{explicit_request,failure_state}
+|glossa.onboarding.anki_refresh.explicit_request|glossa.onboarding.anki_refresh.explicit_request.{}
 |glossa.onboarding.anki_refresh.failure_state|glossa.onboarding.anki_refresh.failure_state.{}
 |glossa.onboarding.install_open|glossa.onboarding.install_open.{chrome_api_guard,listener,tab_url}
 |glossa.onboarding.install_open.chrome_api_guard|glossa.onboarding.install_open.chrome_api_guard.{}
@@ -343,7 +344,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.lookup_order.gloss_cache_created_at|glossa.page_translation.lookup_order.gloss_cache_created_at.{}
 |glossa.page_translation.lookup_order.lexicon_hidden_after_cache|glossa.page_translation.lookup_order.lexicon_hidden_after_cache.{}
 |glossa.page_translation.lookup_order.session_interface|glossa.page_translation.lookup_order.session_interface.{}
-|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{chord_modifier_release,duplicate_prompt_controls,focus_loss,freeze_keys,freeze_pointer,freeze_scroll,plugin_shortcut_chord,selection_note,strict_key_hold}
+|glossa.page_translation.shortcut_selection|glossa.page_translation.shortcut_selection.{chord_modifier_release,duplicate_prompt_controls,focus_loss,freeze_keys,freeze_pointer,freeze_scroll,plugin_shortcut_chord,selection_note,strict_key_hold,word_boundary}
 |glossa.page_translation.shortcut_selection.chord_modifier_release|glossa.page_translation.shortcut_selection.chord_modifier_release.{}
 |glossa.page_translation.shortcut_selection.duplicate_prompt_controls|glossa.page_translation.shortcut_selection.duplicate_prompt_controls.{}
 |glossa.page_translation.shortcut_selection.focus_loss|glossa.page_translation.shortcut_selection.focus_loss.{}
@@ -354,6 +355,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.shortcut_selection.plugin_shortcut_chord|glossa.page_translation.shortcut_selection.plugin_shortcut_chord.{}
 |glossa.page_translation.shortcut_selection.selection_note|glossa.page_translation.shortcut_selection.selection_note.{}
 |glossa.page_translation.shortcut_selection.strict_key_hold|glossa.page_translation.shortcut_selection.strict_key_hold.{}
+|glossa.page_translation.shortcut_selection.word_boundary|glossa.page_translation.shortcut_selection.word_boundary.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
 |glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,form_logic,gloss_cache_ttl,options_load,options_write,timeout_seconds}
 |glossa.settings_save.clear_gloss_cache|glossa.settings_save.clear_gloss_cache.{background_request}

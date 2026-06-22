@@ -25,7 +25,9 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   await loadOnboarding(page);
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
+    const ankiRequests: unknown[] = [];
     Reflect.set(window, "__glossaStore", store);
+    Reflect.set(window, "__ankiRequests", ankiRequests);
     Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
       const body = init?.body ? JSON.parse(init.body as string) : undefined;
       Reflect.set(window, "__lastConnectionRequest", {
@@ -34,6 +36,7 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
         authorization: (init?.headers as Record<string, string> | undefined)?.authorization
       });
       if (String(url).includes("876")) {
+        ankiRequests.push({ url, body });
         const resultByAction: Record<string, unknown> = {
           version: 6,
           deckNames: ["general", "Glossa", "temp"],
@@ -114,9 +117,14 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   await page.locator("#continue").click();
 
   await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
+  await expect(page.locator("#refresh-anki")).toHaveAttribute("data-state", "idle");
+  await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__ankiRequests") as unknown[]).length)).toBe(0);
+  // @verifies glossa.onboarding.anki_refresh.explicit_request
+  await expect(page.locator("select[name=ankiDeck]")).toBeDisabled();
+  await page.locator("input[name=ankiEndpoint]").fill("http://127.0.0.1:8766");
+  await page.locator("#refresh-anki").click();
   await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
   await page.locator("select[name=ankiDeck]").selectOption("temp");
-  await page.locator("input[name=ankiEndpoint]").fill("http://127.0.0.1:8766");
   await page.locator("input[name=ankiRequestTimeoutSeconds]").fill("35");
   await page.locator("input[name=duplicatePromptSeconds]").fill("7");
   await page.locator("#test-anki").click();
