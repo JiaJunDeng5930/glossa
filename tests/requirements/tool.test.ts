@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
+import { fixtureEnv } from "./fixtureEnv";
 
 const TOOL = resolve("tools/requirements/src/main.ts");
 const TSX = resolve("node_modules/tsx/dist/cli.mjs");
@@ -564,7 +565,7 @@ async function runTool(cwd: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(process.execPath, [TSX, TOOL, ...args], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, TMPDIR: "/tmp" },
+    env: fixtureEnv({ TMPDIR: "/tmp" }),
     maxBuffer: 10 * 1024 * 1024,
   });
   return stdout;
@@ -574,6 +575,7 @@ async function runGit(cwd: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", ["-c", "commit.gpgsign=false", ...args], {
     cwd,
     encoding: "utf8",
+    env: fixtureEnv(),
     maxBuffer: 10 * 1024 * 1024,
   });
   return stdout;
