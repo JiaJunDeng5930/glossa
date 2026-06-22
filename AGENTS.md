@@ -290,7 +290,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.failure_reporting|glossa.failure_reporting.{trace_privacy,user_copy}
 |glossa.failure_reporting.trace_privacy|glossa.failure_reporting.trace_privacy.{}
 |glossa.failure_reporting.user_copy|glossa.failure_reporting.user_copy.{}
-|glossa.onboarding|glossa.onboarding.{ai_check,anki_check,anki_refresh,install_open,settings_save,single_topic,status_output,status_state,step_collection}
+|glossa.onboarding|glossa.onboarding.{ai_check,anki_check,anki_refresh,install_open,settings_save,single_topic,status_output,status_state,step_advance_serialization,step_collection,submit_safety}
 |glossa.onboarding.ai_check|glossa.onboarding.ai_check.{}
 |glossa.onboarding.anki_check|glossa.onboarding.anki_check.{}
 |glossa.onboarding.anki_refresh|glossa.onboarding.anki_refresh.{explicit_request,failure_state}
@@ -306,7 +306,10 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.onboarding.status_output|glossa.onboarding.status_output.{}
 |glossa.onboarding.status_state|glossa.onboarding.status_state.{dataset}
 |glossa.onboarding.status_state.dataset|glossa.onboarding.status_state.dataset.{}
+|glossa.onboarding.step_advance_serialization|glossa.onboarding.step_advance_serialization.{cleanup}
+|glossa.onboarding.step_advance_serialization.cleanup|glossa.onboarding.step_advance_serialization.cleanup.{}
 |glossa.onboarding.step_collection|glossa.onboarding.step_collection.{}
+|glossa.onboarding.submit_safety|glossa.onboarding.submit_safety.{}
 |glossa.page_translation|glossa.page_translation.{activation,candidate_scan,gloss_session_error,inline_rendering,lookup_order,shortcut_selection,token_geometry}
 |glossa.page_translation.activation|glossa.page_translation.activation.{lifecycle_cleanup,observer_cleanup,popup_message,settings_error_response,settings_failure,settings_request,stop_cleanup}
 |glossa.page_translation.activation.lifecycle_cleanup|glossa.page_translation.activation.lifecycle_cleanup.{}

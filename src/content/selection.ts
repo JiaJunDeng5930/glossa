@@ -188,7 +188,7 @@ function selectionFromClick(element: Element, event: MouseEvent): WordSelection 
   if (!textPoint) {
     return undefined;
   }
-  const match = wordAtOffset(textPoint.node.nodeValue ?? "", textPoint.offset);
+  const match = wordAtClickPoint(textPoint.node, textPoint.offset, event.clientX, event.clientY);
   if (!match) {
     return undefined;
   }
@@ -277,14 +277,30 @@ function textPointFromCoordinates(doc: Document, x: number, y: number): { node: 
   return undefined;
 }
 
-function wordAtOffset(text: string, offset: number): RegExpMatchArray | undefined {
+// @behavior glossa.page_translation.shortcut_selection.word_boundary Plain-text click selection accepts English word offsets and requires rendered text geometry when the browser returns a word-end offset.
+function wordAtClickPoint(node: Text, offset: number, x: number, y: number): RegExpMatchArray | undefined {
+  const text = node.nodeValue ?? "";
   for (const match of text.matchAll(/[A-Za-z][A-Za-z'-]*/g)) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
-    // @behavior glossa.page_translation.shortcut_selection.word_boundary Plain-text click selection accepts offsets inside the English word and rejects offsets on the word end boundary.
     if (offset >= start && offset < end) {
+      return match as RegExpExecArray;
+    }
+    if (offset === end && pointInsideTextRange(node, start, end, x, y)) {
       return match as RegExpExecArray;
     }
   }
   return undefined;
+}
+
+function pointInsideTextRange(node: Text, start: number, end: number, x: number, y: number): boolean {
+  const doc = node.ownerDocument;
+  const range = doc.createRange();
+  range.setStart(node, start);
+  range.setEnd(node, end);
+  const rects = typeof range.getClientRects === "function" ? Array.from(range.getClientRects()) : [];
+  if (typeof range.detach === "function") {
+    range.detach();
+  }
+  return rects.some((rect) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
 }

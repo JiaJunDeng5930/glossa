@@ -21,6 +21,7 @@ async function visibleStepCount(page: Page): Promise<number> {
 // @verifies glossa.onboarding.settings_save
 // @verifies glossa.onboarding.ai_check
 // @verifies glossa.onboarding.anki_check
+// @verifies glossa.onboarding.submit_safety
 test("onboarding keeps one visible topic per page and saves setup choices", async ({ page }) => {
   await loadOnboarding(page);
   await page.evaluate(() => {
@@ -108,6 +109,9 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
   await page.locator("input[name=apiKey]").fill("sk-test");
+  await page.locator("input[name=apiKey]").press("Enter");
+  await expect(page.getByRole("heading", { name: "连接 AI 服务" })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => location.search)).toBe("");
   await page.locator("input[name=modelVersion]").fill("gpt-test");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
   await page.locator("input[name=aiRequestTimeoutSeconds]").fill("45");
@@ -162,4 +166,41 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   });
   await page.locator("#continue").click();
   await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__onboardingClosed"))).toBe(true);
+});
+
+// @verifies glossa.onboarding.step_advance_serialization
+test("onboarding serializes continue clicks during pending step saves", async ({ page }) => {
+  await loadOnboarding(page);
+  await page.evaluate(() => {
+    const store: Record<string, unknown> = {};
+    Reflect.set(window, "chrome", {
+      runtime: {
+        lastError: undefined
+      },
+      storage: {
+        local: {
+          get(key: string, callback: (result: Record<string, unknown>) => void) {
+            callback({ [key]: store[key] });
+          },
+          set(value: Record<string, unknown>, callback?: () => void) {
+            Object.assign(store, value);
+            window.setTimeout(() => callback?.(), 100);
+          }
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
+
+  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
+  await page.locator("#continue").evaluate((button) => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+
+  await expect(page.locator("#continue")).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
+  await page.waitForTimeout(150);
+  await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
+  await expect(page.locator("#progress")).toHaveText("2 / 8");
 });

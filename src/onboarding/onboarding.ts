@@ -40,12 +40,28 @@ const glossPreviewErrorLabels = Array.from(document.querySelectorAll<HTMLElement
 
 let currentStep = 0;
 let settings: GlossaSettings = DEFAULT_SETTINGS;
+let continueInFlight = false;
 
 populateKnownWordSelect(knownWordListSelect);
 void loadSettings();
 
 continueButton.addEventListener("click", () => {
-  void continueOnboarding();
+  // @behavior glossa.onboarding.step_advance_serialization Continue clicks are ignored while a step save is pending so one user action advances at most one onboarding page.
+  if (continueInFlight) {
+    return;
+  }
+  continueInFlight = true;
+  continueButton.disabled = true;
+  // @behavior glossa.onboarding.step_advance_serialization.cleanup Continue serialization releases the pending state after the step save settles.
+  void continueOnboarding().finally(() => {
+    continueInFlight = false;
+    continueButton.disabled = false;
+  });
+});
+
+form.addEventListener("submit", (event) => {
+  // @behavior glossa.onboarding.submit_safety The onboarding form suppresses native submission so entered API keys stay out of navigation URLs.
+  event.preventDefault();
 });
 
 form.addEventListener("input", () => {

@@ -284,6 +284,47 @@ test("content bundle ignores shortcut clicks in blank space resolved to a word e
   expect((await sentMessageTypes(page)).filter((type) => type === "word.clicked")).toHaveLength(0);
 });
 
+// @verifies glossa.page_translation.shortcut_selection.word_boundary
+test("content bundle captures shortcut clicks on a word-end glyph boundary", async ({ page }) => {
+  await page.setContent(`
+    <main>
+      <p id="target" style="font: 32px Arial, sans-serif; margin: 48px;">Save  draft</p>
+    </main>
+  `);
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForTimeout(300);
+
+  const point = await page.locator("#target").evaluate((element) => {
+    const text = element.firstChild;
+    if (!text) {
+      throw new Error("expected target text");
+    }
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 4);
+    const rect = range.getBoundingClientRect();
+    range.detach();
+    return {
+      x: rect.right - 0.5,
+      y: rect.top + rect.height / 2
+    };
+  });
+  await expect.poll(async () => page.evaluate(({ x, y }) => {
+    return document.caretPositionFromPoint?.(x, y)?.offset ?? document.caretRangeFromPoint?.(x, y)?.startOffset;
+  }, point)).toBe(4);
+
+  await page.keyboard.down("Alt");
+  await page.mouse.click(point.x, point.y);
+  await page.keyboard.up("Alt");
+
+  await expect.poll(async () => (await sentMessageTypes(page)).filter((type) => type === "word.clicked").length).toBe(1);
+});
+
 // @verifies glossa.card_creation.note_request
 test("content bundle marks an existing gloss after confirmed card creation", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Press the submit button.</p></main>");
