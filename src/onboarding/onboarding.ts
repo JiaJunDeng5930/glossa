@@ -78,7 +78,8 @@ async function loadSettings(): Promise<void> {
   setAnkiSelectsEnabled(false);
   updatePreview(settings);
   showStep(0);
-  void refreshAnkiOptions(settings, { reportStatus: false });
+  // @behavior glossa.onboarding.anki_refresh.explicit_request Initial onboarding load keeps Anki refresh idle so users can edit the endpoint before the first catalog request.
+  setTestState(refreshAnkiButton, "idle");
 }
 
 async function continueOnboarding(): Promise<void> {

@@ -281,7 +281,8 @@ function wordAtOffset(text: string, offset: number): RegExpMatchArray | undefine
   for (const match of text.matchAll(/[A-Za-z][A-Za-z'-]*/g)) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
-    if (offset >= start && offset <= end) {
+    // @behavior glossa.page_translation.shortcut_selection.word_boundary Plain-text click selection accepts offsets inside the English word and rejects offsets on the word end boundary.
+    if (offset >= start && offset < end) {
       return match as RegExpExecArray;
     }
   }
