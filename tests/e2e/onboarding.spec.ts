@@ -27,12 +27,25 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
     const store: Record<string, unknown> = {};
     Reflect.set(window, "__glossaStore", store);
     Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
       Reflect.set(window, "__lastConnectionRequest", {
         url,
-        body: init?.body ? JSON.parse(init.body as string) : undefined,
+        body,
         authorization: (init?.headers as Record<string, string> | undefined)?.authorization
       });
-      return new Response(JSON.stringify({ result: 6 }), {
+      if (String(url).includes("876")) {
+        const resultByAction: Record<string, unknown> = {
+          version: 6,
+          deckNames: ["general", "Glossa", "temp"],
+          modelNames: ["Basic", "Broken"],
+          modelFieldNames: body.params?.modelName === "Basic" ? ["Front", "Back"] : ["Front"]
+        };
+        return new Response(JSON.stringify({ result: resultByAction[body.action], error: null }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ result: null }), {
         status: 200,
         headers: { "content-type": "application/json" }
       });
@@ -59,50 +72,85 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
 
+  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
+  await expect.poll(() => visibleStepCount(page)).toBe(1);
+  await page.locator("#continue").click();
+
   await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
   await expect.poll(() => visibleStepCount(page)).toBe(1);
   await page.locator("#continue").click();
 
   await expect(page.getByRole("heading", { name: "加入 Anki" })).toBeVisible();
-  await expect.poll(() => visibleStepCount(page)).toBe(1);
   await page.locator("#continue").click();
 
   await expect(page.getByRole("heading", { name: "选择基础词表" })).toBeVisible();
-  await expect(page.locator("input[name=knownWordList]")).toHaveCount(7);
-  await page.getByLabel("高中课标词汇").check();
+  await expect(page.locator("select[name=knownWordList] option")).toHaveCount(7);
+  await page.locator("select[name=knownWordList]").selectOption("senior-high");
   await page.locator("#continue").click();
 
-  await expect(page.getByRole("heading", { name: "设置释义颜色" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "设置释义样式" })).toBeVisible();
   await page.locator("input[name=glossTextColor]").fill("#ff5500");
   await page.locator("input[name=glossBackgroundColor]").fill("#113355");
-  await expect(page.locator(".preview-word span")).toHaveCSS("color", "rgb(255, 85, 0)");
+  await page.locator("input[name=cardSuccessBackgroundColor]").fill("#228833");
+  await page.locator("input[name=cardErrorBackgroundColor]").fill("#cc2222");
+  await page.locator("input[name=glossBackgroundOpacity]").fill("0.65");
+  await page.locator("select[name=glossFontFamily]").selectOption("Georgia, Times New Roman, serif");
+  await page.locator("input[name=glossFontSize]").fill("18");
+  await expect(page.locator(".preview-gloss").first()).toHaveCSS("color", "rgb(255, 85, 0)");
+  await expect(page.locator(".preview-gloss").first()).toHaveCSS("font-size", "18px");
+  await expect(page.locator(".preview-gloss-success")).toHaveCSS("background-color", "rgba(34, 136, 51, 0.65)");
   await page.locator("#continue").click();
 
   await expect(page.getByRole("heading", { name: "连接 AI 服务" })).toBeVisible();
+  await page.locator("select[name=provider]").selectOption("openai-chat-completions");
+  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
   await page.locator("input[name=apiKey]").fill("sk-test");
+  await page.locator("input[name=modelVersion]").fill("gpt-test");
+  await page.locator("select[name=reasoningEffort]").selectOption("high");
+  await page.locator("input[name=aiRequestTimeoutSeconds]").fill("45");
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#status")).toHaveText("AI 连接成功");
   await page.locator("#continue").click();
 
   await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
+  await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
+  await page.locator("select[name=ankiDeck]").selectOption("temp");
   await page.locator("input[name=ankiEndpoint]").fill("http://127.0.0.1:8766");
+  await page.locator("input[name=ankiRequestTimeoutSeconds]").fill("35");
+  await page.locator("input[name=duplicatePromptSeconds]").fill("7");
   await page.locator("#test-anki").click();
   await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#status")).toHaveText("Anki 已连接");
   await page.locator("#continue").click();
 
   await expect(page.getByRole("heading", { name: "可以开始阅读" })).toBeVisible();
-  await expect(page.locator("#progress")).toHaveText("7 / 7");
+  await expect(page.locator("#progress")).toHaveText("8 / 8");
   const storedSettings = await page.evaluate(() => Reflect.get(window, "__glossaStore").settings);
   expect(storedSettings).toMatchObject({
     knownWordList: "senior-high",
     appearance: {
       textColor: "#ff5500",
-      backgroundColor: "#113355"
+      backgroundColor: "#113355",
+      cardSuccessBackgroundColor: "#228833",
+      cardErrorBackgroundColor: "#cc2222",
+      backgroundOpacity: 0.65,
+      fontFamily: "Georgia, Times New Roman, serif",
+      fontSize: 18
     },
-    ai: { apiKey: "sk-test" },
-    anki: { endpoint: "http://127.0.0.1:8766" }
+    ai: {
+      provider: "openai-chat-completions",
+      apiKey: "sk-test",
+      reasoningEffort: "high",
+      requestTimeoutMs: 45000
+    },
+    anki: {
+      endpoint: "http://127.0.0.1:8766",
+      deck: "temp",
+      requestTimeoutMs: 35000,
+      duplicatePromptMs: 7000
+    },
+    modelVersion: "gpt-test"
   });
   await page.locator("#continue").click();
   await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__onboardingClosed"))).toBe(true);

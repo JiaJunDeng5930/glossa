@@ -4,6 +4,7 @@ import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey }
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { createOptionsMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
 import { defaultEndpointForProvider } from "../shared/settings";
+import { applyAppearancePreview, runSettingsConnectionTest, testAiSettings, testAnkiSettings } from "../shared/settingsForm";
 import { formatShortcutFromEvent } from "../shared/shortcut";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, KNOWN_WORD_LIST_IDS, type AiSettings, type BackgroundResponseMessage, type ErrorService, type GlossaSettings, type KnownWordListId, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
@@ -50,11 +51,11 @@ form.addEventListener("submit", (event) => {
 });
 
 testAiButton.addEventListener("click", () => {
-  void runConnectionTest(testAiButton, () => testAi(readFormSettings()), "ai");
+  void runSettingsConnectionTest(testAiButton, () => testAiSettings(readFormSettings()), "ai", setStatus);
 });
 
 testAnkiButton.addEventListener("click", () => {
-  void runConnectionTest(testAnkiButton, () => testAnki(readFormSettings()), "anki");
+  void runSettingsConnectionTest(testAnkiButton, () => testAnkiSettings(readFormSettings()), "anki", setStatus);
 });
 
 refreshAnkiButton.addEventListener("click", () => {
@@ -617,19 +618,12 @@ function isModifierKey(key: string): boolean {
 }
 
 function updatePreview(settings: GlossaSettings): void {
-  glossPreview.style.fontFamily = settings.appearance.fontFamily;
-  for (const label of glossPreviewLabels) {
-    label.style.color = settings.appearance.textColor;
-    label.style.backgroundColor = hexToRgb(settings.appearance.backgroundColor, settings.appearance.backgroundOpacity);
-    label.style.fontFamily = settings.appearance.fontFamily;
-    label.style.fontSize = `${settings.appearance.fontSize}px`;
-  }
-  for (const label of glossPreviewSuccessLabels) {
-    label.style.backgroundColor = hexToRgb(settings.appearance.cardSuccessBackgroundColor, settings.appearance.backgroundOpacity);
-  }
-  for (const label of glossPreviewErrorLabels) {
-    label.style.backgroundColor = hexToRgb(settings.appearance.cardErrorBackgroundColor, settings.appearance.backgroundOpacity);
-  }
+  applyAppearancePreview({
+    preview: glossPreview,
+    labels: glossPreviewLabels,
+    successLabels: glossPreviewSuccessLabels,
+    errorLabels: glossPreviewErrorLabels
+  }, settings.appearance);
 }
 
 function startShortcutCapture(name: "shortcutKey" | "translateShortcutKey", button: HTMLButtonElement): void {

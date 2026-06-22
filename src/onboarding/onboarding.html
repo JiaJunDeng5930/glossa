@@ -8,13 +8,36 @@
     <link rel="stylesheet" href="../assets/onboarding.css">
   </head>
   <body>
-    <main class="onboarding-shell">
+    <main>
+      <form id="settings-form" class="onboarding-shell">
       <header class="onboarding-header">
         <img class="brand-logo" src="../assets/logo.png" alt="Glossa">
         <output id="status" role="status"></output>
       </header>
 
-      <section class="onboarding-step reading-step" data-step="0" aria-labelledby="translation-heading">
+      <section class="onboarding-step" data-step="0" aria-labelledby="smart-heading">
+        <div class="step-copy">
+          <p class="document-label">识别</p>
+          <h1 id="smart-heading">智能识别生词</h1>
+          <p>Glossa 会结合基础词表和学习记录，优先显示值得看的词。</p>
+        </div>
+        <article class="vocab-preview" aria-label="生词熟词识别预览">
+          <div>
+            <span>familiar</span>
+            <strong>熟词</strong>
+          </div>
+          <div>
+            <span>gloss</span>
+            <strong>生词</strong>
+          </div>
+          <div>
+            <span>context</span>
+            <strong>学习中</strong>
+          </div>
+        </article>
+      </section>
+
+      <section class="onboarding-step reading-step" data-step="1" aria-labelledby="translation-heading" hidden>
         <div class="step-copy">
           <p class="document-label">首次使用</p>
           <h1 id="translation-heading">翻译本页</h1>
@@ -31,7 +54,7 @@
         </article>
       </section>
 
-      <section class="onboarding-step reading-step" data-step="1" aria-labelledby="anki-click-heading" hidden>
+      <section class="onboarding-step reading-step" data-step="2" aria-labelledby="anki-click-heading" hidden>
         <div class="step-copy">
           <p class="document-label">制卡</p>
           <h1 id="anki-click-heading">加入 Anki</h1>
@@ -51,22 +74,25 @@
         </article>
       </section>
 
-      <section class="onboarding-step" data-step="2" aria-labelledby="word-list-heading" hidden>
+      <section class="onboarding-step" data-step="3" aria-labelledby="word-list-heading" hidden>
         <div class="step-copy">
           <p class="document-label">词表</p>
           <h1 id="word-list-heading">选择基础词表</h1>
           <p>Glossa 会跳过这些常见词，把注意力留给生词。</p>
         </div>
-        <fieldset id="known-word-list" class="choice-list">
-          <legend>基础词表</legend>
-        </fieldset>
+        <div class="single-form">
+          <label>
+            基础词表
+            <select name="knownWordList"></select>
+          </label>
+        </div>
       </section>
 
-      <section class="onboarding-step" data-step="3" aria-labelledby="appearance-heading" hidden>
+      <section class="onboarding-step" data-step="4" aria-labelledby="appearance-heading" hidden>
         <div class="step-copy">
           <p class="document-label">外观</p>
-          <h1 id="appearance-heading">设置释义颜色</h1>
-          <p>选择页面上方小标签的文字和背景颜色。</p>
+          <h1 id="appearance-heading">设置释义样式</h1>
+          <p>调整页面上方释义标签和制卡反馈的显示效果。</p>
         </div>
         <div class="color-editor">
           <label>
@@ -77,45 +103,134 @@
             背景颜色
             <input name="glossBackgroundColor" type="color">
           </label>
-          <p class="color-preview">
-            Glossa keeps
-            <span class="glossa-word preview-word"><span>语境</span><strong>context</strong></span>
-            close to the sentence.
-          </p>
+          <label>
+            制卡成功背景
+            <input name="cardSuccessBackgroundColor" type="color">
+          </label>
+          <label>
+            制卡失败背景
+            <input name="cardErrorBackgroundColor" type="color">
+          </label>
+          <label>
+            深浅
+            <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
+          </label>
+          <label>
+            字体
+            <select name="glossFontFamily">
+              <option value="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">系统无衬线</option>
+              <option value="Georgia, Times New Roman, serif">衬线</option>
+              <option value="Inter, ui-sans-serif, system-ui, sans-serif">Inter</option>
+              <option value="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">等宽</option>
+            </select>
+          </label>
+          <label>
+            字号
+            <input name="glossFontSize" type="number" min="9" max="24" step="1">
+          </label>
+          <div id="gloss-preview" class="gloss-preview" aria-label="释义样式预览">
+            <p>
+              Readers can
+              <span class="preview-word">
+                <strong class="preview-gloss">适应</strong>
+                <span>adapt</span>
+              </span>
+              and mark
+              <span class="preview-word">
+                <strong class="preview-gloss preview-gloss-success">完成</strong>
+                <span>cards</span>
+              </span>
+              while failures show
+              <span class="preview-word">
+                <strong class="preview-gloss preview-gloss-error">×</strong>
+                <span>errors</span>
+              </span>
+              in place.
+            </p>
+          </div>
         </div>
       </section>
 
-      <section class="onboarding-step" data-step="4" aria-labelledby="ai-heading" hidden>
+      <section class="onboarding-step" data-step="5" aria-labelledby="ai-heading" hidden>
         <div class="step-copy">
           <p class="document-label">AI</p>
           <h1 id="ai-heading">连接 AI 服务</h1>
-          <p>填入 API Key 后，Glossa 才能生成中文释义。</p>
+          <p>配置生成释义和卡片内容的 AI 服务。</p>
         </div>
-        <div class="single-form">
+        <div class="settings-form">
           <label>
-            OpenAI API Key
-            <input name="apiKey" type="password" autocomplete="off" placeholder="sk-...">
+            AI 服务
+            <select name="provider">
+              <option value="openai-responses">OpenAI Responses API</option>
+              <option value="openai-chat-completions">OpenAI Chat Completions API</option>
+              <option value="openai-completions">OpenAI Completions API</option>
+              <option value="glossa-backend">Glossa 后端</option>
+            </select>
+          </label>
+          <label>
+            AI 接口地址
+            <input name="aiEndpoint" autocomplete="off">
+          </label>
+          <label>
+            AI API 密钥
+            <input name="apiKey" type="password" autocomplete="off">
+          </label>
+          <label>
+            模型
+            <input name="modelVersion" autocomplete="off">
+          </label>
+          <label>
+            推理强度
+            <select name="reasoningEffort">
+              <option value="none">无</option>
+              <option value="minimal">极简</option>
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+              <option value="xhigh">超高</option>
+            </select>
+          </label>
+          <label>
+            AI 超时秒数
+            <input name="aiRequestTimeoutSeconds" type="number" min="1" step="1">
           </label>
           <button id="test-ai" class="secondary-action" type="button" data-state="idle">测试连接</button>
         </div>
       </section>
 
-      <section class="onboarding-step" data-step="5" aria-labelledby="anki-heading" hidden>
+      <section class="onboarding-step" data-step="6" aria-labelledby="anki-heading" hidden>
         <div class="step-copy">
           <p class="document-label">Anki</p>
           <h1 id="anki-heading">连接 AnkiConnect</h1>
-          <p>安装 AnkiConnect 并保持 Anki 打开。</p>
+          <p>安装 AnkiConnect 并保持 Anki 打开，再选择牌组和模板。</p>
         </div>
-        <div class="single-form">
+        <div class="settings-form">
           <label>
-            AnkiConnect 地址
+            AnkiConnect 接口地址
             <input name="ankiEndpoint" autocomplete="off">
           </label>
+          <label>
+            Anki 牌组
+            <select name="ankiDeck" disabled></select>
+          </label>
+          <label>
+            Anki 卡片模板
+            <select name="ankiModelName" disabled></select>
+          </label>
+          <label>
+            Anki 超时秒数
+            <input name="ankiRequestTimeoutSeconds" type="number" min="1" step="1">
+          </label>
+          <label>
+            重复制卡提示秒数
+            <input name="duplicatePromptSeconds" type="number" min="1" step="1">
+          </label>
+          <button id="refresh-anki" class="secondary-action" type="button" data-state="idle">刷新 Anki</button>
           <button id="test-anki" class="secondary-action" type="button" data-state="idle">测试连接</button>
         </div>
       </section>
 
-      <section class="onboarding-step finish-step" data-step="6" aria-labelledby="finish-heading" hidden>
+      <section class="onboarding-step finish-step" data-step="7" aria-labelledby="finish-heading" hidden>
         <div class="step-copy">
           <p class="document-label">完成</p>
           <h1 id="finish-heading">可以开始阅读</h1>
@@ -124,9 +239,10 @@
       </section>
 
       <footer class="onboarding-footer">
-        <span id="progress">1 / 7</span>
+        <span id="progress">1 / 8</span>
         <button id="continue" class="primary-action" type="button" data-action="next">继续</button>
       </footer>
+      </form>
     </main>
     <script type="module" src="../onboarding.js"></script>
   </body>
