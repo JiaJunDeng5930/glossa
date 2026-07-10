@@ -597,13 +597,11 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
     setSelectOptions(ankiModelNameSelect, catalog.modelNames, modelName);
     setAnkiSelectsEnabled(true);
     setTestState(refreshAnkiButton, "idle");
-    if (options.reportStatus) {
-      if (ankiDeckSelect.value !== previousDeck || ankiModelNameSelect.value !== previousModelName) {
-        // @behavior glossa.settings_save.status_state.editing.anki_catalog_refresh A manual Anki catalog refresh marks changed deck or model selections as edited.
-        markSettingsDirty("Anki 选项已更新，等待保存");
-      } else {
-        setStatus("");
-      }
+    if (ankiDeckSelect.value !== previousDeck || ankiModelNameSelect.value !== previousModelName) {
+      // @behavior glossa.settings_save.status_state.editing.anki_catalog_refresh Anki catalog refresh marks automatically changed deck or model selections as edited during initial and manual loads.
+      markSettingsDirty("Anki 选项已更新，等待保存");
+    } else if (options.reportStatus) {
+      setStatus("");
     }
   } catch (error) {
     setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
