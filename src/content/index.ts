@@ -834,6 +834,8 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
   // @behavior glossa.card_creation.duplicate_gate.prompt_supersede Starting a duplicate-card prompt resolves the previous prompt as cancellation before replacing its DOM.
   cancelDuplicateCardPrompt(doc);
   return new Promise((resolve) => {
+    // @behavior glossa.card_creation.duplicate_gate.prompt.keyboard_focus Duplicate-card confirmation manages initial focus and restores the prior page control when it closes.
+    const previousFocus = doc.activeElement;
     const prompt = doc.createElement("div");
     // @constraint glossa.card_creation.duplicate_gate.prompt_dom The duplicate-card prompt is extension-owned page UI anchored at the top right of the viewport.
     prompt.dataset.glossaOwned = "1";
@@ -859,9 +861,38 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       "font:14px/1.4 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
       "box-shadow:0 20px 48px rgba(23,24,20,0.18)"
     ].join(";");
+    const style = doc.createElement("style");
+    style.dataset.glossaOwned = "1";
+    // @constraint glossa.card_creation.duplicate_gate.prompt.responsive_layout Duplicate-card confirmation stacks its message above two equal controls on viewports up to 360 pixels wide.
+    style.textContent = `
+      [data-glossa-duplicate-card-prompt="1"] button:focus-visible {
+        outline: 3px solid rgba(227, 179, 77, 0.72);
+        outline-offset: 2px;
+      }
+      @media (max-width: 360px) {
+        [data-glossa-duplicate-card-prompt="1"] {
+          left: 12px !important;
+          top: 12px !important;
+          right: 12px !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 10px !important;
+          max-width: none !important;
+          padding: 14px !important;
+        }
+        [data-glossa-duplicate-card-prompt="1"] > span {
+          grid-column: 1 / -1;
+        }
+        [data-glossa-duplicate-card-prompt="1"] > button {
+          width: 100%;
+          min-width: 0 !important;
+        }
+      }
+    `;
     const text = doc.createElement("span");
+    text.id = "glossa-duplicate-card-prompt-description";
     text.textContent = `${input.surface} 已经制过卡，继续制卡？`;
     text.style.cssText = "min-width:0;overflow-wrap:anywhere;font-weight:650;letter-spacing:0.005em";
+    prompt.setAttribute("aria-describedby", text.id);
     // @behavior glossa.card_creation.duplicate_gate.prompt_controls The duplicate-card prompt exposes one confirmation control and one cancellation control.
     const confirm = doc.createElement("button");
     // @constraint glossa.card_creation.duplicate_gate.prompt_controls.confirm_label The duplicate-card confirmation control uses visible text and an aria label for the continue action.
@@ -896,7 +927,8 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       "font:740 14px/1 ui-sans-serif,system-ui",
       "cursor:pointer"
     ].join(";");
-    prompt.append(text, confirm, cancel);
+    // @constraint glossa.card_creation.duplicate_gate.prompt_dom.children The duplicate-card prompt contains its scoped style, description, primary action, and cancellation action.
+    prompt.append(style, text, confirm, cancel);
     let settled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const finish = (confirmed: boolean): void => {
@@ -909,6 +941,10 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       }
       duplicatePromptResolvers.delete(doc);
       prompt.remove();
+      // @behavior glossa.card_creation.duplicate_gate.prompt.keyboard_focus.restore Closing the duplicate-card prompt restores the connected page control that held focus before it opened.
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected && previousFocus !== doc.body) {
+        previousFocus.focus({ preventScroll: true });
+      }
       resolve(confirmed);
     };
     // @behavior glossa.card_creation.duplicate_gate.prompt_timeout Duplicate-card prompt timeout resolves as cancellation.
@@ -916,7 +952,17 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     duplicatePromptResolvers.set(doc, finish);
     confirm.addEventListener("click", () => finish(true), { once: true });
     cancel.addEventListener("click", () => finish(false), { once: true });
+    // @behavior glossa.card_creation.duplicate_gate.prompt.escape Pressing Escape cancels the active duplicate-card confirmation.
+    prompt.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        finish(false);
+      }
+    });
     (doc.body ?? doc.documentElement).append(prompt);
+    // @behavior glossa.card_creation.duplicate_gate.prompt.keyboard_focus.initial Opening the duplicate-card prompt moves keyboard focus to its primary confirmation control.
+    confirm.focus({ preventScroll: true });
   });
 }
 

@@ -47,6 +47,9 @@ async function glossaDatabaseHasStore(page: Page, storeName: string): Promise<bo
 // @verifies glossa.settings_save.default_overrides.write_filter
 // @verifies glossa.settings_save.clear_gloss_cache
 // @verifies glossa.settings_save.status_state
+// @verifies glossa.settings_save.status_state.editing
+// @verifies glossa.settings_save.status_state.save_lifecycle
+// @verifies glossa.settings_save.section_navigation
 // @verifies glossa.settings_save.timeout_seconds
 // @verifies glossa.word_memory.known_management
 // @verifies glossa.word_memory.known_management.add_known
@@ -146,6 +149,12 @@ test("options page captures shortcuts, previews style changes and saves prompts"
             callback({ [key]: store[key] });
           },
           set(value: Record<string, unknown>, callback?: () => void) {
+            if (Reflect.get(window, "__glossaFailSettingsSave")) {
+              runtimeApi.lastError = { message: "settings save failed" };
+              callback?.();
+              runtimeApi.lastError = undefined;
+              return;
+            }
             Object.assign(store, value);
             callback?.();
           }
@@ -217,6 +226,17 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
 
+  await expect(page.locator('.section-nav a[href="#reading-section"]')).toHaveAttribute("aria-current", "location");
+  await page.evaluate(() => {
+    document.documentElement.style.scrollBehavior = "auto";
+    const section = document.querySelector<HTMLElement>("#appearance-section")!;
+    window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY - 100);
+  });
+  await expect(page.locator('.section-nav a[href="#appearance-section"]')).toHaveAttribute("aria-current", "location");
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(page.locator('.section-nav a[href="#cache-section"]')).toHaveAttribute("aria-current", "location");
+  await page.evaluate(() => window.scrollTo(0, 0));
+
   await page.locator("#shortcut-capture").click();
   await page.keyboard.down("Control");
   await page.keyboard.down("Shift");
@@ -227,6 +247,9 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.keyboard.down("Alt");
   await page.keyboard.press("KeyG");
   await page.keyboard.up("Alt");
+  await expect(page.locator("#save-settings .save-label")).toHaveText("保存更改");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "dirty");
+  await expect(page.locator("#status")).toHaveText("快捷键已记录，等待保存");
 
   await page.locator("input[name=glossTextColor]").fill("#ff5500");
   await page.locator("input[name=glossBackgroundColor]").fill("#113355");
@@ -263,6 +286,21 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("#open-known-words").click();
   await expect(page.locator("#known-words-dialog")).toBeVisible();
   await expect(page.locator("#known-words-nav button")).toHaveCount(26);
+  await page.setViewportSize({ width: 320, height: 720 });
+  const narrowKnownWordsNav = await page.locator("#known-words-nav").evaluate((nav) => {
+    const firstButton = nav.querySelector("button")!;
+    const buttonRect = firstButton.getBoundingClientRect();
+    return {
+      clientWidth: nav.clientWidth,
+      scrollWidth: nav.scrollWidth,
+      buttonWidth: buttonRect.width,
+      buttonHeight: buttonRect.height
+    };
+  });
+  expect(narrowKnownWordsNav.scrollWidth).toBeLessThanOrEqual(narrowKnownWordsNav.clientWidth + 1);
+  expect(narrowKnownWordsNav.buttonWidth).toBeGreaterThanOrEqual(24);
+  expect(narrowKnownWordsNav.buttonHeight).toBeGreaterThanOrEqual(28);
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator("#known-words-nav button", { hasText: "L" }).click();
   await expect(page.locator("#known-words-l")).toBeInViewport();
   await expect(page.locator("#known-words-list")).toContainText("archive");
@@ -409,6 +447,10 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#status")).toHaveText("");
 
   await page.locator("button[type=submit]").click();
+  await expect(page.locator("#status")).toHaveText("已保存");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "success");
+  await expect(page.locator("#save-settings .save-label")).toHaveText("保存");
+  await expect(page.locator("#save-settings")).toBeEnabled();
 
   const settings = await page.evaluate(() => (Reflect.get(window, "__glossaStore") as { settings: unknown }).settings);
   expect(settings).toMatchObject({
@@ -464,6 +506,18 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       request.onerror = () => reject(request.error);
     });
   })).toBe(0);
+
+  await page.locator("input[name=learningWindowDays]").fill("9");
+  await page.evaluate(() => Reflect.set(window, "__glossaFailSettingsSave", true));
+  await page.locator("#save-settings").click();
+  await expect(page.locator("#status")).toHaveText("设置保存失败，请重试");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#save-settings .save-label")).toHaveText("重试保存");
+  await expect(page.locator("#save-settings")).toBeEnabled();
+  await page.evaluate(() => Reflect.set(window, "__glossaFailSettingsSave", false));
+  await page.locator("#save-settings").click();
+  await expect(page.locator("#status")).toHaveText("已保存");
+  await expect(page.locator("#save-settings .save-label")).toHaveText("保存");
 });
 
 // @verifies glossa.settings_save
