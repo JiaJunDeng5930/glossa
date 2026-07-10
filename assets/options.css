@@ -135,30 +135,20 @@ textarea {
 
 .section-nav a:hover,
 .section-nav a:focus-visible,
-body:not(:has(.settings-panel:target)) .section-nav a:first-child,
-body:has(#reading-section:target) .section-nav a[href="#reading-section"],
-body:has(#known-words-section:target) .section-nav a[href="#known-words-section"],
-body:has(#appearance-section:target) .section-nav a[href="#appearance-section"],
-body:has(#ai-section:target) .section-nav a[href="#ai-section"],
-body:has(#anki-section:target) .section-nav a[href="#anki-section"],
-body:has(#prompt-section:target) .section-nav a[href="#prompt-section"],
-body:has(#cache-section:target) .section-nav a[href="#cache-section"] {
+.section-nav a[aria-current="location"] {
   padding-left: 4px;
   color: var(--ink);
-  outline: 0;
 }
 
 .section-nav a:hover::after,
 .section-nav a:focus-visible::after,
-body:not(:has(.settings-panel:target)) .section-nav a:first-child::after,
-body:has(#reading-section:target) .section-nav a[href="#reading-section"]::after,
-body:has(#known-words-section:target) .section-nav a[href="#known-words-section"]::after,
-body:has(#appearance-section:target) .section-nav a[href="#appearance-section"]::after,
-body:has(#ai-section:target) .section-nav a[href="#ai-section"]::after,
-body:has(#anki-section:target) .section-nav a[href="#anki-section"]::after,
-body:has(#prompt-section:target) .section-nav a[href="#prompt-section"]::after,
-body:has(#cache-section:target) .section-nav a[href="#cache-section"]::after {
+.section-nav a[aria-current="location"]::after {
   width: 42px;
+}
+
+.section-nav a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ochre) 68%, transparent);
+  outline-offset: 3px;
 }
 
 .settings-workspace {
@@ -222,6 +212,11 @@ h1 {
 
 #status[data-state="success"] {
   color: var(--green);
+}
+
+#status[data-state="dirty"],
+#status[data-state="pending"] {
+  color: var(--ink-soft);
 }
 
 #status[data-state="error"] {
@@ -954,11 +949,13 @@ button svg {
 
   .known-words-nav {
     position: static;
-    grid-template-columns: repeat(13, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(24px, 1fr));
   }
 
   .known-words-nav button {
     width: 100%;
+    min-width: 0;
+    min-height: 28px;
   }
 }
 

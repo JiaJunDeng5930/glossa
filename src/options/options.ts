@@ -13,6 +13,8 @@ import { createExtensionStorage } from "../storage/db";
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 const extensionStorage = createExtensionStorage();
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
+const saveButton = document.querySelector<HTMLButtonElement>("#save-settings")!;
+const saveLabel = saveButton.querySelector<HTMLElement>(".save-label")!;
 const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-capture")!;
 const translateShortcutCapture = document.querySelector<HTMLButtonElement>("#translate-shortcut-capture")!;
 const glossPreview = document.querySelector<HTMLElement>("#gloss-preview")!;
@@ -40,14 +42,18 @@ const knownWordsList = document.querySelector<HTMLElement>("#known-words-list")!
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 let capturingShortcutName: "shortcutKey" | "translateShortcutKey" | undefined;
 let pendingShortcut = "";
+let settingsRevision = 0;
 
 populateKnownWordLists();
 populateKnownWordsNav();
-void loadSettings();
+setupSectionNavigation();
+setSaveState("clean");
+// @behavior glossa.settings_save.options_load.failure_status Settings load failures expose a reopening instruction in the options status output.
+void loadSettings().catch(() => setStatus("设置加载失败，请重新打开页面", "error"));
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  void saveSettings(readFormSettings()).then(() => setStatus("已保存", "success"));
+  void persistSettings();
 });
 
 testAiButton.addEventListener("click", () => {
@@ -65,10 +71,14 @@ refreshAnkiButton.addEventListener("click", () => {
 resetGlossPromptButton.addEventListener("click", () => {
   setInput("glossPrompt", DEFAULT_SETTINGS.prompts.gloss);
   updatePreview(readFormSettings());
+  // @behavior glossa.settings_save.status_state.editing.gloss_prompt_reset Resetting the gloss prompt marks the form as edited.
+  markSettingsDirty();
 });
 
 resetAnkiPromptButton.addEventListener("click", () => {
   setInput("ankiPrompt", DEFAULT_SETTINGS.prompts.ankiCard);
+  // @behavior glossa.settings_save.status_state.editing.anki_prompt_reset Resetting the Anki prompt marks the form as edited.
+  markSettingsDirty();
 });
 
 clearGlossCacheButton.addEventListener("click", () => {
@@ -138,7 +148,11 @@ document.addEventListener("keyup", (event) => {
   }
 });
 
-form.addEventListener("input", () => updatePreview(readFormSettings()));
+form.addEventListener("input", () => {
+  updatePreview(readFormSettings());
+  // @behavior glossa.settings_save.status_state.editing.control_input Each settings control input marks the form as edited.
+  markSettingsDirty();
+});
 
 function readFormSettings(): GlossaSettings {
   const provider = readInput("provider") as AiSettings["provider"];
@@ -240,11 +254,108 @@ function setChecked(name: string, value: boolean): void {
   (form.elements.namedItem(name) as HTMLInputElement).checked = value;
 }
 
-// @behavior glossa.settings_save.status_state Options status output distinguishes successful saves, shortcut captures, and cache clears from errors.
-function setStatus(value: string, state: "success" | "error" | "" = value ? "error" : ""): void {
+// @constraint glossa.settings_save.status_state.output_values Options status output uses empty, dirty, pending, success, and error semantic values.
+type StatusState = "dirty" | "pending" | "success" | "error" | "";
+// @constraint glossa.settings_save.status_state.save_lifecycle.values The settings save lifecycle uses clean, dirty, saving, and error states.
+type SettingsSaveState = "clean" | "dirty" | "saving" | "error";
+
+// @behavior glossa.settings_save.status_state Options status output distinguishes edited, pending, successful, and failed operations.
+function setStatus(value: string, state: StatusState = value ? "error" : ""): void {
   statusOutput.value = value;
   // @behavior glossa.settings_save.status_state.dataset Options status output exposes its semantic state to styling and assistive inspection.
   statusOutput.dataset.state = state;
+}
+
+// @behavior glossa.settings_save.status_state.save_button The save button mirrors the current settings save lifecycle through its label, dataset, and disabled state.
+function setSaveState(state: SettingsSaveState): void {
+  const labels: Record<SettingsSaveState, string> = {
+    clean: "保存",
+    dirty: "保存更改",
+    saving: "保存中…",
+    error: "重试保存"
+  };
+  // @behavior glossa.settings_save.status_state.save_button.dataset The save button exposes its lifecycle state through a data attribute.
+  saveButton.dataset.state = state;
+  // @behavior glossa.settings_save.status_state.save_button.pending_disabled The save button stays disabled while a settings write is active.
+  saveButton.disabled = state === "saving";
+  // @behavior glossa.settings_save.status_state.save_button.label The save button label identifies clean, edited, active-write, and retry states.
+  saveLabel.textContent = labels[state];
+}
+
+// @behavior glossa.settings_save.status_state.editing Editing any settings control marks the current form revision as unsaved.
+function markSettingsDirty(message = "有未保存的更改"): void {
+  settingsRevision += 1;
+  // @behavior glossa.settings_save.status_state.editing.during_save Edits made during an active settings write advance the revision while preserving the active-write presentation.
+  if (saveButton.dataset.state === "saving") {
+    return;
+  }
+  setSaveState("dirty");
+  setStatus(message, "dirty");
+}
+
+// @behavior glossa.settings_save.status_state.save_lifecycle Settings saving exposes progress, success, retry, and edits made during an active write.
+async function persistSettings(): Promise<void> {
+  const submittedRevision = settingsRevision;
+  setSaveState("saving");
+  // @behavior glossa.settings_save.status_state.save_lifecycle.pending_status An active settings write announces its pending state in the options status output.
+  setStatus("正在保存…", "pending");
+  // @behavior glossa.settings_save.status_state.save_lifecycle.write_attempt Each settings submission resolves into a saved, still-edited, or retry state.
+  try {
+    await saveSettings(readFormSettings());
+    if (settingsRevision === submittedRevision) {
+      setSaveState("clean");
+      setStatus("已保存", "success");
+      return;
+    }
+    setSaveState("dirty");
+    setStatus("保存完成，仍有未保存的更改", "dirty");
+  } catch {
+    // @behavior glossa.settings_save.status_state.save_lifecycle.failure_status Failed settings writes keep the save action available and announce a retry instruction.
+    setSaveState("error");
+    setStatus("设置保存失败，请重试", "error");
+  }
+}
+
+// @behavior glossa.settings_save.section_navigation Options navigation marks the section nearest the reading marker as the current location while the page scrolls.
+function setupSectionNavigation(): void {
+  const entries = Array.from(document.querySelectorAll<HTMLAnchorElement>(".section-nav a[href^='#']")).flatMap((link) => {
+    const section = document.getElementById(link.hash.slice(1));
+    return section ? [{ link, section }] : [];
+  });
+  if (entries.length === 0) {
+    return;
+  }
+  let animationFrame: number | undefined;
+  const render = (): void => {
+    animationFrame = undefined;
+    const atDocumentEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+    let activeEntry = atDocumentEnd ? entries.at(-1)! : entries[0]!;
+    if (!atDocumentEnd) {
+      const readingMarker = Math.min(window.innerHeight * 0.32, 240);
+      for (const entry of entries) {
+        if (entry.section.getBoundingClientRect().top > readingMarker) {
+          break;
+        }
+        activeEntry = entry;
+      }
+    }
+    for (const entry of entries) {
+      if (entry === activeEntry) {
+        entry.link.setAttribute("aria-current", "location");
+      } else {
+        entry.link.removeAttribute("aria-current");
+      }
+    }
+  };
+  const scheduleRender = (): void => {
+    if (animationFrame === undefined) {
+      animationFrame = window.requestAnimationFrame(render);
+    }
+  };
+  window.addEventListener("scroll", scheduleRender, { passive: true });
+  window.addEventListener("resize", scheduleRender, { passive: true });
+  window.addEventListener("hashchange", scheduleRender);
+  render();
 }
 
 function setAnkiSelectsEnabled(enabled: boolean): void {
@@ -474,6 +585,8 @@ function setTestState(button: HTMLButtonElement, state: TestState): void {
 }
 
 async function refreshAnkiOptions(settings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
+  const previousDeck = ankiDeckSelect.value;
+  const previousModelName = ankiModelNameSelect.value;
   setTestState(refreshAnkiButton, "loading");
   setAnkiSelectsEnabled(false);
   try {
@@ -485,7 +598,12 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
     setAnkiSelectsEnabled(true);
     setTestState(refreshAnkiButton, "idle");
     if (options.reportStatus) {
-      setStatus("");
+      if (ankiDeckSelect.value !== previousDeck || ankiModelNameSelect.value !== previousModelName) {
+        // @behavior glossa.settings_save.status_state.editing.anki_catalog_refresh A manual Anki catalog refresh marks changed deck or model selections as edited.
+        markSettingsDirty("Anki 选项已更新，等待保存");
+      } else {
+        setStatus("");
+      }
     }
   } catch (error) {
     setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
@@ -613,7 +731,8 @@ function finishShortcutCapture(): void {
   shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
   capturingShortcutName = undefined;
   pendingShortcut = "";
-  setStatus("已记录快捷键", "success");
+  // @behavior glossa.settings_save.status_state.editing.shortcut_capture Completing shortcut capture marks the form as edited.
+  markSettingsDirty("快捷键已记录，等待保存");
 }
 
 function isModifierKey(key: string): boolean {

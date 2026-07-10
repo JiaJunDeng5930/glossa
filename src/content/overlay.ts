@@ -109,6 +109,15 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       transform: translateY(0);
     }
   `;
+  // @constraint glossa.page_translation.shortcut_selection.reduced_motion Selection mode removes veil and note transitions when the page requests reduced motion.
+  style.textContent += `
+    @media (prefers-reduced-motion: reduce) {
+      .selection-veil,
+      .selection-note {
+        transition: none;
+      }
+    }
+  `;
   const veil = doc.createElement("div");
   veil.className = "selection-veil";
   veil.dataset.glossaOwned = "1";

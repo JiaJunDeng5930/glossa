@@ -259,6 +259,27 @@ body.review-page {
   }
 }
 
+@media (max-width: 360px) {
+  [data-glossa-duplicate-card-prompt] {
+    left: 12px;
+    top: 12px;
+    right: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    max-width: none;
+    padding: 14px;
+  }
+
+  [data-glossa-duplicate-card-prompt] span {
+    grid-column: 1 / -1;
+  }
+
+  [data-glossa-duplicate-card-prompt] button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-glossa-token-label] {
     animation: none;

@@ -95,7 +95,9 @@ test("content bundle toggles page translation with the configured shortcut", asy
 });
 
 // @verifies glossa.page_translation.shortcut_selection.plugin_shortcut_chord
+// @verifies glossa.page_translation.shortcut_selection.reduced_motion
 test("content bundle keeps plugin shortcut chords while exiting selection mode", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
   await installChromeRuntime(page, {
     shortcutKey: "Alt",
@@ -118,6 +120,14 @@ test("content bundle keeps plugin shortcut chords while exiting selection mode",
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "??");
+  expect(await page.locator("#glossa-overlay").evaluate((host) => {
+    const veil = host.shadowRoot!.querySelector<HTMLElement>(".selection-veil")!;
+    const note = host.shadowRoot!.querySelector<HTMLElement>(".selection-note")!;
+    return {
+      veil: getComputedStyle(veil).transitionDuration,
+      note: getComputedStyle(note).transitionDuration
+    };
+  })).toEqual({ veil: "0s", note: "0s" });
 
   await page.keyboard.down("Alt");
   await expect(page.locator("#glossa-overlay")).toHaveAttribute("data-glossa-selecting", "true");
@@ -553,6 +563,10 @@ test("content bundle shows card loading feedback before creation finishes", asyn
 // @verifies glossa.card_creation.duplicate_gate.prompt
 // @verifies glossa.card_creation.duplicate_gate.prompt_dom
 // @verifies glossa.card_creation.duplicate_gate.prompt_controls
+// @verifies glossa.card_creation.duplicate_gate.prompt.responsive_layout
+// @verifies glossa.card_creation.duplicate_gate.prompt.keyboard_focus.initial
+// @verifies glossa.card_creation.duplicate_gate.prompt.keyboard_focus.restore
+// @verifies glossa.card_creation.duplicate_gate.prompt.escape
 // @verifies glossa.card_creation.duplicate_gate.feedback_state
 // @verifies glossa.card_creation.duplicate_gate.feedback_dataset_state
 // @verifies glossa.card_creation.duplicate_gate.feedback_clear
@@ -560,7 +574,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
 // @verifies glossa.card_creation.note_request.feedback_badge
 // @verifies glossa.page_translation.shortcut_selection.duplicate_prompt_controls
 test("content bundle asks before creating another card for a carded word", async ({ page }) => {
-  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await page.setContent("<main><p id=\"target\" tabindex=\"0\">Create archive card.</p></main>");
   await installChromeRuntime(page, {
     shortcutKey: "Alt",
     autoTranslateEnabled: false,
@@ -597,21 +611,41 @@ test("content bundle asks before creating another card for a carded word", async
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
+  await page.locator("#target").focus();
   await page.keyboard.down("Alt");
   await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
-  await page.getByRole("button", { name: "取消制卡" }).click();
+  await expect(page.getByRole("button", { name: "继续制卡" })).toBeFocused();
+  await page.keyboard.press("Escape");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0);
+  await expect(page.locator("#target")).toBeFocused();
   expect(await page.evaluate(() => {
     const messages = Reflect.get(window, "__duplicateMessages") as Array<{ payload?: { allowDuplicateCard?: boolean } }>;
     return messages.map((message) => message.payload?.allowDuplicateCard === true);
   })).toEqual([false]);
 
+  await page.setViewportSize({ width: 320, height: 720 });
   await page.keyboard.down("Alt");
   await clickWord(page, "#target", "archive");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+  const narrowPromptLayout = await page.locator("[data-glossa-duplicate-card-prompt]").evaluate((prompt) => {
+    const text = prompt.querySelector("span")!.getBoundingClientRect();
+    const confirm = prompt.querySelector("button")!.getBoundingClientRect();
+    const cancel = prompt.querySelectorAll("button")[1]!.getBoundingClientRect();
+    return {
+      columns: getComputedStyle(prompt).gridTemplateColumns.split(" ").length,
+      textWidth: text.width,
+      textBottom: text.bottom,
+      confirmTop: confirm.top,
+      cancelTop: cancel.top
+    };
+  });
+  expect(narrowPromptLayout.columns).toBe(2);
+  expect(narrowPromptLayout.textWidth).toBeGreaterThan(200);
+  expect(narrowPromptLayout.confirmTop).toBeGreaterThanOrEqual(narrowPromptLayout.textBottom);
+  expect(Math.abs(narrowPromptLayout.confirmTop - narrowPromptLayout.cancelTop)).toBeLessThan(1);
   await page.getByRole("button", { name: "继续制卡" }).click();
   await page.keyboard.up("Alt");
 
