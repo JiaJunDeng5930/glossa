@@ -842,26 +842,26 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     prompt.setAttribute("aria-label", "重复制卡确认");
     prompt.style.cssText = [
       "position:fixed",
-      "top:18px",
-      "right:18px",
+      "top:20px",
+      "right:20px",
       "z-index:2147483647",
       "display:grid",
       "grid-template-columns:minmax(0,1fr) auto auto",
       "align-items:center",
-      "gap:10px",
-      "max-width:min(430px,calc(100vw - 36px))",
-      "padding:14px",
-      "border:1px solid #bdb5a6",
-      "border-radius:6px",
-      "background:linear-gradient(rgba(255,253,247,0.98),rgba(255,249,238,0.94)),radial-gradient(circle at 15% 20%,rgba(31,36,40,0.05) 0 1px,transparent 1px)",
-      "background-size:auto,16px 16px",
-      "color:#1f2428",
+      "gap:12px",
+      "max-width:min(440px,calc(100vw - 40px))",
+      "padding:15px 16px",
+      "border:1px solid rgba(23,24,20,0.32)",
+      `border-top:2px solid ${GLOSSA_THEME.accent}`,
+      "border-radius:1px",
+      "background:rgba(250,248,241,0.98)",
+      "color:#171814",
       "font:14px/1.4 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
-      "box-shadow:0 12px 28px rgba(42,35,24,0.16)"
+      "box-shadow:0 20px 48px rgba(23,24,20,0.18)"
     ].join(";");
     const text = doc.createElement("span");
     text.textContent = `${input.surface} 已经制过卡，继续制卡？`;
-    text.style.cssText = "min-width:0;overflow-wrap:anywhere;font-weight:700";
+    text.style.cssText = "min-width:0;overflow-wrap:anywhere;font-weight:650;letter-spacing:0.005em";
     // @behavior glossa.card_creation.duplicate_gate.prompt_controls The duplicate-card prompt exposes one confirmation control and one cancellation control.
     const confirm = doc.createElement("button");
     // @constraint glossa.card_creation.duplicate_gate.prompt_controls.confirm_label The duplicate-card confirmation control uses visible text and an aria label for the continue action.
@@ -875,24 +875,25 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     cancel.setAttribute("aria-label", "取消制卡");
     // @constraint glossa.card_creation.duplicate_gate.prompt_controls.confirm_style The duplicate-card confirmation control uses the shared theme accent as its primary action color.
     confirm.style.cssText = [
-      "min-width:82px",
-      "height:34px",
+      "min-width:88px",
+      "height:36px",
       `border:1px solid ${GLOSSA_THEME.accent}`,
-      "border-radius:6px",
+      "border-radius:2px",
       `background:${GLOSSA_THEME.accent}`,
-      "color:#ffffff",
-      "font:700 14px/1 ui-sans-serif,system-ui",
+      "color:#fffaf2",
+      "font:740 14px/1 ui-sans-serif,system-ui",
+      "box-shadow:0 7px 16px rgba(200,71,36,0.17)",
       "cursor:pointer"
     ].join(";");
     // @constraint glossa.card_creation.duplicate_gate.prompt_controls.cancel_style The duplicate-card cancellation control stays visually secondary inside the paper confirmation prompt.
     cancel.style.cssText = [
       "min-width:54px",
-      "height:34px",
-      "border:1px solid #bdb5a6",
-      "border-radius:6px",
-      "background:rgba(255,253,247,0.8)",
-      "color:#1f2428",
-      "font:700 14px/1 ui-sans-serif,system-ui",
+      "height:36px",
+      "border:1px solid rgba(23,24,20,0.32)",
+      "border-radius:2px",
+      "background:transparent",
+      "color:#171814",
+      "font:740 14px/1 ui-sans-serif,system-ui",
       "cursor:pointer"
     ].join(";");
     prompt.append(text, confirm, cancel);

@@ -18,6 +18,7 @@ async function visibleStepCount(page: Page): Promise<number> {
 
 // @verifies glossa.onboarding
 // @verifies glossa.onboarding.single_topic
+// @verifies glossa.onboarding.step_focus
 // @verifies glossa.onboarding.settings_save
 // @verifies glossa.onboarding.ai_check
 // @verifies glossa.onboarding.anki_check
@@ -77,10 +78,12 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
 
   await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeFocused();
   await expect.poll(() => visibleStepCount(page)).toBe(1);
   await page.locator("#continue").click();
 
   await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "翻译本页" })).toBeFocused();
   await expect.poll(() => visibleStepCount(page)).toBe(1);
   await page.locator("#continue").click();
 

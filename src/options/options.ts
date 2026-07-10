@@ -47,7 +47,7 @@ void loadSettings();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  void saveSettings(readFormSettings()).then(() => setStatus("已保存"));
+  void saveSettings(readFormSettings()).then(() => setStatus("已保存", "success"));
 });
 
 testAiButton.addEventListener("click", () => {
@@ -240,8 +240,11 @@ function setChecked(name: string, value: boolean): void {
   (form.elements.namedItem(name) as HTMLInputElement).checked = value;
 }
 
-function setStatus(value: string): void {
+// @behavior glossa.settings_save.status_state Options status output distinguishes successful saves, shortcut captures, and cache clears from errors.
+function setStatus(value: string, state: "success" | "error" | "" = value ? "error" : ""): void {
   statusOutput.value = value;
+  // @behavior glossa.settings_save.status_state.dataset Options status output exposes its semantic state to styling and assistive inspection.
+  statusOutput.dataset.state = state;
 }
 
 function setAnkiSelectsEnabled(enabled: boolean): void {
@@ -361,7 +364,7 @@ async function clearGlossCache(): Promise<void> {
   // @behavior glossa.settings_save.clear_gloss_cache The options page clears persisted translation labels while leaving vocabulary state unchanged.
   try {
     await runtimeMessage(createOptionsMessage("gloss.cache.clear", {}));
-    setStatus("翻译缓存已清空");
+    setStatus("翻译缓存已清空", "success");
   } catch (error) {
     setStatus(userMessageForError(diagnosticErrorFrom(error, {
       reason: "runtime",
@@ -610,7 +613,7 @@ function finishShortcutCapture(): void {
   shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
   capturingShortcutName = undefined;
   pendingShortcut = "";
-  setStatus("已记录快捷键");
+  setStatus("已记录快捷键", "success");
 }
 
 function isModifierKey(key: string): boolean {

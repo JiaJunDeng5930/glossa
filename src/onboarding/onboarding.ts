@@ -119,7 +119,12 @@ function showStep(index: number): void {
   });
   progress.textContent = `${index + 1} / ${steps.length}`;
   continueButton.textContent = index === steps.length - 1 ? "完成" : "继续";
-  steps[index]?.querySelector("h1")?.focus();
+  // @behavior glossa.onboarding.step_focus Each rendered onboarding step moves programmatic focus to its heading without adding the heading to sequential keyboard navigation.
+  const heading = steps[index]?.querySelector<HTMLHeadingElement>("h1");
+  if (heading) {
+    heading.tabIndex = -1;
+    heading.focus();
+  }
 }
 
 function readCurrentSettings(): GlossaSettings {
