@@ -3,430 +3,427 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f2efe7" />
     <meta
       name="description"
-      content="Glossa AI 是面向中文用户的 Chrome 英文阅读扩展，在网页生词上方显示中文释义，并支持 Alt 点击加入 Anki。"
+      content="Glossa 是一款 Chrome 英文阅读扩展，在网页生词上方显示贴合语境的中文释义，并支持 Alt 点击加入 Anki。"
     />
-    <link rel="icon" href="data:," />
-    <title>Glossa AI - 英文长文，读得更顺</title>
-    <link rel="stylesheet" href="/styles/global.css" />
+    <link rel="icon" href="./favicon.svg" />
+    <link rel="stylesheet" href="./styles/global.css" />
+    <title>Glossa — 生词轻声解释，文章继续向前</title>
   </head>
   <body>
-    <header class="site-nav" aria-label="主导航">
-      <a class="nav-brand" href="#" aria-label="Glossa AI 首页">
-        <img class="nav-logo" src="/assets/logo.png" alt="Glossa AI" />
+    <a class="skip-link" href="#main">跳到正文</a>
+
+    <header class="site-header" data-site-header>
+      <a class="brand" href="#main" aria-label="Glossa 首页">
+        <img src="./assets/logo.png" alt="Glossa" />
       </a>
-      <nav aria-label="站点导航">
-        <a class="nav-link" href="#workflow">工作方式</a>
-        <a class="nav-link" href="#anki">Anki 制卡</a>
-        <a class="nav-link" href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">GitHub</a>
-        <a class="nav-link download-pill" href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">获取 Glossa</a>
+
+      <nav class="site-nav" aria-label="主导航">
+        <a href="#story">阅读演示</a>
+        <a href="#details">产品能力</a>
+        <a href="#install">安装</a>
+        <a href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
+
+      <a
+        class="header-download"
+        href="https://github.com/JiaJunDeng5930/glossa/releases/latest"
+        target="_blank"
+        rel="noreferrer"
+      >
+        下载扩展
+        <span aria-hidden="true">↗</span>
+      </a>
     </header>
 
-    <main>
-      <section class="story story-desktop" id="workflow" aria-label="Glossa AI 滚动演示" data-story>
-        <div class="stage">
-          <div class="stage-shell">
-            <div class="left-viewport">
-              <div class="left-track" data-left-track>
-                <section class="left-panel hero-panel">
-                  <h1>英文长文，<br />读得更顺</h1>
-                  <p>
-                    Glossa 在网页里的生词上方显示中文释义，让你不断流也能读懂上下文。遇到值得记住的词，按住 Alt 点击即可加入 Anki。
-                  </p>
-                  <div class="hero-actions">
-                    <a class="primary-button" href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">获取 Glossa</a>
-                    <a class="text-link" href="#anki">查看 Anki 制卡</a>
-                  </div>
-                </section>
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow"><span>Chrome Extension</span><span>For Deep Reading</span></p>
+            <h1 id="hero-title">生词轻声解释，<br />文章继续向前。</h1>
+            <p class="hero-lede">
+              Glossa 把贴合语境的中文释义放在英文原词上方。熟词保持安静，值得记住的词可以直接进入 Anki。
+            </p>
+            <div class="hero-actions">
+              <a
+                class="button button-primary"
+                href="https://github.com/JiaJunDeng5930/glossa/releases/latest"
+                target="_blank"
+                rel="noreferrer"
+              >
+                获取最新版
+                <span aria-hidden="true">↗</span>
+              </a>
+              <a class="button button-text" href="#story">观看阅读演示 <span aria-hidden="true">↓</span></a>
+            </div>
+            <p class="hero-meta">开源 · Chrome Manifest V3 · 自备 AI 服务</p>
+          </div>
 
-                <section class="left-panel">
-                  <h2>只在需要时<br />显示中文释义</h2>
-                  <p>
-                    熟词保持安静，生词在原文上方轻轻出现。你看见的是文章本身，释义只在真正需要时补上。
-                  </p>
-                </section>
+          <div class="hero-visual" aria-label="Glossa 网页释义效果预览">
+            <span class="hero-index" aria-hidden="true">G / 01</span>
+            <article class="browser-frame hero-browser">
+              <header class="browser-toolbar" aria-hidden="true">
+                <div class="traffic-lights"><i></i><i></i><i></i></div>
+                <div class="browser-tab">The shape of attention</div>
+                <div class="browser-status"><i></i> Glossa active</div>
+              </header>
+              <div class="hero-article">
+                <div class="article-heading">
+                  <p>Field Notes · 08</p>
+                  <p>6 min read</p>
+                </div>
+                <h2>The shape<br />of attention</h2>
+                <p class="article-deck">What changes when a reader gives a sentence enough time?</p>
+                <div class="article-rule"></div>
+                <p class="article-body-copy">
+                  Deep reading begins when
+                  <span class="glossa-token hero-gloss" style="--gloss-delay: 700ms" data-glossa-token>
+                    <span class="glossa-label" data-glossa-token-label>注意力</span>
+                    <span class="glossa-surface" data-glossa-token-surface>attention</span>
+                  </span>
+                  settles. A patient reader notices the
+                  <span class="glossa-token hero-gloss" style="--gloss-delay: 880ms" data-glossa-token>
+                    <span class="glossa-label" data-glossa-token-label>细微</span>
+                    <span class="glossa-surface" data-glossa-token-surface>subtle</span>
+                  </span>
+                  architecture of a sentence, follows an
+                  <span class="glossa-token hero-gloss" style="--gloss-delay: 1060ms" data-glossa-token>
+                    <span class="glossa-label" data-glossa-token-label>陌生的</span>
+                    <span class="glossa-surface" data-glossa-token-surface>unfamiliar</span>
+                  </span>
+                  idea, and keeps moving until the whole argument becomes
+                  <span class="glossa-token hero-gloss" style="--gloss-delay: 1240ms" data-glossa-token>
+                    <span class="glossa-label" data-glossa-token-label>清晰</span>
+                    <span class="glossa-surface" data-glossa-token-surface>clear</span>
+                  </span>.
+                </p>
+                <aside class="margin-note">
+                  <span>CONTEXT FIRST</span>
+                  <p>先读完整句子，<br />再写这一词的释义。</p>
+                </aside>
+              </div>
+            </article>
+            <div class="hero-caption" aria-hidden="true">
+              <span>01</span>
+              <p>释义贴近原词，阅读仍然属于文章。</p>
+            </div>
+          </div>
+        </div>
 
-                <section class="left-panel">
-                  <h2>按住 Alt，<br />把生词加入 Anki</h2>
-                  <p>
-                    选中值得记住的词，Glossa 生成卡片内容，连接你的长期记忆。
-                  </p>
-                </section>
+        <div class="hero-foot" aria-label="Glossa 核心能力">
+          <div><span>01</span><strong>语境释义</strong><p>读完整句子，给出贴合此处语义的中文解释。</p></div>
+          <div><span>02</span><strong>熟词过滤</strong><p>词汇状态随阅读积累，页面只留下有用提示。</p></div>
+          <div><span>03</span><strong>Alt + Click</strong><p>一次动作生成卡片内容，并交给 AnkiConnect。</p></div>
+          <div><span>04</span><strong>外观可调</strong><p>释义的颜色、字号、字体和透明度都由你设定。</p></div>
+        </div>
+      </section>
+
+      <section class="story" id="story" data-story aria-labelledby="story-title">
+        <div class="story-stage">
+          <div class="story-shell">
+            <div class="story-copy">
+              <p class="eyebrow eyebrow-light"><span>01 / Reading Flow</span><span>Three quiet moves</span></p>
+              <div class="story-chapters">
+                <article class="story-chapter story-chapter-one">
+                  <span class="chapter-number">01</span>
+                  <h2 id="story-title">先读文章，<br />让注意力落稳。</h2>
+                  <p>Glossa 从正在阅读的页面取得句子和词的位置，保留原文、排版与上下文。</p>
+                </article>
+                <article class="story-chapter story-chapter-two">
+                  <span class="chapter-number">02</span>
+                  <h2>释义长在<br />原词上方。</h2>
+                  <p>AI 结合完整句子生成简洁中文义。熟词与已忽略词继续留在文章里，保持原来的样子。</p>
+                </article>
+                <article class="story-chapter story-chapter-three">
+                  <span class="chapter-number">03</span>
+                  <h2>一次点击，<br />送进长期记忆。</h2>
+                  <p>按住 Alt 点击单词，Glossa 生成正面、背面与例句，再交给你的 Anki 牌组。</p>
+                </article>
+              </div>
+              <div class="story-progress" aria-hidden="true">
+                <span class="story-progress-line"><i></i></span>
+                <span class="story-status"><b data-story-step>01</b> / 03</span>
               </div>
             </div>
 
-            <div class="right-stage">
-              <article class="reading-demo browser-demo" aria-label="Glossa AI 网页阅读演示" data-reading-demo>
-                <div class="browser-bar" aria-hidden="true">
-                  <span class="browser-dot"></span>
-                  <span class="browser-dot"></span>
-                  <span class="browser-dot"></span>
-                  <span class="browser-url">article.example.com/deep-reading</span>
-                </div>
-                <div class="article-page">
-                  <p class="article-kicker">Long-form reading</p>
-                  <p class="reading-copy" data-glossa-demo-copy>
-                    Long articles reward a steady pace. Glossa keeps the sentence intact while a quiet gloss clarifies context only where it helps. The note stays close to the word, so subtle meaning remains part of the line. When a term becomes indispensable, hold Alt and click to prepare Anki. New vocabulary can move into a simple review flow.
+            <div class="story-visual">
+              <article class="browser-frame story-browser" aria-label="Glossa 阅读到 Anki 制卡的连续演示">
+                <header class="browser-toolbar" aria-hidden="true">
+                  <div class="traffic-lights"><i></i><i></i><i></i></div>
+                  <div class="browser-address">essays.example / attention</div>
+                  <div class="browser-status"><i></i> Glossa</div>
+                </header>
+
+                <div class="story-article">
+                  <p class="story-article-kicker">THE READER · ESSAY</p>
+                  <h3>To read is to<br />remain with an idea.</h3>
+                  <p class="story-article-copy">
+                    A difficult paragraph often becomes clear when attention remains
+                    <span class="glossa-token story-gloss story-gloss-one" data-glossa-token>
+                      <span class="glossa-label" data-glossa-token-label>稳定</span>
+                      <span class="glossa-surface" data-glossa-token-surface>steady</span>
+                    </span>.
+                    The reader begins to notice the
+                    <span class="glossa-token story-gloss story-gloss-two" data-glossa-token>
+                      <span class="glossa-label" data-glossa-token-label>结构</span>
+                      <span class="glossa-surface" data-glossa-token-surface>structure</span>
+                    </span>
+                    beneath each claim, the
+                    <span class="glossa-token story-gloss story-gloss-three" data-glossa-token>
+                      <span class="glossa-label" data-glossa-token-label>细微差别</span>
+                      <span class="glossa-surface" data-glossa-token-surface>nuance</span>
+                    </span>
+                    inside a phrase, and the words that become
+                    <span class="glossa-token story-gloss story-gloss-four card-target" data-glossa-token>
+                      <span class="glossa-label" data-glossa-token-label>不可或缺</span>
+                      <span class="glossa-surface" data-glossa-token-surface>indispensable</span>
+                    </span>
+                    to the argument.
                   </p>
-                  <p class="reading-copy">
-                    A second paragraph keeps the page feeling like a real article. The reader can continue scanning the next thought while the translated line above expands naturally in the same text flow.
+                  <p class="story-article-copy secondary-copy">
+                    Meaning accumulates quietly. One sentence prepares the next, and the page keeps its rhythm.
                   </p>
+                  <div class="article-folio"><span>42</span><i></i><span>GLOSSA READING ROOM</span></div>
                 </div>
 
-                <div class="carding-layer" aria-hidden="true">
-                  <img class="alt-key" src="/assets/alt-key.png" alt="" />
-                  <div class="reading-mask"></div>
-                  <section class="anki-card" aria-label="Anki 卡片预览">
-                    <div class="anki-title">Anki</div>
-                    <div class="anki-row">
-                      <span>正面</span>
-                      <strong>indispensable</strong>
-                    </div>
-                    <div class="anki-row">
-                      <span>背面</span>
-                      <p>不可或缺的</p>
-                    </div>
-                    <p class="anki-example">
-                      For serious readers, this support becomes indispensable.
-                    </p>
-                    <div class="anki-action">加入 Anki</div>
-                  </section>
-                </div>
+                <div class="selection-hint" aria-hidden="true"><kbd>Alt</kbd><span>按住并点击</span></div>
+                <img class="story-pointer" src="./assets/mouse-pointer.png" alt="" aria-hidden="true" />
+                <div class="story-dim" aria-hidden="true"></div>
+
+                <section class="anki-memory-card" aria-label="Anki 卡片预览">
+                  <header><span>ANKI · NEW NOTE</span><i>✓</i></header>
+                  <div class="memory-word">
+                    <span>FRONT</span>
+                    <strong>indispensable</strong>
+                    <small>/ˌɪndɪˈspensəbl/</small>
+                  </div>
+                  <div class="memory-meaning">
+                    <span>BACK</span>
+                    <strong>不可或缺的</strong>
+                    <p>Words that become indispensable to the argument.</p>
+                  </div>
+                  <footer><span>英语长文阅读</span><b>已加入</b></footer>
+                </section>
               </article>
+
+              <p class="story-visual-note" aria-hidden="true"><span>LIVE DEMO</span> 向下滚动，完成一次阅读动作</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="mobile-story" aria-label="Glossa AI 移动端演示">
-        <section class="mobile-panel hero-panel">
-          <h1>英文长文，<br />读得更顺</h1>
-          <p>
-            Glossa 在网页里的生词上方显示中文释义，让你不断流也能读懂上下文。遇到值得记住的词，按住 Alt 点击即可加入 Anki。
-          </p>
-          <div class="hero-actions">
-            <a class="primary-button" href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">获取 Glossa</a>
-            <a class="text-link" href="#anki">查看 Anki 制卡</a>
-          </div>
-        </section>
-
-        <article class="reading-demo browser-demo mobile-reading mobile-reading-plain" aria-label="网页阅读演示">
-          <div class="article-page">
-            <p class="reading-copy">
-              Glossa keeps long-form reading calm and focused. A quiet gloss explains context without breaking the page.
+      <section class="details" id="details" aria-labelledby="details-title">
+        <div class="details-shell">
+          <div class="details-intro" data-reveal>
+            <p class="eyebrow"><span>02 / Built Around The Reader</span><span>Quiet by design</span></p>
+            <h2 id="details-title">它知道何时出现，<br />也知道何时退场。</h2>
+            <p>
+              熟词、忽略词和学习中的词拥有清晰状态。快捷键、释义样式、AI 服务与 Anki 连接，都可以按你的阅读方式调整。
             </p>
           </div>
-        </article>
 
-        <section class="mobile-panel">
-          <h2>只在需要时<br />显示中文释义</h2>
-          <p>
-            熟词保持安静，生词在原文上方轻轻出现。你看见的是文章本身，释义只在真正需要时补上。
-          </p>
-        </section>
+          <div class="details-grid">
+            <ol class="capability-list" aria-label="产品能力" data-reveal>
+              <li>
+                <span>01</span>
+                <div><strong>让熟词保持安静</strong><p>内置常见词表，并持续记住你已经掌握或忽略的词。</p></div>
+              </li>
+              <li>
+                <span>02</span>
+                <div><strong>使用你的 AI 服务</strong><p>支持 OpenAI Responses、Chat Completions、Completions 与 Glossa Backend。</p></div>
+              </li>
+              <li>
+                <span>03</span>
+                <div><strong>把释义调成你的样子</strong><p>颜色、字体、字号与透明度即时预览，适配不同页面。</p></div>
+              </li>
+              <li>
+                <span>04</span>
+                <div><strong>把词汇状态留在浏览器</strong><p>设置、熟词记录与释义缓存保存在本地扩展存储中。</p></div>
+              </li>
+            </ol>
 
-        <article class="reading-demo browser-demo mobile-reading mobile-reading-gloss" aria-label="中文释义演示">
-          <div class="article-page">
-            <p class="reading-copy">
-              Glossa keeps long-form reading calm and focused. A quiet gloss explains <span class="notranslate" translate="no" data-glossa-owned="1" data-glossa-token data-glossa-status="ready" data-glossa-display-kind="gloss" data-glossa-surface="context" data-glossa-display="语境" data-glossa-gloss-display="语境"><span data-glossa-owned="1" data-glossa-token-width translate="no">语境</span><span data-glossa-owned="1" data-glossa-token-label translate="no">语境</span><span data-glossa-owned="1" data-glossa-token-surface translate="no">context</span></span>. <span class="notranslate" translate="no" data-glossa-owned="1" data-glossa-token data-glossa-status="ready" data-glossa-display-kind="gloss" data-glossa-surface="Subtle" data-glossa-display="细微" data-glossa-gloss-display="细微"><span data-glossa-owned="1" data-glossa-token-width translate="no">细微</span><span data-glossa-owned="1" data-glossa-token-label translate="no">细微</span><span data-glossa-owned="1" data-glossa-token-surface translate="no">Subtle</span></span> meaning stays close to the sentence.
-            </p>
+            <div class="settings-scene" data-reveal>
+              <span class="settings-caption" aria-hidden="true">YOUR READING, YOUR SETTINGS</span>
+              <div class="settings-window" aria-hidden="true">
+                <aside class="settings-sidebar">
+                  <img src="./assets/logo.png" alt="" />
+                  <nav aria-hidden="true"><span>阅读</span><span>外观</span><span class="active">AI</span><span>Anki</span></nav>
+                </aside>
+                <div class="settings-content">
+                  <header>
+                    <div><small>CHROME 扩展设置</small><h3>Glossa 设置</h3></div>
+                    <span class="save-preview">保存</span>
+                  </header>
+                  <div class="settings-cards">
+                    <section>
+                      <div class="settings-card-heading"><div><h4>AI 服务</h4><p>按上下文生成简洁释义。</p></div><i class="status-dot"></i></div>
+                      <label><span>Provider</span><strong>OpenAI Responses</strong></label>
+                      <label><span>Reasoning</span><strong>Low</strong></label>
+                      <button type="button" tabindex="-1">测试连接 <span>已连接</span></button>
+                    </section>
+                    <section>
+                      <div class="settings-card-heading"><div><h4>Anki 制卡</h4><p>连接本机 AnkiConnect。</p></div></div>
+                      <label><span>Deck</span><strong>英语长文阅读</strong></label>
+                      <label><span>Model</span><strong>Basic</strong></label>
+                    </section>
+                    <section class="appearance-card">
+                      <div><h4>释义外观</h4><p>11 px · 94% opacity</p></div>
+                      <div class="appearance-preview"><i></i><i></i><i></i><span>语境</span></div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </article>
-
-        <section class="mobile-panel">
-          <h2>按住 Alt，<br />把生词加入 Anki</h2>
-          <p>
-            选中值得记住的词，Glossa 生成卡片内容，连接你的长期记忆。
-          </p>
-        </section>
-
-        <article class="reading-demo browser-demo mobile-reading mobile-reading-card" aria-label="Anki 制卡演示">
-          <div class="mobile-card-reading-shell">
-            <div class="article-page">
-              <p class="reading-copy">
-                For serious readers, this support becomes <span class="card-target notranslate" translate="no" data-glossa-owned="1" data-glossa-token data-glossa-status="ready" data-glossa-display-kind="gloss" data-glossa-surface="indispensable" data-glossa-display="不可或缺" data-glossa-gloss-display="不可或缺"><span data-glossa-owned="1" data-glossa-token-width translate="no">不可或缺</span><span data-glossa-owned="1" data-glossa-token-label translate="no">不可或缺</span><span data-glossa-owned="1" data-glossa-token-surface translate="no">indispensable<img class="word-pointer" src="/assets/mouse-pointer.png" alt="" /></span></span> when long articles introduce unfamiliar vocabulary.
-              </p>
-            </div>
-            <div class="carding-layer" aria-hidden="true">
-              <img class="alt-key" src="/assets/alt-key.png" alt="" />
-              <div class="reading-mask"></div>
-            </div>
-          </div>
-
-          <section class="anki-card" aria-label="Anki 卡片预览">
-            <div class="anki-title">Anki</div>
-            <div class="anki-row">
-              <span>正面</span>
-              <strong>indispensable</strong>
-            </div>
-            <div class="anki-row">
-              <span>背面</span>
-              <p>不可或缺的</p>
-            </div>
-            <p class="anki-example">
-              For serious readers, this support becomes indispensable.
-            </p>
-            <div class="anki-action">加入 Anki</div>
-          </section>
-        </article>
+        </div>
       </section>
 
-      <section class="product-section" id="anki" aria-label="Glossa AI 设置与 Anki 支持">
-        <div class="product-shell">
-          <div class="settings-preview" aria-label="Glossa AI 设置预览">
-            <aside class="settings-rail-preview" aria-hidden="true">
-              <img class="settings-logo" src="/assets/logo.png" alt="" />
-              <nav>
-                <span>阅读</span>
-                <span>外观</span>
-                <span>AI</span>
-                <span>Anki</span>
-              </nav>
-            </aside>
-
-            <div class="settings-workspace-preview">
-              <header class="settings-header-preview">
-                <div>
-                  <p>Chrome 扩展设置</p>
-                  <h3>Glossa 设置</h3>
-                </div>
-                <span class="save-button-preview">保存</span>
-              </header>
-
-              <div class="settings-grid-preview">
-                <section class="settings-block">
-                  <div>
-                    <h3>AI 设置</h3>
-                    <p>连接你的常用模型服务。</p>
-                  </div>
-                  <div class="field-row">
-                    <span>Provider</span>
-                    <strong>OpenAI Responses</strong>
-                  </div>
-                  <div class="field-row">
-                    <span>请求超时</span>
-                    <strong>30 秒</strong>
-                  </div>
-                  <div class="field-row prompt-row">
-                    <span>提示词</span>
-                    <strong>按上下文生成简明中文释义</strong>
-                  </div>
-                </section>
-
-                <section class="settings-block">
-                  <div>
-                    <h3>Anki 制卡</h3>
-                    <p>连接本机 AnkiConnect。</p>
-                  </div>
-                  <div class="field-row">
-                    <span>Endpoint</span>
-                    <strong>http://localhost:8765</strong>
-                  </div>
-                  <div class="field-row">
-                    <span>牌组</span>
-                    <strong>英语长文阅读</strong>
-                  </div>
-                  <span class="secondary-button" aria-hidden="true">测试连接</span>
-                </section>
-
-                <section class="settings-block compact-settings">
-                  <div>
-                    <h3>外观控制</h3>
-                    <p>释义颜色、字号和透明度都可以按习惯调整。</p>
-                  </div>
-                  <div class="swatch-row">
-                    <span class="swatch swatch-label"></span>
-                    <span class="swatch swatch-success"></span>
-                    <span class="swatch swatch-error"></span>
-                  </div>
-                </section>
-              </div>
-            </div>
+      <section class="install" id="install" aria-labelledby="install-title">
+        <div class="install-mark" aria-hidden="true">文</div>
+        <div class="install-shell">
+          <div class="install-heading" data-reveal>
+            <p class="eyebrow eyebrow-light"><span>03 / Install</span><span>Open source</span></p>
+            <h2 id="install-title">从下一篇<br />英文长文开始。</h2>
+            <p>最新版通过 GitHub Releases 提供。下载、解压、加载，三步即可开始阅读。</p>
+            <a
+              class="button button-light"
+              href="https://github.com/JiaJunDeng5930/glossa/releases/latest"
+              target="_blank"
+              rel="noreferrer"
+            >
+              下载最新版 <span aria-hidden="true">↗</span>
+            </a>
           </div>
 
-          <div class="product-copy">
-            <h2>为认真阅读和长期记忆设计</h2>
-            <p>
-              你可以设置 AI 服务、释义样式、已掌握词库和 Anki 连接。Glossa 把页面阅读、词义判断和制卡流程放在同一个轻量扩展里。
-            </p>
-            <ul class="feature-list" aria-label="Glossa AI 特性">
-              <li>中文释义贴在原文上方</li>
-              <li>熟词过滤和本地设置保存</li>
-              <li>Alt 点击创建 Anki 卡片</li>
-              <li>自定义释义与制卡提示词</li>
-            </ul>
-
-            <div class="closing-cta">
-              <h2>开始用 Glossa 阅读英文</h2>
-              <p>开源 Chrome 扩展，适合长文阅读、英语学习和 Anki 复习流。</p>
-              <div class="hero-actions">
-                <a class="primary-button" href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">获取 Glossa</a>
-                <a class="text-link" href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">查看 GitHub</a>
-              </div>
-            </div>
-          </div>
+          <ol class="install-steps" data-reveal>
+            <li><span>01</span><div><strong>下载并解压</strong><p>从 Latest Release 下载扩展 ZIP，然后解压到固定目录。</p></div></li>
+            <li><span>02</span><div><strong>打开扩展管理页</strong><p>在 Chrome 地址栏输入 <code>chrome://extensions</code>，开启开发者模式。</p></div></li>
+            <li><span>03</span><div><strong>加载扩展</strong><p>选择“加载已解压的扩展程序”，指向刚才解压的目录。</p></div></li>
+          </ol>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <span>© 2026 Glossa AI</span>
-      <a href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">GitHub</a>
+      <p><strong>Glossa</strong><span>Contextual glosses for deep reading.</span></p>
+      <div><span>© 2026 Glossa</span><a href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </footer>
 
     <script>
       const story = document.querySelector("[data-story]");
-      const leftTrack = document.querySelector("[data-left-track]");
-      const readingDemo = document.querySelector("[data-reading-demo]");
-      const demoCopy = document.querySelector("[data-glossa-demo-copy]");
-      const GLOSS_DEMO_TOKENS = [
-        "Long articles reward a steady pace. Glossa keeps the sentence intact while a quiet gloss clarifies ",
-        { surface: "context", label: "语境", threshold: 0.09 },
-        " only where it helps. The note stays close to the word, so ",
-        { surface: "subtle", label: "细微", threshold: 0.14 },
-        " meaning remains part of the line. When a term becomes ",
-        { surface: "indispensable", label: "不可或缺", threshold: 0.19, card: true },
-        ", hold Alt and click to prepare Anki. New ",
-        { surface: "vocabulary", label: "词汇", threshold: 0.24 },
-        " can move into a simple ",
-        { surface: "review", label: "复习", threshold: 0.29 },
-        " flow.",
-      ];
-      let renderedDemoStage = "";
+      const storyStep = document.querySelector("[data-story-step]");
+      const siteHeader = document.querySelector("[data-site-header]");
+      const desktopStory = window.matchMedia("(min-width: 960px) and (min-height: 680px)");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      let storyInteractive = false;
+      let frameRequested = false;
 
-      function clamp(value, min, max) {
-        return Math.min(Math.max(value, min), max);
+      const clamp = (value, min = 0, max = 1) => Math.min(Math.max(value, min), max);
+      const segment = (value, start, end) => clamp((value - start) / (end - start));
+      const setStoryValue = (name, value) => story?.style.setProperty(name, String(value));
+
+      function setChapter(index, opacity) {
+        setStoryValue(`--chapter-${index}`, opacity);
+        setStoryValue(`--chapter-${index}-y`, `${(1 - opacity) * 22}px`);
       }
 
-      function segment(value, start, end) {
-        return clamp((value - start) / (end - start), 0, 1);
+      function setStaticStory() {
+        storyInteractive = false;
+        story?.classList.remove("is-interactive");
+        for (const name of ["--gloss-1", "--gloss-2", "--gloss-3", "--gloss-4", "--alt", "--click", "--card", "--mask"]) {
+          setStoryValue(name, 1);
+        }
+        setStoryValue("--card-y", "0px");
+        setStoryValue("--card-scale", 1);
+        setStoryValue("--pointer-x", "0px");
+        setStoryValue("--pointer-y", "0px");
+        storyStep && (storyStep.textContent = "03");
       }
 
-      function heldStageProgress(value) {
-        if (value < 0.3) {
-          return segment(value, 0, 0.3);
-        }
-
-        if (value < 0.52) {
-          return 1;
-        }
-
-        if (value < 0.68) {
-          return 1 + segment(value, 0.52, 0.68);
-        }
-
-        return 2;
-      }
-
-      function createGlossToken(token) {
-        const wrapper = document.createElement("span");
-        wrapper.dataset.glossaOwned = "1";
-        wrapper.dataset.glossaToken = "";
-        wrapper.dataset.glossaSurface = token.surface;
-        wrapper.dataset.glossaDisplay = token.label;
-        wrapper.dataset.glossaDisplayKind = "gloss";
-        wrapper.dataset.glossaGlossDisplay = token.label;
-        wrapper.dataset.glossaStatus = "ready";
-        wrapper.className = token.card ? "card-target notranslate" : "notranslate";
-        wrapper.setAttribute("translate", "no");
-
-        const label = document.createElement("span");
-        label.dataset.glossaOwned = "1";
-        label.dataset.glossaTokenLabel = "";
-        label.setAttribute("translate", "no");
-        label.textContent = token.label;
-
-        const width = document.createElement("span");
-        width.dataset.glossaOwned = "1";
-        width.dataset.glossaTokenWidth = "";
-        width.setAttribute("translate", "no");
-        width.textContent = token.label;
-
-        const surface = document.createElement("span");
-        surface.dataset.glossaOwned = "1";
-        surface.dataset.glossaTokenSurface = "";
-        surface.setAttribute("translate", "no");
-        surface.textContent = token.surface;
-
-        if (token.card) {
-          const pointer = document.createElement("img");
-          pointer.className = "word-pointer";
-          pointer.src = "/assets/mouse-pointer.png";
-          pointer.alt = "";
-          surface.append(pointer);
-        }
-
-        wrapper.append(width, label, surface);
-        return wrapper;
-      }
-
-      function renderDemoCopy(progress) {
-        if (!demoCopy) {
+      function syncStoryMode() {
+        const shouldAnimate = desktopStory.matches && !reducedMotion.matches;
+        if (!shouldAnimate) {
+          setStaticStory();
           return;
         }
 
-        const stageKey = GLOSS_DEMO_TOKENS.map((part) => (
-          typeof part === "string" || progress >= part.threshold ? "1" : "0"
-        )).join("");
-        if (stageKey === renderedDemoStage) {
-          return;
-        }
-        renderedDemoStage = stageKey;
+        storyInteractive = true;
+        story?.classList.add("is-interactive");
+        renderPage();
+      }
 
-        const fragment = document.createDocumentFragment();
-        for (const part of GLOSS_DEMO_TOKENS) {
-          if (typeof part === "string") {
-            fragment.append(document.createTextNode(part));
-            continue;
+      function renderStory() {
+        if (!story || !storyInteractive) return;
+
+        const distance = story.offsetHeight - window.innerHeight;
+        const progress = distance > 0 ? clamp(-story.getBoundingClientRect().top / distance) : 0;
+        const chapterOne = 1 - segment(progress, 0.16, 0.27);
+        const chapterTwo = Math.min(segment(progress, 0.16, 0.27), 1 - segment(progress, 0.52, 0.64));
+        const chapterThree = segment(progress, 0.52, 0.64);
+        const click = segment(progress, 0.68, 0.78);
+        const card = segment(progress, 0.81, 0.93);
+
+        setChapter(1, chapterOne);
+        setChapter(2, chapterTwo);
+        setChapter(3, chapterThree);
+        setStoryValue("--story-progress", progress);
+        setStoryValue("--gloss-1", segment(progress, 0.2, 0.26));
+        setStoryValue("--gloss-2", segment(progress, 0.27, 0.33));
+        setStoryValue("--gloss-3", segment(progress, 0.34, 0.4));
+        setStoryValue("--gloss-4", segment(progress, 0.41, 0.47));
+        setStoryValue("--alt", segment(progress, 0.63, 0.71));
+        setStoryValue("--click", click);
+        setStoryValue("--card", card);
+        setStoryValue("--mask", segment(progress, 0.82, 0.9));
+        setStoryValue("--card-y", `${(1 - card) * 24}px`);
+        setStoryValue("--card-scale", 0.96 + card * 0.04);
+        setStoryValue("--pointer-x", `${(1 - click) * 34}px`);
+        setStoryValue("--pointer-y", `${(1 - click) * 28}px`);
+
+        if (storyStep) storyStep.textContent = progress < 0.27 ? "01" : progress < 0.64 ? "02" : "03";
+      }
+
+      function renderPage() {
+        frameRequested = false;
+        siteHeader?.classList.toggle("is-scrolled", window.scrollY > 24);
+        renderStory();
+      }
+
+      function requestRender() {
+        if (frameRequested) return;
+        frameRequested = true;
+        requestAnimationFrame(renderPage);
+      }
+
+      function animateReveals() {
+        if (reducedMotion.matches || !("IntersectionObserver" in window)) return;
+        const observer = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.animate(
+              [
+                { opacity: 0.01, transform: "translateY(28px)" },
+                { opacity: 1, transform: "translateY(0)" },
+              ],
+              { duration: 760, easing: "cubic-bezier(.2,.72,.2,1)", fill: "both" },
+            );
+            observer.unobserve(entry.target);
           }
-
-          fragment.append(
-            progress >= part.threshold
-              ? createGlossToken(part)
-              : document.createTextNode(part.surface),
-          );
-        }
-
-        demoCopy.replaceChildren(fragment);
+        }, { threshold: 0.18 });
+        document.querySelectorAll("[data-reveal]").forEach((element) => observer.observe(element));
       }
 
-      function updateStory() {
-        if (!story || !leftTrack || !readingDemo) {
-          return;
-        }
+      window.addEventListener("scroll", requestRender, { passive: true });
+      window.addEventListener("resize", () => { syncStoryMode(); requestRender(); });
+      desktopStory.addEventListener("change", syncStoryMode);
+      reducedMotion.addEventListener("change", () => { syncStoryMode(); requestRender(); });
 
-        const isDesktopStage = window.matchMedia("(min-width: 1024px) and (min-height: 600px)").matches;
-        if (!isDesktopStage) {
-          leftTrack.style.transform = "";
-          renderDemoCopy(1);
-          readingDemo.style.setProperty("--alt-progress", "1");
-          readingDemo.style.setProperty("--mask-progress", "1");
-          readingDemo.style.setProperty("--click-progress", "1");
-          readingDemo.style.setProperty("--card-progress", "1");
-          return;
-        }
-
-        const scrollable = story.offsetHeight - window.innerHeight;
-        if (scrollable <= 0) {
-          return;
-        }
-        const progress = clamp(-story.getBoundingClientRect().top / scrollable, 0, 1);
-        const leftProgress = heldStageProgress(progress);
-        const overlayProgress = segment(progress, 0.53, 0.57);
-
-        leftTrack.style.transform = `translateY(${-leftProgress * 33.3333}%)`;
-        renderDemoCopy(progress);
-        readingDemo.style.setProperty("--alt-progress", String(overlayProgress));
-        readingDemo.style.setProperty("--mask-progress", String(overlayProgress));
-        readingDemo.style.setProperty("--click-progress", String(segment(progress, 0.59, 0.62)));
-        readingDemo.style.setProperty("--card-progress", String(segment(progress, 0.64, 0.68)));
-      }
-
-      window.addEventListener("scroll", updateStory, { passive: true });
-      window.addEventListener("resize", updateStory);
-      updateStory();
+      syncStoryMode();
+      animateReveals();
+      requestRender();
     </script>
   </body>
 </html>
