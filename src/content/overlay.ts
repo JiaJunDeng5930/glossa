@@ -75,12 +75,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       position: fixed;
       inset: 0;
       background:
-        radial-gradient(circle at 15% 18%, rgba(31, 36, 40, 0.05) 0 1px, transparent 1px),
+        radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.18), transparent 26rem),
         ${GLOSSA_THEME.selectionWash};
-      background-size: 18px 18px, auto;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 120ms ease;
+      transition: opacity 160ms ease;
     }
     :host([data-glossa-selecting="true"]) .selection-veil {
       opacity: 1;
@@ -90,19 +89,18 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       top: 18px;
       right: 18px;
       max-width: min(320px, calc(100vw - 36px));
-      padding: 10px 12px;
-      border: 1px solid #bdb5a6;
-      border-radius: 6px;
-      background:
-        linear-gradient(rgba(255, 253, 247, 0.98), rgba(255, 249, 238, 0.94)),
-        radial-gradient(circle at 20% 20%, rgba(31, 36, 40, 0.05) 0 1px, transparent 1px);
-      background-size: auto, 16px 16px;
-      color: #1f2428;
-      font: 700 13px/1.35 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
-      box-shadow: 0 10px 24px rgba(42, 35, 24, 0.14);
+      padding: 11px 14px;
+      border: 1px solid rgba(23, 24, 20, 0.32);
+      border-top: 2px solid ${GLOSSA_THEME.accent};
+      border-radius: 1px;
+      background: rgba(250, 248, 241, 0.98);
+      color: #171814;
+      font: 720 13px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+      letter-spacing: 0.01em;
+      box-shadow: 0 16px 36px rgba(23, 24, 20, 0.14);
       opacity: 0;
-      transform: translateY(-4px);
-      transition: opacity 120ms ease, transform 120ms ease;
+      transform: translateY(-6px);
+      transition: opacity 160ms ease, transform 160ms ease;
     }
     :host([data-glossa-selecting="true"]) .selection-note {
       opacity: 1;
@@ -149,12 +147,13 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     inlineStyle.id = STYLE_ID;
     inlineStyle.dataset.glossaOwned = "1";
     inlineStyle.setAttribute("translate", "no");
+    // @constraint glossa.page_translation.inline_rendering.label_accessibility Inline gloss labels remain non-interactive and honor reduced-motion preferences during their entrance effect.
     inlineStyle.textContent = `
       [data-glossa-token] {
         display: inline-block;
         position: relative;
         min-width: max-content;
-        padding-block-start: calc(var(--glossa-font-size) + 8px);
+        padding-block-start: calc(var(--glossa-font-size) + 12px);
         vertical-align: baseline;
         max-width: max-content;
         white-space: nowrap;
@@ -167,19 +166,21 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         position: absolute;
         top: 0;
         left: 50%;
-        padding: 1px 6px 2px;
-        border: 1px solid color-mix(in srgb, ${GLOSSA_THEME.accent} 45%, var(--glossa-bg-color));
-        border-radius: 4px;
+        padding: 1px 5px 2px;
+        border: 1px solid color-mix(in srgb, ${GLOSSA_THEME.accent} 48%, var(--glossa-bg-color));
+        border-radius: 1px;
         background: color-mix(in srgb, var(--glossa-bg-color) var(--glossa-bg-alpha), transparent);
         color: var(--glossa-text-color);
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
-        font-weight: 700;
+        font-weight: 750;
         line-height: 1.15;
         white-space: nowrap;
-        box-shadow: 0 1px 2px rgba(42, 35, 24, 0.16);
+        box-shadow: 0 1px 2px rgba(23, 24, 20, 0.12);
         pointer-events: none;
         transform: translateX(-50%);
+        transform-origin: 50% 100%;
+        animation: glossa-label-enter 180ms cubic-bezier(0.2, 0.72, 0.2, 1) both;
       }
       [data-glossa-token][data-glossa-status="pending"] [data-glossa-token-label] {
         min-width: 2.1em;
@@ -211,6 +212,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         height: 1.65em;
         min-width: 1.65em;
         padding: 0;
+        border-radius: 50%;
         color: transparent;
         overflow: hidden;
       }
@@ -240,20 +242,32 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         display: inline;
         line-height: inherit;
         text-decoration: underline;
-        text-decoration-style: dotted;
-        text-underline-offset: 4px;
+        text-decoration-color: color-mix(in srgb, ${GLOSSA_THEME.accent} 72%, currentColor);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
       }
       [data-glossa-token-width] {
         display: block;
         height: 0;
         overflow: hidden;
         visibility: hidden;
-        padding-inline: 6px;
+        padding-inline: 5px;
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
         font-weight: 700;
         line-height: 1.15;
         white-space: nowrap;
+      }
+      @keyframes glossa-label-enter {
+        from {
+          opacity: 0;
+          transform: translate(-50%, 3px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        [data-glossa-token-label] {
+          animation: none;
+        }
       }
     `;
     if (root instanceof Document) {

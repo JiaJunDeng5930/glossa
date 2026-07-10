@@ -46,6 +46,7 @@ async function glossaDatabaseHasStore(page: Page, storeName: string): Promise<bo
 // @verifies glossa.settings_save.default_overrides.stored_shape.prompts
 // @verifies glossa.settings_save.default_overrides.write_filter
 // @verifies glossa.settings_save.clear_gloss_cache
+// @verifies glossa.settings_save.status_state
 // @verifies glossa.settings_save.timeout_seconds
 // @verifies glossa.word_memory.known_management
 // @verifies glossa.word_memory.known_management.add_known
@@ -330,6 +331,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("#close-known-words").click();
   await page.locator("#clear-gloss-cache").click();
   await expect(page.locator("#status")).toHaveText("翻译缓存已清空");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "success");
   expect(await page.evaluate(async () => {
     return await new Promise<number>((resolve, reject) => {
       const request = indexedDB.open("glossa", 2);
@@ -349,6 +351,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.evaluate(() => Reflect.set(window, "__glossaFailCacheClear", true));
   await page.locator("#clear-gloss-cache").click();
   await expect(page.locator("#status")).toHaveText("扩展运行时错误");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "error");
   await page.evaluate(() => Reflect.set(window, "__glossaFailCacheClear", false));
 
   await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");

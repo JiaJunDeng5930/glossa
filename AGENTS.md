@@ -37,7 +37,7 @@ Runtime error payloads are diagnostic data: `reason`, `message`, optional `servi
 
 Known-word filter assets live in `assets/known-wordlists/`. `junior-high` is the unstarred compulsory-education subset and `senior-high` is the full 3000-word appendix from the Ministry of Education high-school English curriculum standard zip. Extra filter presets cover CET-4, CET-6, TOEFL, GRE, and COCA 20000. The options page opens known lexicon records in a dialog grouped by first letter and lets the user add, remove, or clear those records manually.
 
-The options page follows `DESIGN.md`: `#f5f5f7` canvas, white 28px cards, no shadows, and a single blue Save action. Connection test buttons are text buttons placed directly below Reasoning effort and Anki deck.
+Plugin UI follows `DESIGN.md`: warm editorial paper, ink typography, fine rules, vermillion actions, restrained motion, and square document-like surfaces. Connection test buttons stay directly below Reasoning effort and Anki deck.
 
 ## Commands
 
@@ -290,7 +290,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.failure_reporting|glossa.failure_reporting.{trace_privacy,user_copy}
 |glossa.failure_reporting.trace_privacy|glossa.failure_reporting.trace_privacy.{}
 |glossa.failure_reporting.user_copy|glossa.failure_reporting.user_copy.{}
-|glossa.onboarding|glossa.onboarding.{ai_check,anki_check,anki_refresh,install_open,settings_save,single_topic,status_output,status_state,step_advance_serialization,step_collection,submit_safety}
+|glossa.onboarding|glossa.onboarding.{ai_check,anki_check,anki_refresh,install_open,settings_save,single_topic,status_output,status_state,step_advance_serialization,step_collection,step_focus,submit_safety}
 |glossa.onboarding.ai_check|glossa.onboarding.ai_check.{}
 |glossa.onboarding.anki_check|glossa.onboarding.anki_check.{}
 |glossa.onboarding.anki_refresh|glossa.onboarding.anki_refresh.{explicit_request,failure_state}
@@ -309,6 +309,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.onboarding.step_advance_serialization|glossa.onboarding.step_advance_serialization.{cleanup}
 |glossa.onboarding.step_advance_serialization.cleanup|glossa.onboarding.step_advance_serialization.cleanup.{}
 |glossa.onboarding.step_collection|glossa.onboarding.step_collection.{}
+|glossa.onboarding.step_focus|glossa.onboarding.step_focus.{}
 |glossa.onboarding.submit_safety|glossa.onboarding.submit_safety.{}
 |glossa.page_translation|glossa.page_translation.{activation,candidate_scan,gloss_session_error,inline_rendering,lookup_order,shortcut_selection,token_geometry}
 |glossa.page_translation.activation|glossa.page_translation.activation.{lifecycle_cleanup,observer_cleanup,popup_message,settings_error_response,settings_failure,settings_request,stop_cleanup}
@@ -337,7 +338,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.candidate_scan.viewport_option|glossa.page_translation.candidate_scan.viewport_option.{}
 |glossa.page_translation.candidate_scan.viewport_tokens|glossa.page_translation.candidate_scan.viewport_tokens.{}
 |glossa.page_translation.gloss_session_error|glossa.page_translation.gloss_session_error.{}
-|glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{pending_state}
+|glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{label_accessibility,pending_state}
+|glossa.page_translation.inline_rendering.label_accessibility|glossa.page_translation.inline_rendering.label_accessibility.{}
 |glossa.page_translation.inline_rendering.pending_state|glossa.page_translation.inline_rendering.pending_state.{add,remove}
 |glossa.page_translation.inline_rendering.pending_state.add|glossa.page_translation.inline_rendering.pending_state.add.{}
 |glossa.page_translation.inline_rendering.pending_state.remove|glossa.page_translation.inline_rendering.pending_state.remove.{}
@@ -360,7 +362,7 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.shortcut_selection.strict_key_hold|glossa.page_translation.shortcut_selection.strict_key_hold.{}
 |glossa.page_translation.shortcut_selection.word_boundary|glossa.page_translation.shortcut_selection.word_boundary.{}
 |glossa.page_translation.token_geometry|glossa.page_translation.token_geometry.{}
-|glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,form_logic,gloss_cache_ttl,options_load,options_write,timeout_seconds}
+|glossa.settings_save|glossa.settings_save.{clear_gloss_cache,default_overrides,form_logic,gloss_cache_ttl,options_load,options_write,status_state,timeout_seconds}
 |glossa.settings_save.clear_gloss_cache|glossa.settings_save.clear_gloss_cache.{background_request}
 |glossa.settings_save.clear_gloss_cache.background_request|glossa.settings_save.clear_gloss_cache.background_request.{}
 |glossa.settings_save.default_overrides|glossa.settings_save.default_overrides.{merge,positive_number,provider_endpoint_defaults,stored_shape,write_filter}
@@ -442,6 +444,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.settings_save.options_write|glossa.settings_save.options_write.{font_size_bounds,storage_write}
 |glossa.settings_save.options_write.font_size_bounds|glossa.settings_save.options_write.font_size_bounds.{}
 |glossa.settings_save.options_write.storage_write|glossa.settings_save.options_write.storage_write.{}
+|glossa.settings_save.status_state|glossa.settings_save.status_state.{dataset}
+|glossa.settings_save.status_state.dataset|glossa.settings_save.status_state.dataset.{}
 |glossa.settings_save.timeout_seconds|glossa.settings_save.timeout_seconds.{display,input_parse}
 |glossa.settings_save.timeout_seconds.display|glossa.settings_save.timeout_seconds.display.{}
 |glossa.settings_save.timeout_seconds.input_parse|glossa.settings_save.timeout_seconds.input_parse.{minimum}
