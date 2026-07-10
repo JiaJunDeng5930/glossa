@@ -338,8 +338,9 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.page_translation.candidate_scan.viewport_option|glossa.page_translation.candidate_scan.viewport_option.{}
 |glossa.page_translation.candidate_scan.viewport_tokens|glossa.page_translation.candidate_scan.viewport_tokens.{}
 |glossa.page_translation.gloss_session_error|glossa.page_translation.gloss_session_error.{}
-|glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{label_accessibility,pending_state}
+|glossa.page_translation.inline_rendering|glossa.page_translation.inline_rendering.{label_accessibility,label_measurement,pending_state}
 |glossa.page_translation.inline_rendering.label_accessibility|glossa.page_translation.inline_rendering.label_accessibility.{}
+|glossa.page_translation.inline_rendering.label_measurement|glossa.page_translation.inline_rendering.label_measurement.{}
 |glossa.page_translation.inline_rendering.pending_state|glossa.page_translation.inline_rendering.pending_state.{add,remove}
 |glossa.page_translation.inline_rendering.pending_state.add|glossa.page_translation.inline_rendering.pending_state.add.{}
 |glossa.page_translation.inline_rendering.pending_state.remove|glossa.page_translation.inline_rendering.pending_state.remove.{}

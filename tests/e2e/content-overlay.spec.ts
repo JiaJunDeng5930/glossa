@@ -1355,6 +1355,7 @@ test("content bundle removes page and runtime listeners when content stops", asy
 });
 
 // @verifies glossa.page_translation.token_geometry
+// @verifies glossa.page_translation.inline_rendering.label_measurement
 test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
   await page.setContent("<main><p id=\"target\">Obscure archive archive terms appear here.</p></main>");
   await installChromeRuntime(page, {
@@ -1430,6 +1431,11 @@ test("content bundle lays out inline glosses without label or source overlap", a
   if (!first || !second) {
     throw new Error("expected two rendered gloss wrappers");
   }
+  const fontWeights = await page.locator("[data-glossa-token]").first().evaluate((wrapper) => ({
+    label: getComputedStyle(wrapper.querySelector<HTMLElement>("[data-glossa-token-label]")!).fontWeight,
+    widthProbe: getComputedStyle(wrapper.querySelector<HTMLElement>("[data-glossa-token-width]")!).fontWeight
+  }));
+  expect(fontWeights).toEqual({ label: "750", widthProbe: "750" });
   for (const item of [first, second]) {
     expect(Math.abs(item.label.centerX - item.surface.centerX)).toBeLessThan(0.5);
     expect(item.label.bottom).toBeLessThanOrEqual(item.surface.top);

@@ -51,6 +51,8 @@ interface TextSegment {
 
 const STYLE_ID = "glossa-inline-style";
 const FINGERPRINT_CONTEXT_CHARS = 16;
+// @constraint glossa.page_translation.inline_rendering.label_measurement Visible inline labels and hidden width probes share one font weight so reserved text flow matches rendered badge width.
+const INLINE_LABEL_FONT_WEIGHT = 750;
 
 export function createGlossOverlay(doc: Document, appearance: AppearanceSettings = DEFAULT_SETTINGS.appearance): GlossOverlay {
   const host = doc.createElement("div");
@@ -173,7 +175,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         color: var(--glossa-text-color);
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
-        font-weight: 750;
+        font-weight: ${INLINE_LABEL_FONT_WEIGHT};
         line-height: 1.15;
         white-space: nowrap;
         box-shadow: 0 1px 2px rgba(23, 24, 20, 0.12);
@@ -254,7 +256,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         padding-inline: 5px;
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
-        font-weight: 700;
+        font-weight: ${INLINE_LABEL_FONT_WEIGHT};
         line-height: 1.15;
         white-space: nowrap;
       }
