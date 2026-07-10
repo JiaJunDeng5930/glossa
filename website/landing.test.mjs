@@ -19,6 +19,9 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
     await page.evaluate(() => { document.documentElement.style.scrollBehavior = "auto"; });
 
     assert.match(await page.title(), /^Glossa/);
+    assert.equal(await page.locator("#hero-title").textContent(), "生词智能语境翻译，让原文阅读不被打断。");
+    assert.equal(await page.locator(".hero-index").textContent(), "");
+    assert.match(await page.locator(".margin-note").textContent(), /结合整句语境，\s*给出此处词义。/);
     assert.equal(
       await page.locator(".button-primary").getAttribute("href"),
       "https://github.com/JiaJunDeng5930/glossa/releases/latest",
