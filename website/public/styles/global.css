@@ -1,7 +1,6 @@
 :root {
   --paper: #f2efe7;
   --paper-light: #faf8f1;
-  --paper-deep: #e7e1d5;
   --ink: #171814;
   --ink-soft: #2b2f29;
   --muted: #66675f;
@@ -46,19 +45,6 @@ body {
     var(--paper);
   font-family: var(--sans);
   text-rendering: optimizeLegibility;
-}
-
-body::before {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    radial-gradient(circle at 9px 11px, rgba(23, 24, 20, 0.04) 0 0.55px, transparent 0.8px),
-    radial-gradient(circle at 32px 35px, rgba(255, 255, 255, 0.68) 0 0.6px, transparent 0.9px);
-  background-size: 44px 48px;
-  content: "";
-  opacity: 0.42;
-  pointer-events: none;
 }
 
 ::selection {
@@ -121,9 +107,8 @@ button:focus-visible {
 
 .site-header.is-scrolled {
   border-color: rgba(23, 24, 20, 0.1);
-  background: rgba(242, 239, 231, 0.9);
+  background: rgba(242, 239, 231, 0.97);
   box-shadow: 0 12px 32px rgba(23, 24, 20, 0.06);
-  backdrop-filter: blur(18px) saturate(120%);
 }
 
 .brand {
@@ -542,7 +527,6 @@ button:focus-visible {
   position: relative;
   display: inline-block;
   padding-top: 1.12rem;
-  margin-top: -1.12rem;
   line-height: inherit;
   text-align: center;
   vertical-align: baseline;
@@ -838,12 +822,17 @@ button:focus-visible {
 
 .selection-hint {
   position: absolute;
-  top: 4.7rem;
-  left: 2rem;
+  top: 3.2rem;
+  right: 2rem;
   z-index: 7;
   display: flex;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.55rem;
+  padding: 0.34rem 0.7rem 0.42rem 0.36rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.45rem;
+  background: rgba(27, 29, 25, 0.92);
+  box-shadow: 0 0.45rem 1.25rem rgba(23, 24, 20, 0.16);
   color: #fbf8ef;
   font-size: 0.68rem;
   font-weight: 700;
@@ -854,15 +843,15 @@ button:focus-visible {
 
 .selection-hint kbd {
   display: inline-flex;
-  min-width: 3.25rem;
-  min-height: 2.2rem;
+  min-width: 2.8rem;
+  min-height: 1.8rem;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 0.35rem;
-  background: rgba(27, 29, 25, 0.92);
+  background: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 3px 0 rgba(0, 0, 0, 0.7),
+    0 2px 0 rgba(0, 0, 0, 0.7),
     inset 0 1px rgba(255, 255, 255, 0.16);
   font-family: var(--sans);
   font-size: 0.78rem;
@@ -870,8 +859,8 @@ button:focus-visible {
 
 .story-pointer {
   position: absolute;
-  top: 57%;
-  right: 20%;
+  top: 69%;
+  left: 26%;
   z-index: 7;
   width: 1.85rem;
   height: auto;
@@ -954,36 +943,27 @@ button:focus-visible {
   letter-spacing: 0.13em;
 }
 
-.memory-word strong,
 .memory-meaning strong {
   display: block;
   font-family: var(--article);
   font-weight: 500;
 }
 
-.memory-word strong {
-  font-size: 1.8rem;
+.memory-word p {
+  margin: 0;
+  font-family: var(--article);
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 
-.memory-word small {
-  display: block;
-  margin-top: 0.25rem;
-  color: #797971;
-  font-family: var(--article);
-  font-size: 0.72rem;
+.memory-word p strong {
+  font-weight: 700;
+  box-shadow: inset 0 -1px rgba(200, 71, 36, 0.75);
 }
 
 .memory-meaning strong {
   font-family: var(--serif);
   font-size: 1.08rem;
-}
-
-.memory-meaning p {
-  margin: 0.55rem 0 0;
-  color: #66665f;
-  font-family: var(--article);
-  font-size: 0.74rem;
-  line-height: 1.5;
 }
 
 .anki-memory-card > footer {
@@ -998,23 +978,6 @@ button:focus-visible {
   color: #2f8155;
 }
 
-.story-visual-note {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.65rem;
-  margin: 1rem max(0rem, calc((100% - 49rem) / 2)) 0 0;
-  color: rgba(23, 24, 20, 0.42);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-}
-
-.story-visual-note span {
-  color: #ef6a40;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
 .story.is-interactive {
   height: 360svh;
   padding: 0 var(--gutter);
@@ -1022,20 +985,20 @@ button:focus-visible {
 
 .story.is-interactive .story-stage {
   position: sticky;
-  top: 0;
+  top: calc(var(--header-height) + 0.75rem);
   display: grid;
-  min-height: 100svh;
+  min-height: calc(100svh - var(--header-height) - 0.75rem);
   align-items: center;
 }
 
 .story.is-interactive .story-shell {
-  min-height: 100svh;
+  min-height: calc(100svh - var(--header-height) - 0.75rem);
 }
 
 .story.is-interactive .story-copy {
   position: relative;
   display: flex;
-  min-height: 38rem;
+  min-height: min(38rem, calc(100svh - var(--header-height) - 0.75rem));
   flex-direction: column;
   justify-content: center;
 }
@@ -1057,6 +1020,7 @@ button:focus-visible {
   position: absolute;
   inset: 0 auto auto 0;
   width: 100%;
+  will-change: opacity, transform;
 }
 
 .story.is-interactive .story-chapter-one {
@@ -1139,15 +1103,16 @@ button:focus-visible {
 
 .details-intro {
   display: grid;
-  grid-template-columns: minmax(15rem, 0.3fr) minmax(0, 0.44fr) minmax(18rem, 0.26fr);
+  grid-template-columns: minmax(0, 0.64fr) minmax(18rem, 0.36fr);
   align-items: end;
   gap: clamp(1.5rem, 3vw, 3.5rem);
   padding-left: clamp(1.5rem, 3vw, 3rem);
 }
 
 .details-intro .eyebrow {
+  grid-column: 1 / -1;
   align-self: start;
-  padding-top: 0.8rem;
+  margin-bottom: clamp(1.5rem, 2.8vw, 3rem);
 }
 
 .details-intro h2 {
@@ -1157,6 +1122,7 @@ button:focus-visible {
   font-weight: 470;
   letter-spacing: -0.045em;
   line-height: 1.04;
+  text-wrap: balance;
 }
 
 .details-intro > p {
@@ -1222,17 +1188,6 @@ button:focus-visible {
   border: 1px solid rgba(23, 24, 20, 0.14);
   content: "";
   transform: rotate(-2deg);
-}
-
-.settings-caption {
-  position: absolute;
-  top: 0;
-  right: 0;
-  color: var(--vermillion);
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  writing-mode: vertical-rl;
 }
 
 .settings-window {
@@ -1478,9 +1433,9 @@ button:focus-visible {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(22rem, 0.46fr) minmax(0, 0.54fr);
+  grid-template-columns: minmax(24rem, 0.52fr) minmax(0, 0.48fr);
   align-items: end;
-  gap: clamp(3.5rem, 8vw, 9rem);
+  gap: clamp(3.5rem, 6vw, 6.5rem);
   width: min(78rem, 100%);
   margin-inline: auto;
 }
@@ -1488,16 +1443,17 @@ button:focus-visible {
 .install-heading h2 {
   margin: clamp(2rem, 4vw, 3.2rem) 0 0;
   font-family: var(--serif);
-  font-size: clamp(4rem, 6.7vw, 7.3rem);
+  font-size: clamp(4rem, 5.8vw, 5.5rem);
   font-weight: 450;
   letter-spacing: -0.05em;
   line-height: 0.98;
+  text-wrap: balance;
 }
 
 .install-heading > p:not(.eyebrow) {
   max-width: 34rem;
   margin: 1.7rem 0 0;
-  color: rgba(255, 249, 238, 0.68);
+  color: rgba(255, 249, 238, 0.82);
   font-family: var(--serif);
   font-size: clamp(0.98rem, 1.18vw, 1.15rem);
   line-height: 1.8;
@@ -1542,7 +1498,7 @@ button:focus-visible {
 
 .install-steps p {
   margin: 0.55rem 0 0;
-  color: rgba(255, 249, 238, 0.66);
+  color: rgba(255, 249, 238, 0.82);
   font-size: 0.79rem;
   line-height: 1.72;
 }
@@ -1640,7 +1596,7 @@ button:focus-visible {
   }
 
   .details-intro {
-    grid-template-columns: 0.28fr 0.45fr 0.27fr;
+    grid-template-columns: minmax(0, 0.6fr) minmax(17rem, 0.4fr);
     gap: 2rem;
   }
 
@@ -1649,7 +1605,7 @@ button:focus-visible {
   }
 }
 
-@media (max-width: 959px) {
+@media (max-width: 1080px) {
   :root {
     --header-height: 4.5rem;
     --gutter: clamp(1.1rem, 5vw, 2.2rem);
@@ -1657,8 +1613,7 @@ button:focus-visible {
 
   .site-header {
     grid-template-columns: 1fr auto;
-    background: rgba(242, 239, 231, 0.92);
-    backdrop-filter: blur(16px);
+    background: rgba(242, 239, 231, 0.97);
   }
 
   .site-nav {
@@ -1765,17 +1720,14 @@ button:focus-visible {
     transform: none;
   }
 
-  .story-visual-note {
-    display: none;
-  }
-
   .details-intro {
     grid-template-columns: 1fr;
     padding-left: clamp(1.25rem, 4vw, 2rem);
   }
 
   .details-intro .eyebrow {
-    padding-top: 0;
+    grid-column: auto;
+    margin-bottom: 1rem;
   }
 
   .details-intro h2 {
@@ -1971,12 +1923,13 @@ button:focus-visible {
     font-size: clamp(3rem, 13.5vw, 4.35rem);
   }
 
-  .settings-scene {
-    padding: 1.15rem 0 1.15rem 0.75rem;
+  .details-intro h2 br,
+  .install-heading h2 br {
+    display: none;
   }
 
-  .settings-caption {
-    display: none;
+  .settings-scene {
+    padding: 1.15rem 0 1.15rem 0.75rem;
   }
 
   .settings-window {
