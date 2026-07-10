@@ -226,6 +226,11 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
 
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
+  await expect(page.locator("#save-settings .save-label")).toHaveText("保存更改");
+  await expect(page.locator("#status")).toHaveText("Anki 选项已更新，等待保存");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "dirty");
+
   await expect(page.locator('.section-nav a[href="#reading-section"]')).toHaveAttribute("aria-current", "location");
   await page.evaluate(() => {
     document.documentElement.style.scrollBehavior = "auto";
