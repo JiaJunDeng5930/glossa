@@ -10,7 +10,7 @@
     />
     <link rel="icon" href="./favicon.svg" />
     <link rel="stylesheet" href="./styles/global.css" />
-    <title>Glossa — 生词轻声解释，文章继续向前</title>
+    <title>Glossa — 生词智能语境翻译，让原文阅读不被打断</title>
   </head>
   <body>
     <a class="skip-link" href="#main">跳到正文</a>
@@ -43,9 +43,9 @@
         <div class="hero-grid">
           <div class="hero-copy">
             <p class="eyebrow"><span>Chrome Extension</span><span>For Deep Reading</span></p>
-            <h1 id="hero-title">生词轻声解释，<br />文章继续向前。</h1>
+            <h1 id="hero-title">生词智能语境翻译，<br />让原文阅读<br />不被打断。</h1>
             <p class="hero-lede">
-              Glossa 把语境释义贴在英文原词上方。<br />熟词保持安静，生词一键送进 Anki。
+              启动 Glossa，生词上方显示中文义。<br />释义贴合语境，阅读自然保持连贯。
             </p>
             <div class="hero-actions">
               <a
@@ -59,11 +59,11 @@
               </a>
               <a class="button button-text" href="#story">观看阅读演示 <span aria-hidden="true">↓</span></a>
             </div>
-            <p class="hero-meta">开源 · Chrome Manifest V3 · 使用自己的 AI 服务</p>
+            <p class="hero-meta">开源 · Chrome Manifest V3 · 使用您自己的 AI 服务</p>
           </div>
 
           <div class="hero-visual" aria-label="Glossa 网页释义效果预览">
-            <span class="hero-index" aria-hidden="true">G / 01</span>
+            <span class="hero-index" aria-hidden="true"></span>
             <article class="browser-frame hero-browser">
               <header class="browser-toolbar" aria-hidden="true">
                 <div class="traffic-lights"><i></i><i></i><i></i></div>
@@ -101,8 +101,8 @@
                   </span>.
                 </p>
                 <aside class="margin-note">
-                  <span>CONTEXT FIRST</span>
-                  <p>先读完整句子，<br />再写下此处词义。</p>
+                  <span>CONTEXTUAL GLOSS</span>
+                  <p>结合整句语境，<br />给出此处词义。</p>
                 </aside>
               </div>
             </article>
@@ -114,10 +114,10 @@
         </div>
 
         <div class="hero-foot" aria-label="Glossa 核心能力">
-          <div><span>01</span><strong>语境释义</strong><p>先理解整句，再给这个词最贴切的中文义。</p></div>
-          <div><span>02</span><strong>熟词过滤</strong><p>常见词表与阅读记录协同，只提示此刻需要的词。</p></div>
-          <div><span>03</span><strong>Alt + Click</strong><p>按住 Alt 点击，生成卡片并送入 AnkiConnect。</p></div>
-          <div><span>04</span><strong>外观可调</strong><p>释义的颜色、字号、字体和透明度都由你设定。</p></div>
+          <div><span>01</span><strong>语境释义</strong><p>结合整句语境，显示此处的简短中文义。</p></div>
+          <div><span>02</span><strong>熟词过滤</strong><p>根据词表和阅读记录，只标注可能陌生的词。</p></div>
+          <div><span>03</span><strong>Alt + Click</strong><p>按住 Alt 点击，将例句与当前词义写入 Anki。</p></div>
+          <div><span>04</span><strong>外观可调</strong><p>释义颜色、字号、字体和透明度均由您设置。</p></div>
         </div>
       </section>
 
@@ -129,18 +129,18 @@
               <div class="story-chapters">
                 <article class="story-chapter story-chapter-one">
                   <span class="chapter-number">01</span>
-                  <h2 id="story-title">先读文章，<br />让注意力落稳。</h2>
-                  <p>Glossa 先理解你正在读的完整句子。<br />原文、排版和阅读节奏保持原样。</p>
+                  <h2 id="story-title">打开英文文章，<br />启动 Glossa。</h2>
+                  <p>Glossa 识别可能陌生的词，<br />并读取它们所在的完整句子。</p>
                 </article>
                 <article class="story-chapter story-chapter-two">
                   <span class="chapter-number">02</span>
-                  <h2>释义长在<br />原词上方。</h2>
-                  <p>释义贴在原词上方，视线沿着原句向前。<br />熟词与忽略词保持安静。</p>
+                  <h2>生词上方，<br />显示语境释义。</h2>
+                  <p>陌生词上方会显示简短中文义。<br />看一眼释义，就能继续阅读原文。</p>
                 </article>
                 <article class="story-chapter story-chapter-three">
                   <span class="chapter-number">03</span>
-                  <h2>一次点击，<br />送进长期记忆。</h2>
-                  <p>按住 Alt 点击，卡片随即送进 Anki。<br />正面保留例句，背面写下当前词义。</p>
+                  <h2>Alt + 点击，<br />存入 Anki。</h2>
+                  <p>正面保留例句，背面写下当前词义。<br />卡片直接存入您的 Anki 牌组。</p>
                 </article>
               </div>
               <div class="story-progress" aria-hidden="true">
@@ -218,7 +218,7 @@
             <p class="eyebrow"><span>02 / Built Around The Reader</span><span>Quiet by design</span></p>
             <h2 id="details-title">释义知道何时出现，<br />也知道何时退场。</h2>
             <p>
-              Glossa 记住每个词的学习状态。快捷键、释义样式、AI 服务与 Anki 连接，都可以按你的阅读习惯调整。
+              Glossa 记住每个词的学习状态。快捷键、释义样式、AI 服务与 Anki 连接，都可以按您的阅读习惯调整。
             </p>
           </div>
 
@@ -226,19 +226,19 @@
             <ol class="capability-list" aria-label="产品能力" data-reveal>
               <li>
                 <span>01</span>
-                <div><strong>让熟词保持安静</strong><p>内置常见词表，并持续记住你已经掌握或忽略的词。</p></div>
+                <div><strong>让熟词保持安静</strong><p>内置常见词表，并持续记住您已经掌握或忽略的词。</p></div>
               </li>
               <li>
                 <span>02</span>
-                <div><strong>使用你的 AI 服务</strong><p>连接 OpenAI 系列接口或 Glossa Backend，并保留你的自定义提示词。</p></div>
+                <div><strong>使用您自己的 AI 服务</strong><p>连接 OpenAI 系列接口或 Glossa Backend，并保留您的自定义提示词。</p></div>
               </li>
               <li>
                 <span>03</span>
-                <div><strong>把释义调成你的样子</strong><p>颜色、字体、字号与透明度即时预览，让释义自然融入不同网页。</p></div>
+                <div><strong>按您的习惯调整释义</strong><p>颜色、字体、字号与透明度即时预览，让释义自然融入不同网页。</p></div>
               </li>
               <li>
                 <span>04</span>
-                <div><strong>把词汇状态留在浏览器</strong><p>设置、熟词记录与释义缓存都留在你的浏览器里。</p></div>
+                <div><strong>把词汇状态留在浏览器</strong><p>设置、熟词记录与释义缓存都留在您的浏览器里。</p></div>
               </li>
             </ol>
 
