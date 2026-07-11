@@ -232,6 +232,10 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#status")).toHaveAttribute("data-state", "dirty");
 
   await expect(page.locator('.section-nav a[href="#reading-section"]')).toHaveAttribute("aria-current", "location");
+  await page.setViewportSize({ width: 1280, height: 6000 });
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
+  await expect(page.locator('.section-nav a[href="#reading-section"]')).toHaveAttribute("aria-current", "location");
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => {
     document.documentElement.style.scrollBehavior = "auto";
     const section = document.querySelector<HTMLElement>("#appearance-section")!;
