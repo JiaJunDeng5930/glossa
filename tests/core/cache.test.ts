@@ -19,12 +19,20 @@ describe("cache keys", () => {
     await expect(buildGlossCacheKey({ ...input, targetSpan: [10, 15] })).resolves.not.toBe(await buildGlossCacheKey(input));
   });
 
-  it("builds stable card keys from lemma, language and card prompt version", async () => {
-    await expect(buildCardCacheKey({
+  it("separates card content for the same lemma in different sentence contexts", async () => {
+    const riverContext = {
       lang: "en",
-      lemma: "submit",
+      lemma: "bank",
       targetLang: "zh-CN",
-      promptVersion: "anki-v1"
-    })).resolves.toBe("card:en:zh-CN:anki-v1:submit");
+      promptVersion: "anki-v1",
+      sentence: "They rested on the river bank."
+    };
+    const financeContext = {
+      ...riverContext,
+      sentence: "The bank approved the loan."
+    };
+
+    await expect(buildCardCacheKey(riverContext)).resolves.not.toBe(await buildCardCacheKey(financeContext));
+    await expect(buildCardCacheKey(riverContext)).resolves.toBe(await buildCardCacheKey(riverContext));
   });
 });

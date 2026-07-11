@@ -23,14 +23,18 @@ export interface CardCacheKeyInput {
   lemma: string;
   targetLang: string;
   promptVersion: string;
+  sentence: string;
 }
 
 export async function buildCardCacheKey(input: CardCacheKeyInput): Promise<string> {
+  // Card content is reusable within one sentence context; word-level duplicate history is tracked separately.
+  const sentenceHash = await hashText(input.sentence);
   return [
     "card",
     input.lang,
     input.targetLang,
     input.promptVersion,
-    input.lemma.toLocaleLowerCase("en-US")
+    input.lemma.toLocaleLowerCase("en-US"),
+    sentenceHash
   ].join(":");
 }

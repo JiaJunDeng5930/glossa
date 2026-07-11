@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createBackgroundMessageHandler } from "../../src/background/messages";
+import type { AnkiClient } from "../../src/background/anki";
 import { buildCardCacheKey } from "../../src/core/cache";
 import { hashText } from "../../src/shared/hash";
 import { createContentMessage } from "../../src/shared/messages";
@@ -321,6 +322,41 @@ describe("background message handler", () => {
     expect(anki.createNote).toHaveBeenCalledTimes(2);
   });
 
+  it("generates fresh card content for a confirmed duplicate in a new sentence", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    const ai = {
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async ({ sentence }: { sentence: string }) => ({
+        cards: [{ front: sentence, back: sentence.includes("river") ? "河岸" : "银行" }]
+      }))
+    };
+    const anki = {
+      createNote: vi.fn(async (_input: Parameters<AnkiClient["createNote"]>[0]) => anki.createNote.mock.calls.length)
+    };
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+    const token = { id: "t1", sentenceId: "s1", surface: "bank", lemma: "bank", startOffset: 23, endOffset: 27 };
+
+    await handler(createContentMessage("word.clicked", {
+      pageUrl: "https://example.test/river",
+      sentence: "They rested on the river bank.",
+      token
+    }));
+    await handler(createContentMessage("word.clicked", {
+      pageUrl: "https://example.test/finance",
+      sentence: "The bank approved the loan.",
+      token: { ...token, id: "t2", startOffset: 4, endOffset: 8 },
+      allowDuplicateCard: true
+    }));
+
+    expect(ai.ankiCard).toHaveBeenCalledTimes(2);
+    expect(ai.ankiCard.mock.calls.map(([input]) => input.sentence)).toEqual([
+      "They rested on the river bank.",
+      "The bank approved the loan."
+    ]);
+    expect(anki.createNote.mock.calls.map(([input]) => input.card.back)).toEqual(["河岸", "银行"]);
+  });
+
   it("strips legacy note ids when rewriting cached card content", async () => {
     const storage = createMemoryStorage();
     const settings = {
@@ -333,7 +369,8 @@ describe("background message handler", () => {
       lang: "en",
       lemma: "submit",
       targetLang: GLOSS_TARGET_LANG,
-      promptVersion: [settings.promptVersion, await hashText(settings.prompts.ankiCard)].join(":")
+      promptVersion: [settings.promptVersion, await hashText(settings.prompts.ankiCard)].join(":"),
+      sentence: "A submit button finishes the form."
     });
     await storage.cardCache.put(cardKey, {
       cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }],
