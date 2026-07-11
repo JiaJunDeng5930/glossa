@@ -457,6 +457,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#test-ai .test-icon-success")).toBeVisible();
   await expect(page.locator("#test-ai")).toHaveCSS("width", "44px");
   await expect(page.locator("#ai-status")).toHaveText("AI 连接可用");
+  await expect(page.locator("#ai-status")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#status")).toHaveText("有未保存的更改");
 
   await page.locator("#test-anki").click();
@@ -465,6 +466,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#test-anki .test-icon-success")).toBeVisible();
   await expect(page.locator("#test-anki")).toHaveCSS("width", "44px");
   await expect(page.locator("#anki-status")).toHaveText("Anki 连接可用");
+  await expect(page.locator("#anki-status")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#status")).toHaveText("有未保存的更改");
 
   await page.evaluate(async () => {
