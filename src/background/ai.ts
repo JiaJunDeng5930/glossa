@@ -26,6 +26,7 @@ export interface AiBackend {
   ankiCard(input: AnkiCardInput): Promise<AnkiCardOutput>;
 }
 
+// Contextual AI calls send the current sentence and target token to the endpoint selected in settings.
 export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
   return {
     async glossFrame(input) {

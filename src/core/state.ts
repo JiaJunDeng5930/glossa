@@ -30,6 +30,7 @@ export function createCandidateRecord(
 }
 
 export function markRecordShown(record: VocabularyRecord, now: number): VocabularyRecord {
+  // A displayed gloss is the recognition signal: continuing to read accepts the word as known.
   return {
     ...record,
     state: record.state === "candidate" ? "known" : record.state,
@@ -39,6 +40,7 @@ export function markRecordShown(record: VocabularyRecord, now: number): Vocabula
 }
 
 export function markRecordClicked(record: VocabularyRecord, now: number, learningWindowDays: number): VocabularyRecord {
+  // Card creation extends visibility for the configured learning window before the word settles as known.
   return {
     ...record,
     state: "learning_active",
