@@ -26,7 +26,7 @@ interface TextSegment {
 
 interface ContextSnapshot {
   text: string;
-  segments: TextSegment[];
+  segments: WeakMap<Text, TextSegment>;
 }
 
 export interface SentenceContext {
@@ -47,7 +47,7 @@ export function createSentenceContextResolver(): (node: Text, startOffset: numbe
       snapshot = buildSnapshot(boundary, node.ownerDocument);
       snapshots.set(boundary, snapshot);
     }
-    const segment = snapshot.segments.find((item) => item.node === node);
+    const segment = snapshot.segments.get(node);
     if (!segment) {
       return undefined;
     }
@@ -81,7 +81,7 @@ function contextBoundary(node: Text): Node {
 }
 
 function buildSnapshot(boundary: Node, doc: Document): ContextSnapshot {
-  const segments: TextSegment[] = [];
+  const segments = new WeakMap<Text, TextSegment>();
   let text = "";
   const walker = doc.createTreeWalker(boundary, NodeFilter.SHOW_TEXT);
   let current = walker.nextNode();
@@ -91,7 +91,7 @@ function buildSnapshot(boundary: Node, doc: Document): ContextSnapshot {
       const value = textNode.nodeValue ?? "";
       const start = text.length;
       text += value;
-      segments.push({ node: textNode, start, end: text.length });
+      segments.set(textNode, { node: textNode, start, end: text.length });
     }
     current = walker.nextNode();
   }
