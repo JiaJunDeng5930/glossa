@@ -15,6 +15,7 @@ export interface WordSelection {
 export interface SelectionController {
   attach(): void;
   detach(): void;
+  setShortcut(shortcutKey: string): void;
 }
 
 export interface SelectionControllerOptions {
@@ -28,6 +29,7 @@ export interface SelectionControllerOptions {
 export function createSelectionController(options: SelectionControllerOptions): SelectionController {
   let active = false;
   let scrollBlockersAttached = false;
+  let shortcutKey = options.shortcutKey;
   const doc = options.document;
   const activeListenerOptions = { capture: true, passive: false };
 
@@ -48,7 +50,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
 
   // A held shortcut owns pointer input; any second key exits the hold so page and extension chords resolve normally.
   const onKeyDown = (event: KeyboardEvent) => {
-    if (matchesShortcut(event, options.shortcutKey)) {
+    if (matchesShortcut(event, shortcutKey)) {
       setActive(true);
       consumeEvent(event);
       return;
@@ -58,7 +60,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
     }
   };
   const onKeyUp = (event: KeyboardEvent) => {
-    if (active && isShortcutRelease(event, options.shortcutKey)) {
+    if (active && isShortcutRelease(event, shortcutKey)) {
       setActive(false);
       consumeEvent(event);
       return;
@@ -129,6 +131,10 @@ export function createSelectionController(options: SelectionControllerOptions): 
   };
 
   return {
+    setShortcut(nextShortcutKey) {
+      setActive(false);
+      shortcutKey = nextShortcutKey;
+    },
     attach() {
       doc.addEventListener("keydown", onKeyDown, true);
       doc.addEventListener("keyup", onKeyUp, true);

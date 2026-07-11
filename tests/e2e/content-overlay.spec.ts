@@ -98,6 +98,88 @@ test("content bundle toggles page translation with the configured shortcut", asy
   expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk").length).toBe(scanCount + 1);
 });
 
+test("content bundle applies saved appearance and shortcuts without changing the active route state", async ({ page }) => {
+  await page.setContent("<main><p>Dynamic archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    shortcutKey: "Alt",
+    translateShortcutKey: "Ctrl+Shift+G",
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const token = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "dynamic");
+      if (token) {
+        emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, targetText: token.surface, display: "动态" }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "动态");
+
+  await page.evaluate(() => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({
+      ...current,
+      autoTranslateEnabled: false,
+      shortcutKey: "Shift",
+      translateShortcutKey: "Alt+H",
+      appearance: { ...current.appearance, textColor: "#ff0000" }
+    });
+  });
+
+  await expect.poll(() => page.locator("[data-glossa-token]").evaluate((node) => node.style.getPropertyValue("--glossa-text-color"))).toBe("#ff0000");
+  await pressTranslationShortcut(page);
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(1);
+  await page.keyboard.down("Alt");
+  await page.keyboard.press("KeyH");
+  await page.keyboard.up("Alt");
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+});
+
+test("content bundle reloads the selected word list and rescans the open page", async ({ page }) => {
+  await page.setContent("<main><p>A curious archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    chrome.runtime.getURL = (path: string) => `https://wordlists.test/${path}`;
+    Reflect.set(window, "fetch", async (input: RequestInfo | URL) => {
+      const text = String(input).includes("senior-high.txt") ? "archive" : "";
+      return new Response(text, { status: 200 });
+    });
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const token = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "archive");
+      if (token) {
+        emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, targetText: token.surface, display: "档案" }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "档案");
+
+  await page.evaluate(() => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({ ...current, knownWordList: "senior-high" });
+  });
+
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await expect(page.locator("p")).toHaveText("A curious archive appears here.");
+});
+
 test("content bundle keeps plugin shortcut chords while exiting selection mode", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
@@ -168,6 +250,8 @@ test("content bundle drops pending shortcut glosses after translation is toggled
 
   await pressTranslationShortcut(page);
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "Pending：正在生成释义");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("title", "Pending：正在生成释义");
 
   await pressTranslationShortcut(page);
   await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
@@ -535,6 +619,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
       && node.dataset.glossaDisplayKind === "feedback"
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...";
   });
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：正在制卡");
 
   await page.evaluate(() => {
     const resolveCardClick = Reflect.get(window, "__resolveCardClick") as () => void;
@@ -546,6 +631,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
     return node?.dataset.glossaFeedback === "card-success"
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "✓";
   });
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：制卡完成");
 });
 
 test("content bundle asks before creating another card for a carded word", async ({ page }) => {
@@ -592,6 +678,11 @@ test("content bundle asks before creating another card for a carded word", async
   await page.keyboard.up("Alt");
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveAttribute("aria-modal", "true");
+  await expect(page.getByRole("button", { name: "继续制卡" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByRole("button", { name: "取消制卡" })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "继续制卡" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0);
@@ -1008,6 +1099,8 @@ test("content bundle replaces pending gloss spinners with ready labels", async (
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "Pending：正在生成释义");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("title", "Pending：正在生成释义");
   const pendingGeometry = await tokenGeometry(page);
   expect(pendingGeometry.label.bottom).toBeLessThanOrEqual(pendingGeometry.surface.top);
   expect(Math.abs(pendingGeometry.label.centerX - pendingGeometry.surface.centerX)).toBeLessThan(0.5);
@@ -1016,6 +1109,7 @@ test("content bundle replaces pending gloss spinners with ready labels", async (
     (Reflect.get(window, "__resolvePendingGloss") as () => void)();
   });
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "等待");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "Pending：等待");
 });
 
 test("content bundle resolves pending glosses after external page mutations", async ({ page }) => {
@@ -1809,11 +1903,19 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
   await page.evaluate((settings) => {
     const sent: unknown[] = [];
     const activationListeners: Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void> = [];
+    const storageListeners: Array<(changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void> = [];
     const endedScans = new Set<string>();
     const pendingDone = new Map<string, unknown>();
     Reflect.set(window, "__glossaRuntimeSettings", settings);
     Reflect.set(window, "__glossaMessages", sent);
     Reflect.set(window, "__glossaListeners", activationListeners);
+    Reflect.set(window, "__glossaChangeSettings", (nextSettings: GlossaSettings) => {
+      const previousSettings = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+      Reflect.set(window, "__glossaRuntimeSettings", nextSettings);
+      for (const listener of storageListeners) {
+        listener({ settings: { oldValue: previousSettings, newValue: nextSettings } }, "local");
+      }
+    });
     Reflect.set(window, "__glossaDisconnects", 0);
     Reflect.set(window, "glossToken", (scanId: string, tokenId: string, status: string, item?: unknown, error?: { message?: string }) => ({
       type: "gloss.token",
@@ -1846,6 +1948,19 @@ async function installChromeRuntime(page: Page, settings: RuntimeSettings): Prom
       payload: { scanId, chunkId, acceptedTokens }
     });
     Reflect.set(window, "chrome", {
+      storage: {
+        onChanged: {
+          addListener(listener: (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void) {
+            storageListeners.push(listener);
+          },
+          removeListener(listener: (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void) {
+            const index = storageListeners.indexOf(listener);
+            if (index >= 0) {
+              storageListeners.splice(index, 1);
+            }
+          }
+        }
+      },
       runtime: {
         getURL: () => "/missing-known-word-list.txt",
         onMessage: {
