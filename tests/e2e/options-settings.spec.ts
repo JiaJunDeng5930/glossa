@@ -573,6 +573,16 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     });
   });
 
+  await page.evaluate(() => {
+    const observedTimeouts: number[] = [];
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    Reflect.set(window, "__glossaObservedTimeouts", observedTimeouts);
+    Reflect.set(window, "setTimeout", (handler: TimerHandler, timeout?: number, ...args: any[]) => {
+      observedTimeouts.push(timeout ?? 0);
+      return nativeSetTimeout(handler, timeout, ...args);
+    });
+  });
+
   const resetHistoryDialog = page.waitForEvent("dialog", { timeout: 5_000 });
   const resetHistoryClick = page.locator("#reset-card-history").click();
   const historyDialog = await resetHistoryDialog;
@@ -580,6 +590,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await historyDialog.accept();
   await resetHistoryClick;
   await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有卡片保持不变");
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaObservedTimeouts"))).toContain(95_000);
   expect(await page.evaluate(async () => {
     return await new Promise<Record<string, number>>((resolve, reject) => {
       const request = indexedDB.open("glossa", 2);
