@@ -26,14 +26,15 @@ describe("settings default overrides", () => {
       { ...current, prompts: { ...current.prompts, gloss: "A different gloss prompt" } },
       { ...current, ai: { ...current.ai, provider: "openai-chat-completions" as const } },
       { ...current, ai: { ...current.ai, endpoint: "https://example.test/v1" } },
-      { ...current, ai: { ...current.ai, reasoningEffort: "high" as const } }
+      { ...current, ai: { ...current.ai, reasoningEffort: "high" as const } },
+      { ...current, ai: { ...current.ai, apiKey: "new-secret" } }
     ];
 
     expect(outputChanges.every((next) => glossOutputSettingsChanged(current, next))).toBe(true);
     expect(glossOutputSettingsChanged(current, {
       ...current,
       appearance: { ...current.appearance, fontSize: current.appearance.fontSize + 1 },
-      ai: { ...current.ai, apiKey: "new-secret", requestTimeoutMs: current.ai.requestTimeoutMs + 1 }
+      ai: { ...current.ai, requestTimeoutMs: current.ai.requestTimeoutMs + 1 }
     })).toBe(false);
   });
 });

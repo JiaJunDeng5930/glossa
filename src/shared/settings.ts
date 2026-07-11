@@ -82,6 +82,7 @@ export function glossOutputSettingsChanged(previous: GlossaSettings, next: Gloss
     || previous.prompts.gloss !== next.prompts.gloss
     || previous.ai.provider !== next.ai.provider
     || previous.ai.endpoint !== next.ai.endpoint
+    || previous.ai.apiKey !== next.ai.apiKey
     || previous.ai.reasoningEffort !== next.ai.reasoningEffort;
 }
 
