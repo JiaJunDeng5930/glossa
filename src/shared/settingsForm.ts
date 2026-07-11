@@ -195,15 +195,15 @@ export async function runSettingsConnectionTest(
   button: HTMLButtonElement,
   run: () => Promise<void>,
   service: ErrorService,
-  setStatus: (value: string) => void,
+  setStatus: (value: string, state: "success" | "error" | "") => void,
   successStatus = ""
 ): Promise<boolean> {
-  setStatus("");
+  setStatus("", "");
   setTestState(button, "loading");
   try {
     await run();
     setTestState(button, "success");
-    setStatus(successStatus);
+    setStatus(successStatus, "success");
     return true;
   } catch (error) {
     setTestState(button, "error");
@@ -211,7 +211,7 @@ export async function runSettingsConnectionTest(
       reason: "service-error",
       message: "Connection test failed",
       service
-    }).payload, service));
+    }).payload, service), "error");
     return false;
   }
 }
