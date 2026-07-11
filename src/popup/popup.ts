@@ -36,7 +36,7 @@ async function initializeTranslationState(): Promise<void> {
       renderUnavailable();
       return;
     }
-    const response = await chrome.tabs.sendMessage(tab.id, { type: "glossa.getTranslationState" });
+    const response = await chrome.tabs.sendMessage(tab.id, { type: "glossa.getTranslationState" }, { frameId: 0 });
     if (!isTranslationStateResponse(response)) {
       renderUnavailable(messageFromControlResponse(response));
       return;
@@ -57,7 +57,12 @@ async function toggleCurrentTab(): Promise<void> {
   translateButton.disabled = true;
   translateButtonLabel.textContent = translationEnabled ? "正在停止…" : "正在开启…";
   try {
-    const response = await chrome.tabs.sendMessage(currentTabId, { type: "glossa.toggleTranslation" });
+    const desiredState = !translationEnabled;
+    // The top frame defines the tab state; an explicit value keeps every injected frame synchronized.
+    const response = await chrome.tabs.sendMessage(currentTabId, {
+      type: "glossa.setTranslationState",
+      enabled: desiredState
+    });
     if (!isTranslationStateResponse(response)) {
       setStatus(messageFromControlResponse(response));
       renderAvailableState();
