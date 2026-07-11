@@ -767,7 +767,8 @@ async function cacheKey(sentence: string, targetText: string, startOffset: numbe
     targetLang: GLOSS_TARGET_LANG,
     sentence,
     targetText,
-    targetSpan: [startOffset, endOffset]
+    targetSpan: [startOffset, endOffset],
+    settings: testSettings()
   });
 }
 

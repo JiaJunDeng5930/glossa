@@ -1,6 +1,6 @@
 import pLimit from "p-limit";
 
-import { buildGlossCacheKey } from "../core/cache";
+import { buildGlossCacheKey, glossGenerationIdentity } from "../core/cache";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { trace } from "../shared/diagnostics";
 import {
@@ -305,7 +305,7 @@ async function resolveToken(input: {
     if (input.sink.isActive?.() === false) {
       return;
     }
-    const cacheKey = await glossCacheKey(input.sentence, input.token);
+    const cacheKey = await glossCacheKey(input.sentence, input.token, input.settings);
     const memoryKey = transientMemoryKey(input.pageUrl, cacheKey);
     // Fresh cached glosses replay before vocabulary state so toggling or rescanning keeps the current reading stable.
     const memoryCached = input.recall(memoryKey);
@@ -644,13 +644,15 @@ async function emitReusedMiss(
 
 async function glossCacheKey(
   sentence: SentenceCandidate,
-  token: TokenCandidate
+  token: TokenCandidate,
+  settings: GlossaSettings
 ): Promise<string> {
   return buildGlossCacheKey({
     targetLang: GLOSS_TARGET_LANG,
     sentence: sentence.text,
     targetText: token.surface,
-    targetSpan: [token.startOffset, token.endOffset]
+    targetSpan: [token.startOffset, token.endOffset],
+    settings
   });
 }
 
@@ -699,14 +701,8 @@ function aiInFlightKey(settings: GlossaSettings, cacheKey: string): string {
 
 function aiFrameKey(settings: GlossaSettings): string {
   return [
-    settings.ai.provider,
-    settings.ai.endpoint,
-    settings.ai.reasoningEffort,
-    String(settings.ai.requestTimeoutMs),
-    settings.ai.apiKey ? hashSmall(settings.ai.apiKey) : "",
-    settings.promptVersion,
-    settings.modelVersion,
-    settings.prompts.gloss
+    glossGenerationIdentity(settings),
+    String(settings.ai.requestTimeoutMs)
   ].join("\n");
 }
 
