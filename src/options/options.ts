@@ -854,11 +854,8 @@ async function resetCardHistory(): Promise<void> {
   resetCardHistoryButton.disabled = true;
   setAnkiStatus("正在重置制卡记录…", "pending");
   try {
-    await Promise.all([
-      extensionStorage.cardCache.clear(),
-      extensionStorage.cardedWords.clear(),
-      clearLexiconCardHistory()
-    ]);
+    // @behavior glossa.card_creation.history_reset.options_request The reset control delegates history mutation to the service worker so it can coordinate active card creation.
+    await runtimeMessage(createOptionsMessage("card.history.reset", {}));
     setAnkiStatus("制卡记录已重置，Anki 中已有卡片保持不变", "success");
   } catch (error) {
     setAnkiStatus(userMessageForError(diagnosticErrorFrom(error, {
@@ -869,14 +866,6 @@ async function resetCardHistory(): Promise<void> {
   } finally {
     resetCardHistoryButton.disabled = false;
   }
-}
-
-async function clearLexiconCardHistory(): Promise<void> {
-  const states = ["candidate", "known", "learning_active", "ignored"] as const;
-  const records = (await Promise.all(states.map((state) => extensionStorage.lexicon.listByState(state)))).flat();
-  await Promise.all(records
-    .filter((record) => record.ankiNoteIds.length > 0)
-    .map((record) => extensionStorage.lexicon.put({ ...record, ankiNoteIds: [] })));
 }
 
 function updateProviderFields(provider: AiSettings["provider"]): void {

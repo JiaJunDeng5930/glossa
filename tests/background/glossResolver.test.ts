@@ -1006,6 +1006,14 @@ function createMemoryStorage(): ExtensionStorage {
       async clear() {
         cardedWords.clear();
       }
+    },
+    async resetCardHistory() {
+      cardCache.clear();
+      cardedWords.clear();
+      for (const [key, value] of lexicon) {
+        const record = value as VocabularyRecord;
+        lexicon.set(key, { ...record, ankiNoteIds: [] });
+      }
     }
   };
 }

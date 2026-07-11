@@ -12,6 +12,7 @@ import type { AiBackend } from "./ai";
 import type { AnkiClient } from "./anki";
 import type {
   BackgroundResponseMessage,
+  CardHistoryResetMessage,
   ContentToBackgroundMessage,
   WordCardDuplicatePayload,
   WordClickedOkPayload
@@ -25,19 +26,49 @@ export interface BackgroundMessageHandlerDeps {
   now?: () => number;
 }
 
+type BackgroundHandledMessage = ContentToBackgroundMessage | CardHistoryResetMessage;
+
 export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDeps) {
   const now = deps.now ?? Date.now;
   const wordClickLanes = new Map<string, Promise<void>>();
-  return async function handleMessage(message: ContentToBackgroundMessage): Promise<BackgroundResponseMessage> {
+  const activeWordClicks = new Set<Promise<void>>();
+  let cardHistoryBarrier = Promise.resolve();
+  return async function handleMessage(message: BackgroundHandledMessage): Promise<BackgroundResponseMessage> {
     try {
       if (message.type === "settings.get") {
         return createBackgroundResponse(message, "settings.response", { settings: await deps.storage.settings.get() });
       }
-      const result = await runSerializedWordClick(
+      // @behavior glossa.card_creation.history_reset.serialization A reset waits for earlier card requests and blocks later card requests until local history is cleared.
+      if (message.type === "card.history.reset") {
+        const previousBarrier = cardHistoryBarrier;
+        let releaseReset!: () => void;
+        const resetBarrier = new Promise<void>((resolve) => {
+          releaseReset = resolve;
+        });
+        cardHistoryBarrier = previousBarrier.then(() => resetBarrier);
+        const activeBeforeReset = Array.from(activeWordClicks);
+        try {
+          await previousBarrier;
+          await Promise.all(activeBeforeReset);
+          await deps.storage.resetCardHistory();
+        } finally {
+          releaseReset();
+        }
+        return createBackgroundResponse(message, "card.history.reset.ok", {});
+      }
+      const precedingReset = cardHistoryBarrier;
+      const operation = runSerializedWordClick(
         wordClickLanes,
         vocabularyKey("en", message.payload.token.lemma),
-        () => handleWordClicked(message.payload, deps, now())
+        async () => {
+          await precedingReset;
+          return handleWordClicked(message.payload, deps, now());
+        }
       );
+      const settled = operation.then(() => undefined, () => undefined);
+      activeWordClicks.add(settled);
+      void settled.then(() => activeWordClicks.delete(settled));
+      const result = await operation;
       return result.kind === "duplicate"
         ? createBackgroundResponse(message, "word.card.duplicate", result.payload)
         : createBackgroundResponse(message, "word.clicked.ok", result.payload);

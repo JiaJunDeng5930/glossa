@@ -33,6 +33,7 @@ export interface ExtensionStorage {
   lexicon: LexiconStore;
   cardCache: KeyValueStore<AnkiCardOutput>;
   cardedWords: KeyValueStore<CardedWordRecord>;
+  resetCardHistory(): Promise<void>;
 }
 
 type StoreName = "lexicon" | "glossCache" | "cardCache" | "cardedWords";
@@ -43,8 +44,36 @@ export function createExtensionStorage(): ExtensionStorage {
     lexicon: createLexiconStore(),
     glossCache: createGlossCacheStore(),
     cardCache: createIndexedStore<AnkiCardOutput>("cardCache"),
-    cardedWords: createIndexedStore<CardedWordRecord>("cardedWords")
+    cardedWords: createIndexedStore<CardedWordRecord>("cardedWords"),
+    resetCardHistory
   };
+}
+
+// @behavior glossa.card_creation.history_reset.storage_transaction Card caches, duplicate markers, and lexicon note ids are cleared in one IndexedDB transaction.
+async function resetCardHistory(): Promise<void> {
+  const db = await openDatabase();
+  const tx = db.transaction(["cardCache", "cardedWords", "lexicon"], "readwrite");
+  const done = transactionDone(tx);
+  tx.objectStore("cardCache").clear();
+  tx.objectStore("cardedWords").clear();
+  const lexicon = tx.objectStore("lexicon");
+  const cursorRequest = lexicon.openCursor();
+  const cursorDone = new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      const record = cursor.value as VocabularyRecord;
+      if (record.ankiNoteIds.length > 0) {
+        cursor.update({ ...record, ankiNoteIds: [] });
+      }
+      cursor.continue();
+    };
+    cursorRequest.onerror = () => reject(cursorRequest.error);
+  });
+  await Promise.all([cursorDone, done]);
 }
 
 function createChromeSettingsStore(): SettingsStore {

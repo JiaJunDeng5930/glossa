@@ -79,10 +79,44 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     const runtimeApi: { lastError: { message: string } | undefined; sendMessage(message: { type: string; requestId: string; source: string }, callback: (response: unknown) => void): void } = {
       lastError: undefined,
       sendMessage(message, callback) {
-        if (Reflect.get(window, "__glossaFailCacheClear")) {
+        if (message.type === "gloss.cache.clear" && Reflect.get(window, "__glossaFailCacheClear")) {
           runtimeApi.lastError = { message: "cache clear failed" };
           callback(undefined);
           runtimeApi.lastError = undefined;
+          return;
+        }
+        if (message.type === "card.history.reset") {
+          const request = indexedDB.open("glossa", 2);
+          request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction(["cardCache", "cardedWords", "lexicon"], "readwrite");
+            tx.objectStore("cardCache").clear();
+            tx.objectStore("cardedWords").clear();
+            const cursorRequest = tx.objectStore("lexicon").openCursor();
+            cursorRequest.onsuccess = () => {
+              const cursor = cursorRequest.result;
+              if (!cursor) {
+                return;
+              }
+              const record = cursor.value as { ankiNoteIds?: number[] };
+              if ((record.ankiNoteIds?.length ?? 0) > 0) {
+                cursor.update({ ...record, ankiNoteIds: [] });
+              }
+              cursor.continue();
+            };
+            tx.oncomplete = () => {
+              db.close();
+              callback({
+                type: "card.history.reset.ok",
+                version: 1,
+                requestId: message.requestId,
+                source: "service-worker",
+                target: message.source,
+                createdAt: Date.now(),
+                payload: {}
+              });
+            };
+          };
           return;
         }
         if (message.type !== "gloss.cache.clear") {

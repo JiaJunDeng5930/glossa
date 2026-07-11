@@ -4,7 +4,7 @@ import { createBackgroundMessageHandler } from "../../src/background/messages";
 import type { AnkiClient } from "../../src/background/anki";
 import { buildCardCacheKey } from "../../src/core/cache";
 import { hashText } from "../../src/shared/hash";
-import { createContentMessage } from "../../src/shared/messages";
+import { createContentMessage, createOptionsMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossCacheEntry, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
@@ -392,6 +392,68 @@ describe("background message handler", () => {
     });
   });
 
+  // @verifies glossa.card_creation.history_reset.serialization
+  it("waits for active card creation before clearing every card-history store", async () => {
+    const storage = createMemoryStorage();
+    await storage.settings.set(DEFAULT_SETTINGS);
+    await storage.cardCache.put("old-card", { cards: [{ front: "old", back: "旧" }] });
+    await storage.cardedWords.put("en:old", { key: "en:old", lang: "en", lemma: "old", createdAt: 500 });
+    await storage.lexicon.put({
+      key: "en:old",
+      lang: "en",
+      lemma: "old",
+      surface: "old",
+      state: "learning_active",
+      shownCount: 1,
+      clickCount: 1,
+      ankiNoteIds: [99]
+    });
+    const message = createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "A submit button finishes the form.",
+      token: { id: "t2", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 2, endOffset: 8 }
+    });
+    const ai = {
+      glossFrame: vi.fn(),
+      ankiCard: vi.fn(async () => ({ cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }] }))
+    };
+    const note = deferred<number>();
+    const anki = { createNote: vi.fn(() => note.promise) };
+    const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
+
+    const cardCreation = handler(message);
+    await vi.waitFor(() => {
+      expect(anki.createNote).toHaveBeenCalledTimes(1);
+    });
+    const resetSettled = vi.fn();
+    const resetMessage = createOptionsMessage("card.history.reset", {});
+    const reset = handler(resetMessage).then((response) => {
+      resetSettled();
+      return response;
+    });
+    const laterCreation = handler(createContentMessage("word.clicked", {
+      pageUrl: "https://example.test",
+      sentence: "Create an archive for the report.",
+      token: { id: "t3", sentenceId: "s2", surface: "archive", lemma: "archive", startOffset: 10, endOffset: 17 }
+    }));
+
+    await Promise.resolve();
+    expect(resetSettled).not.toHaveBeenCalled();
+    expect(anki.createNote).toHaveBeenCalledTimes(1);
+    note.resolve(42);
+
+    await expect(cardCreation).resolves.toMatchObject({ type: "word.clicked.ok" });
+    await expect(reset).resolves.toMatchObject({ type: "card.history.reset.ok", requestId: resetMessage.requestId });
+    await expect(laterCreation).resolves.toMatchObject({ type: "word.clicked.ok" });
+    expect(await storage.cardCache.get("old-card")).toBeUndefined();
+    expect(await storage.cardedWords.get("en:old")).toBeUndefined();
+    expect(await storage.cardedWords.get("en:submit")).toBeUndefined();
+    expect(await storage.cardedWords.get("en:archive")).toMatchObject({ lemma: "archive" });
+    expect(await storage.lexicon.get("en:old")).toMatchObject({ state: "learning_active", ankiNoteIds: [] });
+    expect(await storage.lexicon.get("en:submit")).toMatchObject({ state: "learning_active", ankiNoteIds: [] });
+    expect(await storage.lexicon.get("en:archive")).toMatchObject({ state: "learning_active", ankiNoteIds: [42] });
+  });
+
 });
 
 export function createMemoryStorage(): ExtensionStorage {
@@ -492,6 +554,14 @@ export function createMemoryStorage(): ExtensionStorage {
       },
       async clear() {
         cardedWords.clear();
+      }
+    },
+    async resetCardHistory() {
+      cardCache.clear();
+      cardedWords.clear();
+      for (const [key, value] of lexicon) {
+        const record = value as VocabularyRecord;
+        lexicon.set(key, { ...record, ankiNoteIds: [] });
       }
     }
   };

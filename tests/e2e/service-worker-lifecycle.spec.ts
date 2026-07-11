@@ -1,7 +1,7 @@
 import { chromium, expect, test, type BrowserContext, type CDPSession, type Page, type Worker } from "@playwright/test";
 import { resolve } from "node:path";
 
-test("extension service worker handles settings messages after restart", async () => {
+test("extension service worker handles settings and card-history reset after restart", async () => {
   const extensionPath = resolve("dist");
   const context = await chromium.launchPersistentContext("", {
     channel: "chromium",
@@ -45,10 +45,80 @@ test("extension service worker handles settings messages after restart", async (
       }
     });
     expect(second.requestId).not.toBe(first.requestId);
+
+    await seedCardHistory(page);
+    page.once("dialog", (dialog) => {
+      void dialog.accept();
+    });
+    await page.locator("#reset-card-history").click();
+    await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有卡片保持不变");
+    await expect.poll(() => readCardHistory(page)).toEqual({ cardCache: 0, cardedWords: 0, noteIds: 0 });
   } finally {
     await context.close();
   }
 });
+
+async function seedCardHistory(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onupgradeneeded = () => {
+        for (const store of ["lexicon", "glossCache", "cardCache", "cardedWords"]) {
+          if (!request.result.objectStoreNames.contains(store)) {
+            request.result.createObjectStore(store);
+          }
+        }
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction(["cardCache", "cardedWords", "lexicon"], "readwrite");
+        tx.objectStore("cardCache").put({ cards: [{ front: "old", back: "旧" }] }, "old-card");
+        tx.objectStore("cardedWords").put({ key: "en:old", lang: "en", lemma: "old", createdAt: 1 }, "en:old");
+        tx.objectStore("lexicon").put({
+          key: "en:old",
+          lang: "en",
+          lemma: "old",
+          surface: "old",
+          state: "learning_active",
+          shownCount: 1,
+          clickCount: 1,
+          ankiNoteIds: [42]
+        }, "en:old");
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
+}
+
+async function readCardHistory(page: Page): Promise<{ cardCache: number; cardedWords: number; noteIds: number }> {
+  return await page.evaluate(async () => {
+    return await new Promise<{ cardCache: number; cardedWords: number; noteIds: number }>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction(["cardCache", "cardedWords", "lexicon"], "readonly");
+        const cardCache = tx.objectStore("cardCache").count();
+        const cardedWords = tx.objectStore("cardedWords").count();
+        const lexicon = tx.objectStore("lexicon").getAll();
+        tx.oncomplete = () => {
+          db.close();
+          resolve({
+            cardCache: cardCache.result,
+            cardedWords: cardedWords.result,
+            noteIds: (lexicon.result as Array<{ ankiNoteIds: number[] }>).reduce((total, record) => total + record.ankiNoteIds.length, 0)
+          });
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
+}
 
 async function requestSettings(page: Page): Promise<{ type: string; requestId: string; source: string; target: string; payload: unknown }> {
   return await page.evaluate<{ type: string; requestId: string; source: string; target: string; payload: unknown }>(() => {
