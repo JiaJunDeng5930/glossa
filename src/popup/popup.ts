@@ -1,62 +1,96 @@
-import { isErrorPayload } from "../shared/errors";
+import { diagnosticPayloadFrom, isErrorPayload } from "../shared/errors";
 import { mergeStoredSettings, type StoredGlossaSettings } from "../shared/settings";
 import { DEFAULT_SETTINGS } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 
-const DEFAULT_ACTIVATION_FAILURE_MESSAGE = "当前页面无法翻译";
 const DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE = "无法读取快捷键设置";
 
-type ActivationResult = ActivationActivatedResult | ActivationFailedResult;
-
-interface ActivationActivatedResult {
-  kind: "activated";
-}
-
-interface ActivationFailedResult {
-  kind: "failed";
-  message: string;
-}
-
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-page")!;
+const translateButtonLabel = document.querySelector<HTMLElement>("#translate-page-label")!;
+const pageStateLabel = document.querySelector<HTMLElement>("#page-state-label")!;
+const pageStateMark = document.querySelector<HTMLElement>("#page-state-mark")!;
 const optionsButton = document.querySelector<HTMLButtonElement>("#open-options")!;
 const statusOutput = document.querySelector<HTMLOutputElement>("#popup-status")!;
 const translateShortcutHint = document.querySelector<HTMLElement>("#translate-shortcut-hint")!;
+let currentTabId: number | undefined;
+let translationEnabled = false;
 
+void initializeTranslationState();
 void renderTranslateShortcutHint().catch((error) => {
   setStatus(shortcutSettingsFailureMessage(error));
 });
 
 translateButton.addEventListener("click", () => {
-  void activateCurrentTab();
+  void toggleCurrentTab();
 });
 
 optionsButton.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
 
-async function activateCurrentTab(): Promise<void> {
+async function initializeTranslationState(): Promise<void> {
   setStatus("");
-  translateButton.disabled = true;
-  const result = await resolveCurrentTabActivation();
-  if (result.kind === "activated") {
-    window.close();
-    return;
-  }
-  setStatus(result.message);
-  translateButton.disabled = false;
-}
-
-async function resolveCurrentTabActivation(): Promise<ActivationResult> {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) {
-      return activationFailed();
+      renderUnavailable();
+      return;
     }
-    const response = await chrome.tabs.sendMessage(tab.id, { type: "glossa.activateTranslation" });
-    return activationResultFromResponse(response);
-  } catch (error) {
-    return activationFailureFromError(error);
+    const response = await chrome.tabs.sendMessage(tab.id, { type: "glossa.getTranslationState" });
+    if (!isTranslationStateResponse(response)) {
+      renderUnavailable(messageFromControlResponse(response));
+      return;
+    }
+    currentTabId = tab.id;
+    translationEnabled = response.enabled;
+    renderAvailableState();
+  } catch {
+    renderUnavailable();
   }
+}
+
+async function toggleCurrentTab(): Promise<void> {
+  if (currentTabId === undefined) {
+    return;
+  }
+  setStatus("");
+  translateButton.disabled = true;
+  translateButtonLabel.textContent = translationEnabled ? "正在停止…" : "正在开启…";
+  try {
+    const response = await chrome.tabs.sendMessage(currentTabId, { type: "glossa.toggleTranslation" });
+    if (!isTranslationStateResponse(response)) {
+      setStatus(messageFromControlResponse(response));
+      renderAvailableState();
+      return;
+    }
+    translationEnabled = response.enabled;
+    window.close();
+  } catch (error) {
+    setStatus(userMessageForError(diagnosticPayloadFrom(error, {
+      reason: "runtime",
+      message: "Translation toggle failed",
+      service: "runtime"
+    }), "runtime"));
+    renderAvailableState();
+  }
+}
+
+function renderAvailableState(): void {
+  pageStateLabel.textContent = translationEnabled ? "翻译已开启" : "翻译已关闭";
+  pageStateMark.textContent = translationEnabled ? "开启" : "可用";
+  pageStateMark.dataset.state = translationEnabled ? "active" : "available";
+  translateButtonLabel.textContent = translationEnabled ? "停止翻译" : "翻译本页";
+  translateButton.disabled = false;
+}
+
+function renderUnavailable(message = "当前页面不支持扩展翻译"): void {
+  currentTabId = undefined;
+  pageStateLabel.textContent = "此页面不可用";
+  pageStateMark.textContent = "不可用";
+  pageStateMark.dataset.state = "unavailable";
+  translateButtonLabel.textContent = "当前页面不可用";
+  translateButton.disabled = true;
+  setStatus(message);
 }
 
 function setStatus(value: string): void {
@@ -116,48 +150,27 @@ function shortcutNodes(parts: string[]): Node[] {
   return nodes;
 }
 
-function shortcutSettingsFailureMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  if (typeof error === "string" && error) {
-    return error;
-  }
+function shortcutSettingsFailureMessage(_error: unknown): string {
   return DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE;
 }
 
-function isOkResponse(value: unknown): value is { ok: true } {
+function isTranslationStateResponse(value: unknown): value is { ok: true; enabled: boolean } {
   return typeof value === "object"
     && value !== null
     && "ok" in value
-    && value.ok === true;
+    && value.ok === true
+    && "enabled" in value
+    && typeof value.enabled === "boolean";
 }
 
-function activationResultFromResponse(value: unknown): ActivationResult {
-  if (isOkResponse(value)) {
-    return { kind: "activated" };
+function messageFromControlResponse(value: unknown): string {
+  if (hasControlError(value)) {
+    return userMessageForError(value.error, "runtime");
   }
-  if (hasActivationError(value)) {
-    return activationFailed(userMessageForError(value.error, "runtime"));
-  }
-  return activationFailed();
+  return "扩展运行时错误";
 }
 
-function activationFailureFromError(error: unknown): ActivationResult {
-  if (error instanceof Error && error.message) {
-    return activationFailed(error.message);
-  }
-  if (typeof error === "string" && error) {
-    return activationFailed(error);
-  }
-  return activationFailed();
-}
-
-function activationFailed(message = DEFAULT_ACTIVATION_FAILURE_MESSAGE): ActivationResult {
-  return { kind: "failed", message };
-}
-
-function hasActivationError(value: unknown): value is { ok: false; error: Parameters<typeof userMessageForError>[0] } {
+function hasControlError(value: unknown): value is { ok: false; error: Parameters<typeof userMessageForError>[0] } {
   return typeof value === "object"
     && value !== null
     && "ok" in value
