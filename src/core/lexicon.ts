@@ -14,22 +14,22 @@ export const KNOWN_WORD_LISTS = [
   },
   {
     id: KNOWN_WORD_LIST_IDS[2],
-    label: "四级 4535 词",
+    label: "四级 4882 词",
     file: "assets/known-wordlists/cet4.txt"
   },
   {
     id: KNOWN_WORD_LIST_IDS[3],
-    label: "六级 2219 词",
+    label: "六级 5953 词",
     file: "assets/known-wordlists/cet6.txt"
   },
   {
     id: KNOWN_WORD_LIST_IDS[4],
-    label: "托福 4510 词",
+    label: "托福 6586 词",
     file: "assets/known-wordlists/toefl.txt"
   },
   {
     id: KNOWN_WORD_LIST_IDS[5],
-    label: "GRE 7728 词",
+    label: "GRE 10326 词",
     file: "assets/known-wordlists/gre.txt"
   },
   {
