@@ -32,15 +32,23 @@ test("content bundle waits for manual activation before requesting glosses", asy
   const controlState = await page.evaluate(async () => {
     const listeners = Reflect.get(window, "__glossaListeners") as Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void>;
     const send = (message: unknown) => new Promise<unknown>((resolve) => {
-      listeners[0]?.(message, {}, resolve);
+      let responded = false;
+      const sendResponse = (response: unknown) => {
+        responded = true;
+        resolve(response);
+      };
+      const pending = listeners[0]?.(message, {}, sendResponse);
+      if (pending !== true && !responded) {
+        resolve(undefined);
+      }
     });
     const before = await send({ type: "glossa.getTranslationState" });
-    const toggled = await send({ type: "glossa.toggleTranslation" });
-    return { before, toggled };
+    const enabled = await send({ type: "glossa.setTranslationState", enabled: true });
+    return { before, enabled };
   });
   expect(controlState).toEqual({
     before: { ok: true, enabled: false },
-    toggled: { ok: true, enabled: true }
+    enabled: { ok: true, enabled: true }
   });
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "手动");

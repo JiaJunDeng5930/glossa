@@ -22,12 +22,12 @@ test("popup reads and toggles translation state for the current tab", async ({ p
         async query() {
           return [{ id: 11 }];
         },
-        async sendMessage(tabId: number, message: unknown) {
-          sent.push({ tabId, message });
+        async sendMessage(tabId: number, message: unknown, options?: unknown) {
+          sent.push(options ? { tabId, message, options } : { tabId, message });
           const type = (message as { type?: string }).type;
           return type === "glossa.getTranslationState"
             ? { ok: true, enabled: false }
-            : { ok: true, enabled: true };
+            : { ok: true, enabled: (message as { enabled?: boolean }).enabled };
         }
       }
     });
@@ -43,8 +43,8 @@ test("popup reads and toggles translation state for the current tab", async ({ p
 
   await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__glossaPopupClosed"))).toBe(true);
   expect(await page.evaluate(() => Reflect.get(window, "__glossaTabMessages"))).toEqual([
-    { tabId: 11, message: { type: "glossa.getTranslationState" } },
-    { tabId: 11, message: { type: "glossa.toggleTranslation" } }
+    { tabId: 11, message: { type: "glossa.getTranslationState" }, options: { frameId: 0 } },
+    { tabId: 11, message: { type: "glossa.setTranslationState", enabled: true } }
   ]);
 });
 

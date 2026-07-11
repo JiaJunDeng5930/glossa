@@ -556,12 +556,19 @@ async function boot(): Promise<void> {
     });
   };
 
-  const toggleTranslation = async (reason: string): Promise<void> => {
-    if (translationEnabled) {
-      disableTranslation(reason);
+  const setTranslationState = async (enabled: boolean, reason: string): Promise<void> => {
+    if (enabled === translationEnabled) {
       return;
     }
-    await enableTranslation(reason);
+    if (enabled) {
+      await enableTranslation(reason);
+    } else {
+      disableTranslation(reason);
+    }
+  };
+
+  const toggleTranslation = async (reason: string): Promise<void> => {
+    await setTranslationState(!translationEnabled, reason);
   };
 
   const onShortcutKeyDown: EventListener = (event): void => {
@@ -616,12 +623,14 @@ async function boot(): Promise<void> {
       sendResponse({ ok: true, enabled: translationEnabled } satisfies TranslationControlResponse);
       return false;
     }
-    if (!isTranslateActivationMessage(message) && !isTranslationToggleMessage(message)) {
+    if (!isTranslateActivationMessage(message) && !isTranslationToggleMessage(message) && !isTranslationSetMessage(message)) {
       return false;
     }
-    const action = isTranslationToggleMessage(message)
-      ? toggleTranslation("popup")
-      : enableTranslation("popup");
+    const action = isTranslationSetMessage(message)
+      ? setTranslationState(message.enabled, "popup")
+      : isTranslationToggleMessage(message)
+        ? toggleTranslation("popup")
+        : setTranslationState(true, "popup");
     void action.then(() => {
       sendResponse({ ok: true, enabled: translationEnabled } satisfies TranslationControlResponse);
     }).catch((error) => {
@@ -1091,6 +1100,15 @@ function isTranslationToggleMessage(value: unknown): value is { type: "glossa.to
     && value !== null
     && "type" in value
     && value.type === "glossa.toggleTranslation";
+}
+
+function isTranslationSetMessage(value: unknown): value is { type: "glossa.setTranslationState"; enabled: boolean } {
+  return typeof value === "object"
+    && value !== null
+    && "type" in value
+    && value.type === "glossa.setTranslationState"
+    && "enabled" in value
+    && typeof value.enabled === "boolean";
 }
 
 type TranslationControlResponse = { ok: true; enabled: boolean } | { ok: false; message: string; error?: ErrorPayload };
