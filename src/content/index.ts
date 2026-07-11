@@ -4,10 +4,10 @@ import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
 import { glossOutputSettingsChanged, mergeStoredSettings } from "../shared/settings";
 import { matchesShortcut } from "../shared/shortcut";
+import { cardOperationTimeoutMs } from "../shared/cardTimeout";
 import GLOSSA_THEME from "../shared/theme.json";
 import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
-import { wordClickTimeoutMs } from "./cardTimeout";
 import { createGlossOverlay } from "./overlay";
 import { scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
 import { createSelectionController, type WordSelection } from "./selection";
@@ -64,12 +64,13 @@ async function boot(): Promise<void> {
   let stopped = false;
   const lifecycleCleanups: Array<() => void> = [];
   let autoTranslateEnabled = settings?.autoTranslateEnabled ?? false;
-  let wordClickTimeout = wordClickTimeoutMs(settings);
+  let wordClickTimeout = cardOperationTimeoutMs(settings);
   let translationEnabled = autoTranslateEnabled;
   let selectionController: ReturnType<typeof createSelectionController> | undefined;
   let observer: MutationObserver | undefined;
   let currentGlossSession: GlossSession | undefined;
   const glossSessions = new Set<GlossSession>();
+  const pendingGenerationRefreshKeys = new Set<string>();
   let scanInProgress = 0;
 
   const stopContentScript = (reason: string): void => {
@@ -129,20 +130,23 @@ async function boot(): Promise<void> {
     registerLifecycleCleanup(() => target.removeEventListener(type, listener, options));
   };
 
-  const synchronizeRouteState = (manualActivation = false): void => {
+  const synchronizeRouteState = (manualActivation = false): boolean => {
     const routeUrl = urlWithoutHash(location.href);
-    if (routeUrl !== pageUrl) {
-      pageUrl = routeUrl;
-      scanVersion += 1;
-      closeAllGlossSessions();
-      cancelDuplicateCardPrompt(document);
-      overlay.clear();
-      // Manual activation belongs to one route; navigation restores the configured automatic default.
-      translationEnabled = manualActivation || autoTranslateEnabled;
+    if (routeUrl === pageUrl) {
+      return false;
     }
+    pageUrl = routeUrl;
+    scanVersion += 1;
+    closeAllGlossSessions();
+    cancelDuplicateCardPrompt(document);
+    overlay.clear();
+    pendingGenerationRefreshKeys.clear();
+    // Manual activation belongs to one route; navigation restores the configured automatic default.
+    translationEnabled = manualActivation || autoTranslateEnabled;
+    return true;
   };
 
-  const scanAndRender = async (reason: string, options: { manualActivation?: boolean; forceRefreshKeys?: ReadonlySet<string> } = {}) => {
+  const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
     if (stopped) {
       return;
     }
@@ -183,8 +187,8 @@ async function boot(): Promise<void> {
             }
           }
           for (const token of chunk.tokens) {
-            // Only labels already visible on this page can cross the known-word gate for regeneration.
-            if (options.forceRefreshKeys?.has(glossRefreshKey(token))) {
+            // Labels rendered before a generation change keep refresh eligibility until their page location is scanned again.
+            if (pendingGenerationRefreshKeys.has(glossRefreshKey(token))) {
               token.forceRefresh = true;
             }
             tokenMap.set(token.id, token);
@@ -392,6 +396,9 @@ async function boot(): Promise<void> {
       ? overlay.applyTokenOutcome(token, outcome, token?.scanVersion ?? session.version)
       : overlay.applyStalePendingOutcome(outcome);
     updatePendingTokenState(session, outcome, render);
+    if (current && token?.forceRefresh && (outcome.status === "ready" || outcome.status === "hidden")) {
+      pendingGenerationRefreshKeys.delete(glossRefreshKey(token));
+    }
     trace({
       component: "content-script",
       operation: "content.token",
@@ -570,8 +577,11 @@ async function boot(): Promise<void> {
   };
 
   const setTranslationState = async (enabled: boolean, reason: string): Promise<void> => {
-    synchronizeRouteState();
+    const routeChanged = synchronizeRouteState();
     if (enabled === translationEnabled) {
+      if (routeChanged && enabled) {
+        await scanAndRender(reason);
+      }
       return;
     }
     if (enabled) {
@@ -610,10 +620,14 @@ async function boot(): Promise<void> {
       const nextSettings = mergeStoredSettings(settingsChange.newValue);
       const knownWordListChanged = nextSettings.knownWordList !== previousSettings.knownWordList;
       const generationSettingsChanged = glossOutputSettingsChanged(previousSettings, nextSettings);
-      const forceRefreshKeys = generationSettingsChanged ? renderedGlossRefreshKeys(document) : undefined;
+      if (generationSettingsChanged) {
+        for (const key of renderedGlossRefreshKeys(document)) {
+          pendingGenerationRefreshKeys.add(key);
+        }
+      }
       settings = nextSettings;
       autoTranslateEnabled = nextSettings.autoTranslateEnabled;
-      wordClickTimeout = wordClickTimeoutMs(nextSettings);
+      wordClickTimeout = cardOperationTimeoutMs(nextSettings);
       overlay.setAppearance(nextSettings.appearance);
       selectionController?.setShortcut(nextSettings.shortcutKey);
       // The automatic setting becomes the next route default while the user's current-route choice stays stable.
@@ -637,7 +651,7 @@ async function boot(): Promise<void> {
       overlay.clear();
       if (translationEnabled) {
         const reason = knownWordListChanged ? "settings-known-word-list" : "settings-gloss-generation";
-        await scanAndRender(reason, forceRefreshKeys ? { forceRefreshKeys } : {});
+        await scanAndRender(reason);
       }
     })().catch((error) => handleRuntimeError("settings.changed", error));
   };
@@ -647,7 +661,10 @@ async function boot(): Promise<void> {
   }
   const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
     if (isTranslationStateMessage(message)) {
-      synchronizeRouteState();
+      const routeChanged = synchronizeRouteState();
+      if (routeChanged && translationEnabled) {
+        void scanAndRender("popup-state").catch((error) => handleRuntimeError("content.route", error));
+      }
       sendResponse({ ok: true, enabled: translationEnabled } satisfies TranslationControlResponse);
       return false;
     }
@@ -808,19 +825,38 @@ async function boot(): Promise<void> {
 
 function renderedGlossRefreshKeys(doc: Document): Set<string> {
   const keys = new Set<string>();
-  for (const node of doc.querySelectorAll<HTMLElement>("[data-glossa-token]")) {
-    const carriesGloss = node.dataset.glossaGlossDisplay !== undefined
-      || (node.dataset.glossaStatus === "ready" && node.dataset.glossaDisplayKind === "gloss");
-    const sentenceText = node.dataset.glossaSentence;
-    const lemma = node.dataset.glossaLemma;
-    const startOffset = Number(node.dataset.glossaSentenceStart);
-    const endOffset = Number(node.dataset.glossaSentenceEnd);
-    if (!carriesGloss || !sentenceText || !lemma || !Number.isFinite(startOffset) || !Number.isFinite(endOffset)) {
+  const roots: ParentNode[] = [doc];
+  while (roots.length > 0) {
+    const root = roots.pop();
+    if (!root) {
       continue;
     }
-    keys.add(glossRefreshKey({ sentenceText, lemma, startOffset, endOffset }));
+    for (const element of root.querySelectorAll<HTMLElement>("*")) {
+      if (element.matches("[data-glossa-token]")) {
+        const key = renderedGlossRefreshKey(element);
+        if (key) {
+          keys.add(key);
+        }
+      }
+      if (element.shadowRoot) {
+        roots.push(element.shadowRoot);
+      }
+    }
   }
   return keys;
+}
+
+function renderedGlossRefreshKey(node: HTMLElement): string | undefined {
+  const carriesGloss = node.dataset.glossaGlossDisplay !== undefined
+    || (node.dataset.glossaStatus === "ready" && node.dataset.glossaDisplayKind === "gloss");
+  const sentenceText = node.dataset.glossaSentence;
+  const lemma = node.dataset.glossaLemma;
+  const startOffset = Number(node.dataset.glossaSentenceStart);
+  const endOffset = Number(node.dataset.glossaSentenceEnd);
+  if (!carriesGloss || !sentenceText || !lemma || !Number.isFinite(startOffset) || !Number.isFinite(endOffset)) {
+    return undefined;
+  }
+  return glossRefreshKey({ sentenceText, lemma, startOffset, endOffset });
 }
 
 function glossRefreshKey(input: { sentenceText: string; lemma: string; startOffset: number; endOffset: number }): string {

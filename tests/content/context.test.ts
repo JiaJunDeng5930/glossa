@@ -58,4 +58,19 @@ describe("sentence context resolver", () => {
       endOffset: 22
     });
   });
+
+  it("uses page context around a rendered token without a semantic container", () => {
+    document.body.innerHTML = `Before <span data-glossa-token="t-archive" data-glossa-owned="1"><span data-glossa-token-label="t-archive">档案</span><span data-glossa-token-surface="t-archive">archive</span></span> appears here.`;
+    const node = document.querySelector("[data-glossa-token-surface]")!.firstChild as Text;
+    const resolveContext = createSentenceContextResolver();
+
+    const context = resolveContext(node, 0, "archive".length);
+
+    expect(context).toMatchObject({
+      boundary: document.body,
+      text: "Before archive appears here.",
+      startOffset: 7,
+      endOffset: 14
+    });
+  });
 });

@@ -77,8 +77,12 @@ export function createSentenceContextResolver(): (node: Text, startOffset: numbe
 }
 
 function contextBoundary(node: Text): Node {
-  return node.parentElement?.closest(CONTEXT_BOUNDARY_SELECTOR)
-    ?? node.parentElement
+  const sourceWrapper = node.parentElement?.closest("[data-glossa-token]");
+  const sourceParent = sourceWrapper?.parentNode;
+  const startElement = sourceParent instanceof Element ? sourceParent : node.parentElement;
+  return startElement?.closest(CONTEXT_BOUNDARY_SELECTOR)
+    ?? sourceParent
+    ?? startElement
     ?? node.getRootNode();
 }
 
