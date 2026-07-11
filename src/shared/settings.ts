@@ -76,6 +76,15 @@ export function settingsOverrides(settings: GlossaSettings): StoredGlossaSetting
   return overrides;
 }
 
+export function glossOutputSettingsChanged(previous: GlossaSettings, next: GlossaSettings): boolean {
+  return previous.promptVersion !== next.promptVersion
+    || previous.modelVersion !== next.modelVersion
+    || previous.prompts.gloss !== next.prompts.gloss
+    || previous.ai.provider !== next.ai.provider
+    || previous.ai.endpoint !== next.ai.endpoint
+    || previous.ai.reasoningEffort !== next.ai.reasoningEffort;
+}
+
 export function defaultEndpointForProvider(provider: GlossaSettings["ai"]["provider"]): string {
   if (provider === "openai-chat-completions") {
     return "https://api.openai.com/v1/chat/completions";
