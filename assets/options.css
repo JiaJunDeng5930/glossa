@@ -23,14 +23,16 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
-  min-width: 320px;
   scroll-behavior: smooth;
   background: var(--paper);
 }
 
 body {
-  min-width: 320px;
   margin: 0;
   color: var(--ink);
   background:
@@ -53,6 +55,8 @@ button,
 input,
 select,
 textarea {
+  min-width: 0;
+  max-width: 100%;
   font: inherit;
 }
 
@@ -647,7 +651,7 @@ button svg {
   font: 750 9px/1 var(--sans);
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  content: "Live reading proof / 03";
+  content: "释义样式预览";
 }
 
 .gloss-preview p {
@@ -689,6 +693,7 @@ button svg {
   width: min(920px, calc(100vw - 40px));
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - 48px);
+  overflow-y: auto;
   padding: 28px;
   border: 1px solid var(--line-strong);
   border-top: 3px solid var(--accent);
@@ -729,8 +734,27 @@ button svg {
   min-width: 94px;
 }
 
+.known-word-tools .inline-status {
+  grid-column: 1 / -1;
+}
+
+.inline-status {
+  min-height: 20px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.inline-status[data-state="success"] {
+  color: var(--green);
+}
+
+.inline-status[data-state="pending"] {
+  color: var(--ink-soft);
+}
+
 .known-words-browser {
-  min-height: 420px;
+  min-height: 0;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
   gap: 20px;
@@ -759,8 +783,7 @@ button svg {
 .known-words-list {
   display: grid;
   gap: 20px;
-  max-height: 52vh;
-  overflow: auto;
+  overflow: visible;
   padding-right: 8px;
   scrollbar-color: var(--line-strong) transparent;
 }

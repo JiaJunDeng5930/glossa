@@ -127,9 +127,12 @@
                   <input name="cardErrorBackgroundColor" type="color">
                 </label>
                 <label>
-                  深浅
+                  <span class="field-heading">
+                    <span>深浅</span>
+                    <output id="gloss-background-opacity-value" for="gloss-background-opacity">94%</output>
+                  </span>
                   <span class="field-help">控制释义和反馈标签的背景透明度。</span>
-                  <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
+                  <input id="gloss-background-opacity" name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
                 </label>
                 <label>
                   字体
@@ -191,7 +194,7 @@
                 <span class="field-help">发送 AI 请求的 HTTP 地址。</span>
                 <input name="aiEndpoint" autocomplete="off">
               </label>
-              <label>
+              <label data-ai-field="api-key">
                 AI API 密钥
                 <span class="field-help">发送 OpenAI 请求时使用的密钥。</span>
                 <input name="apiKey" type="password" autocomplete="off">
@@ -201,7 +204,7 @@
                 <span class="field-help">AI 请求体中的模型名称。</span>
                 <input name="modelVersion" autocomplete="off">
               </label>
-              <label>
+              <label data-ai-field="reasoning">
                 推理强度
                 <span class="field-help">控制支持推理参数的 AI 请求强度。</span>
                 <select name="reasoningEffort">
@@ -228,6 +231,7 @@
                   <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
                 </svg>
               </button>
+              <output id="ai-status" class="inline-status" role="status"></output>
             </section>
 
             <section id="anki-section" class="settings-panel" aria-labelledby="anki-heading">
@@ -278,6 +282,8 @@
                   </svg>
                 </button>
               </div>
+              <button id="reset-card-history" class="secondary danger-action" type="button">重置制卡记录</button>
+              <output id="anki-status" class="inline-status" role="status"></output>
             </section>
           </div>
 
@@ -346,15 +352,16 @@
             </svg>
           </button>
         </div>
-        <div class="known-word-tools">
+        <form id="known-word-form" class="known-word-tools">
           <label>
             添加词汇
-            <span class="field-help">加入后这个词会按 known 状态处理。</span>
+            <span class="field-help">加入后，页面扫描会跳过这个词。</span>
             <input id="known-word-input" autocomplete="off">
           </label>
-          <button id="add-known-word" class="secondary" type="button">添加</button>
+          <button id="add-known-word" class="secondary" type="submit">添加</button>
           <button id="clear-known-words" class="secondary danger-action" type="button">清空已掌握词汇</button>
-        </div>
+          <output id="known-words-status" class="inline-status" role="status"></output>
+        </form>
         <div class="known-words-browser">
           <nav id="known-words-nav" class="known-words-nav" aria-label="已掌握词汇字母索引"></nav>
           <div id="known-words-list" class="known-words-list" role="list"></div>
