@@ -459,6 +459,12 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#ai-status")).toHaveText("AI 连接可用");
   await expect(page.locator("#ai-status")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#status")).toHaveText("有未保存的更改");
+  await page.locator("input[name=modelVersion]").fill("gpt-edited-after-test");
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "idle");
+  await expect(page.locator("#ai-status")).toHaveText("");
+  await page.locator("input[name=modelVersion]").fill("gpt-4.1-mini");
+  await page.locator("#test-ai").click();
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
 
   await page.locator("#test-anki").click();
   await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "success");
@@ -468,6 +474,12 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#anki-status")).toHaveText("Anki 连接可用");
   await expect(page.locator("#anki-status")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#status")).toHaveText("有未保存的更改");
+  await page.locator("select[name=ankiDeck]").selectOption("general");
+  await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "idle");
+  await expect(page.locator("#anki-status")).toHaveText("");
+  await page.locator("select[name=ankiDeck]").selectOption("temp");
+  await page.locator("#test-anki").click();
+  await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "success");
 
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {

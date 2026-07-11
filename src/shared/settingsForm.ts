@@ -152,6 +152,26 @@ export function applyAppearancePreview(targets: AppearancePreviewTargets, appear
   }
 }
 
+export function aiConnectionKey(value: GlossaSettings): string {
+  return JSON.stringify([
+    value.ai.provider,
+    value.ai.endpoint,
+    value.ai.apiKey ?? "",
+    value.modelVersion,
+    value.ai.reasoningEffort,
+    value.ai.requestTimeoutMs
+  ]);
+}
+
+export function ankiConnectionKey(value: GlossaSettings): string {
+  return JSON.stringify([
+    value.anki.endpoint,
+    value.anki.deck,
+    value.anki.modelName,
+    value.anki.requestTimeoutMs
+  ]);
+}
+
 export async function testAiSettings(settings: GlossaSettings): Promise<void> {
   // This check confirms that the configured transport accepts a request; normal gloss and card calls validate their own output contracts.
   const endpoint = settings.ai.provider === "glossa-backend"

@@ -1,5 +1,7 @@
 import { defaultEndpointForProvider } from "../shared/settings";
 import {
+  aiConnectionKey,
+  ankiConnectionKey,
   applyAppearancePreview,
   loadAnkiCatalog,
   pickExistingValue,
@@ -269,24 +271,4 @@ function setNavigationBusy(busy: boolean): void {
     control.disabled = wasDisabled;
   }
   busyStepControls.clear();
-}
-
-function aiConnectionKey(value: GlossaSettings): string {
-  return JSON.stringify([
-    value.ai.provider,
-    value.ai.endpoint,
-    value.ai.apiKey ?? "",
-    value.modelVersion,
-    value.ai.reasoningEffort,
-    value.ai.requestTimeoutMs
-  ]);
-}
-
-function ankiConnectionKey(value: GlossaSettings): string {
-  return JSON.stringify([
-    value.anki.endpoint,
-    value.anki.deck,
-    value.anki.modelName,
-    value.anki.requestTimeoutMs
-  ]);
 }
