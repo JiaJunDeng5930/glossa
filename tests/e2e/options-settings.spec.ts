@@ -242,6 +242,13 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY - 100);
   });
   await expect(page.locator('.section-nav a[href="#appearance-section"]')).toHaveAttribute("aria-current", "location");
+  await test.step("keeps AI current when the AI and Anki panels share a row", async () => {
+    await page.evaluate(() => {
+      const section = document.querySelector<HTMLElement>("#ai-section")!;
+      window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY - 100);
+    });
+    await expect(page.locator('.section-nav a[href="#ai-section"]')).toHaveAttribute("aria-current", "location");
+  });
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect(page.locator('.section-nav a[href="#cache-section"]')).toHaveAttribute("aria-current", "location");
   await page.evaluate(() => window.scrollTo(0, 0));

@@ -333,11 +333,17 @@ function setupSectionNavigation(): void {
     let activeEntry = atDocumentEnd ? entries.at(-1)! : entries[0]!;
     if (!atDocumentEnd) {
       const readingMarker = Math.min(window.innerHeight * 0.32, 240);
+      let activeTop = Number.NEGATIVE_INFINITY;
       for (const entry of entries) {
-        if (entry.section.getBoundingClientRect().top > readingMarker) {
+        const sectionTop = entry.section.getBoundingClientRect().top;
+        if (sectionTop > readingMarker) {
           break;
         }
-        activeEntry = entry;
+        // @behavior glossa.settings_save.section_navigation.shared_row Equal-top sections keep the first navigation entry for their shared row current.
+        if (sectionTop > activeTop) {
+          activeEntry = entry;
+          activeTop = sectionTop;
+        }
       }
     }
     for (const entry of entries) {
