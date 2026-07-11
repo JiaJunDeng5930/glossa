@@ -1,6 +1,7 @@
 import { isKnownLemma } from "../core/lexicon";
 import { normalizeLemma } from "../core/state";
 import type { SentenceCandidate, TokenCandidate } from "../shared/types";
+import { createSentenceContextResolver, type SentenceContext } from "./context";
 
 export interface ScannedToken extends TokenCandidate {
   textNode: Text;
@@ -48,7 +49,6 @@ export interface ScanChunkOptions extends ScanOptions {
 }
 
 const WORD_RE = /[A-Za-z]+(?:['-][A-Za-z]+)*/g;
-const SENTENCE_RE = /[^.!?\n]+[.!?]?/g;
 const SKIPPED_TAGS = new Set([
   "SCRIPT",
   "STYLE",
@@ -89,12 +89,15 @@ export async function scanDocumentTextInChunks(
   const stats = createScanStats();
   const textNodes = doc.body ? collectTextNodes(doc.body, stats) : [];
   const lemmaCounts = new Map<string, number>();
+  const resolveSentenceContext = createSentenceContextResolver();
+  const sentenceIds = new WeakMap<Node, Map<number, string>>();
   let sentenceIndex = 0;
   let chunkIndex = 0;
   let chunkStartedAt = nowMs();
   let chunkSentences: ScannedSentence[] = [];
   let chunkTokens: ScannedToken[] = [];
   const scanVersion = options.scanVersion ?? 0;
+  // Automatic glossing stays sparse by design: short shapes, acronyms, and repeated lemmas reduce page noise.
   const maxOccurrencesPerLemma = options.maxOccurrencesPerLemma ?? 1;
   const minWordLength = options.minWordLength ?? 3;
   const minContextChars = options.minContextChars ?? 12;
@@ -119,95 +122,90 @@ export async function scanDocumentTextInChunks(
     return keepGoing !== false;
   };
 
+  const sentenceIdFor = (context: SentenceContext): string => {
+    let ids = sentenceIds.get(context.boundary);
+    if (!ids) {
+      ids = new Map();
+      sentenceIds.set(context.boundary, ids);
+    }
+    let id = ids.get(context.sentenceStart);
+    if (!id) {
+      id = `s${sentenceIndex++}`;
+      ids.set(context.sentenceStart, id);
+    }
+    return id;
+  };
+
+  const appendToken = (token: ScannedToken): void => {
+    const sentence = chunkSentences.find((item) => item.id === token.sentenceId);
+    if (sentence) {
+      sentence.tokens.push(token);
+      return;
+    }
+    chunkSentences.push({ id: token.sentenceId, text: token.sentenceText, tokens: [token] });
+  };
+
   for (const textNode of textNodes) {
     stats.scannedTextNodes += 1;
     const text = textNode.nodeValue ?? "";
-    for (const sentenceMatch of text.matchAll(SENTENCE_RE)) {
-      const raw = sentenceMatch[0];
-      const trimmed = raw.trim();
-      if (trimmed.length === 0) {
+    for (const wordMatch of text.matchAll(WORD_RE)) {
+      const surface = wordMatch[0];
+      if (!isEligibleSurface(surface, minWordLength)) {
+        stats.rejectedByShape += 1;
+        continue;
+      }
+      const lemma = normalizeLemma(surface);
+      if (isKnownLemma(knownWords, lemma)) {
+        stats.rejectedByKnownWord += 1;
+        continue;
+      }
+      const count = lemmaCounts.get(lemma) ?? 0;
+      if (count >= maxOccurrencesPerLemma) {
+        stats.rejectedByFrequency += 1;
+        continue;
+      }
+      const nodeStartOffset = wordMatch.index ?? 0;
+      const nodeEndOffset = nodeStartOffset + surface.length;
+      const context = resolveSentenceContext(textNode, nodeStartOffset, nodeEndOffset);
+      if (!context || context.text.length < minContextChars) {
         stats.rejectedByText += 1;
         continue;
       }
-      if (trimmed.length < minContextChars) {
-        stats.rejectedByText += 1;
+      if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset, options.requireViewportRange === true)) {
+        stats.rejectedByVisibility += 1;
         continue;
       }
-      const leading = raw.length - raw.trimStart().length;
-      const sentenceStart = (sentenceMatch.index ?? 0) + leading;
-      const sentenceId = `s${sentenceIndex++}`;
-      let sentenceTokens: ScannedToken[] = [];
-
-      const appendSentencePart = (): void => {
-        if (sentenceTokens.length === 0) {
-          return;
-        }
-        chunkSentences.push({
-          id: sentenceId,
-          text: trimmed,
-          tokens: sentenceTokens
-        });
-        sentenceTokens = [];
+      const sentenceId = sentenceIdFor(context);
+      const sourceFingerprint = createSourceFingerprint(text, nodeStartOffset, nodeEndOffset);
+      const token: ScannedToken = {
+        id: createTokenId(textNode, surface, lemma, context.sentenceStart, sourceFingerprint),
+        sentenceId,
+        surface,
+        lemma,
+        startOffset: context.startOffset,
+        endOffset: context.endOffset,
+        textNode,
+        nodeStartOffset,
+        nodeEndOffset,
+        sentenceText: context.text,
+        sourceText: surface,
+        sourceFingerprint,
+        scanVersion
       };
+      appendToken(token);
+      chunkTokens.push(token);
+      lemmaCounts.set(lemma, count + 1);
+      stats.candidateWords += 1;
 
-      for (const wordMatch of trimmed.matchAll(WORD_RE)) {
-        const surface = wordMatch[0];
-        if (!isEligibleSurface(surface, minWordLength)) {
-          stats.rejectedByShape += 1;
-          continue;
-        }
-        const lemma = normalizeLemma(surface);
-        if (isKnownLemma(knownWords, lemma)) {
-          stats.rejectedByKnownWord += 1;
-          continue;
-        }
-        const count = lemmaCounts.get(lemma) ?? 0;
-        if (count >= maxOccurrencesPerLemma) {
-          stats.rejectedByFrequency += 1;
-          continue;
-        }
-        const startOffset = wordMatch.index ?? 0;
-        const endOffset = startOffset + surface.length;
-        const nodeStartOffset = sentenceStart + startOffset;
-        const nodeEndOffset = sentenceStart + endOffset;
-        if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset, options.requireViewportRange === true)) {
-          stats.rejectedByVisibility += 1;
-          continue;
-        }
-        const sourceFingerprint = createSourceFingerprint(text, nodeStartOffset, nodeEndOffset);
-        const token: ScannedToken = {
-          id: createTokenId(textNode, surface, lemma, sentenceStart, sourceFingerprint),
-          sentenceId,
-          surface,
-          lemma,
-          startOffset,
-          endOffset,
-          textNode,
-          nodeStartOffset,
-          nodeEndOffset,
-          sentenceText: trimmed,
-          sourceText: surface,
-          sourceFingerprint,
-          scanVersion
-        };
-        sentenceTokens.push(token);
-        chunkTokens.push(token);
-        lemmaCounts.set(lemma, count + 1);
-        stats.candidateWords += 1;
-
-        if (
-          chunkTokens.length >= maxTokensPerChunk
-          || nowMs() - chunkStartedAt >= maxChunkDelayMs
-        ) {
-          appendSentencePart();
-          const keepGoing = await flushChunk();
-          if (!keepGoing) {
-            return stats;
-          }
+      if (
+        chunkTokens.length >= maxTokensPerChunk
+        || nowMs() - chunkStartedAt >= maxChunkDelayMs
+      ) {
+        const keepGoing = await flushChunk();
+        if (!keepGoing) {
+          return stats;
         }
       }
-
-      appendSentencePart();
     }
 
     if (
