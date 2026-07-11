@@ -570,6 +570,7 @@ async function boot(): Promise<void> {
   };
 
   const setTranslationState = async (enabled: boolean, reason: string): Promise<void> => {
+    synchronizeRouteState();
     if (enabled === translationEnabled) {
       return;
     }
@@ -581,6 +582,7 @@ async function boot(): Promise<void> {
   };
 
   const toggleTranslation = async (reason: string): Promise<void> => {
+    synchronizeRouteState();
     await setTranslationState(!translationEnabled, reason);
   };
 
@@ -645,6 +647,7 @@ async function boot(): Promise<void> {
   }
   const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
     if (isTranslationStateMessage(message)) {
+      synchronizeRouteState();
       sendResponse({ ok: true, enabled: translationEnabled } satisfies TranslationControlResponse);
       return false;
     }

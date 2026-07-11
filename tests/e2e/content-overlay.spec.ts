@@ -94,10 +94,26 @@ test("content bundle applies the automatic default after inactive SPA navigation
   });
 
   await expect(page.locator('[data-glossa-token-label][data-glossa-visual="自动"]')).toHaveCount(1, { timeout: 2_000 });
+  const nextRouteState = await page.evaluate(async () => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({ ...current, autoTranslateEnabled: false });
+    history.pushState({}, "", "/three");
+    const listeners = Reflect.get(window, "__glossaListeners") as Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void>;
+    return await new Promise<unknown>((resolve) => {
+      listeners[0]?.({ type: "glossa.getTranslationState" }, {}, resolve);
+    });
+  });
+  expect(nextRouteState).toEqual({ ok: true, enabled: false });
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
 });
 
 test("content bundle toggles page translation with the configured shortcut", async ({ page }) => {
-  await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
+  await page.route("https://shortcut.test/**", (route) => route.fulfill({
+    contentType: "text/html",
+    body: "<!doctype html><html><body><main><p>Shortcut archive appears here.</p></main></body></html>"
+  }));
+  await page.goto("https://shortcut.test/one");
   await installChromeRuntime(page, {
     shortcutKey: "Alt",
     translateShortcutKey: "Ctrl+Shift+G",
@@ -145,6 +161,11 @@ test("content bundle toggles page translation with the configured shortcut", asy
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "快捷");
   expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk").length).toBe(scanCount + 1);
+
+  await page.evaluate(() => history.pushState({}, "", "/two"));
+  await pressTranslationShortcut(page);
+
+  await expect(page.locator('[data-glossa-token-label][data-glossa-visual="快捷"]')).toHaveCount(1, { timeout: 2_000 });
 });
 
 test("content bundle applies saved appearance and shortcuts without changing the active route state", async ({ page }) => {
