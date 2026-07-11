@@ -396,11 +396,11 @@ function setAnkiSelectsEnabled(enabled: boolean): void {
   ankiModelNameSelect.disabled = !enabled;
 }
 
-async function refreshKnownWords(): Promise<void> {
+async function refreshKnownWords(successStatus = ""): Promise<void> {
   try {
     const records = await extensionStorage.lexicon.listByState("known");
     renderKnownWords(records);
-    setKnownWordsStatus("");
+    setKnownWordsStatus(successStatus, successStatus ? "success" : "");
   } catch {
     knownWordsSummary.textContent = "词汇读取失败。";
     setKnownWordsStatus("词汇读取失败，请重试", "error");
@@ -431,7 +431,7 @@ async function addKnownWord(): Promise<void> {
     }
     await extensionStorage.lexicon.put({ ...shown, state: "known", ankiNoteIds: existing?.ankiNoteIds ?? shown.ankiNoteIds });
     knownWordInput.value = "";
-    await refreshKnownWords();
+    await refreshKnownWords("已添加");
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
   } finally {
@@ -511,7 +511,7 @@ async function removeKnownWord(record: VocabularyRecord): Promise<void> {
     const key = vocabularyKey(record.lang, record.lemma);
     await preserveCardHistory(record);
     await extensionStorage.lexicon.delete(key);
-    await refreshKnownWords();
+    await refreshKnownWords("已移除");
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
   }
@@ -529,10 +529,9 @@ async function clearKnownWords(): Promise<void> {
       await preserveCardHistory(record);
       await extensionStorage.lexicon.delete(vocabularyKey(record.lang, record.lemma));
     }));
-    await refreshKnownWords();
+    await refreshKnownWords("已清空");
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
-  } finally {
     clearKnownWordsButton.disabled = false;
   }
 }

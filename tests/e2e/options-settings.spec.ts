@@ -308,6 +308,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#known-words-list")).toContainText("archive");
   await page.locator(".known-word-row", { hasText: "archive" }).getByRole("button", { name: "移除" }).click();
   await expect(page.locator("#known-words-list")).not.toContainText("archive");
+  await expect(page.locator("#known-words-status")).toHaveText("已移除");
+  await expect(page.locator("#known-words-status")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#known-words-list")).toContainText("legacy");
   await page.locator("#known-word-input").fill("legacy");
   await page.locator("#add-known-word").click();
@@ -348,6 +350,8 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("#known-word-input").fill("calibrate");
   await page.locator("#known-word-input").press("Enter");
   await expect(page.locator("#known-words-list")).toContainText("calibrate");
+  await expect(page.locator("#known-words-status")).toHaveText("已添加");
+  await expect(page.locator("#known-words-status")).toHaveAttribute("data-state", "success");
   const cancelClearDialog = page.waitForEvent("dialog", { timeout: 5_000 });
   const cancelClearClick = page.locator("#clear-known-words").click();
   const cancelDialog = await cancelClearDialog;
@@ -361,6 +365,9 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await confirmClearClick;
   await expect(page.locator("#known-words-summary")).toHaveText("当前没有已掌握词汇。");
   await expect(page.locator("#known-words-list")).not.toContainText("calibrate");
+  await expect(page.locator("#known-words-status")).toHaveText("已清空");
+  await expect(page.locator("#known-words-status")).toHaveAttribute("data-state", "success");
+  await expect(page.locator("#clear-known-words")).toBeDisabled();
   expect(await page.evaluate(async () => {
     return await new Promise<unknown>((resolve, reject) => {
       const request = indexedDB.open("glossa", 2);
