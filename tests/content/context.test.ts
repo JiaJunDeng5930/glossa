@@ -44,4 +44,18 @@ describe("sentence context resolver", () => {
       endOffset: "quizzical".length
     });
   });
+
+  it("uses semantic block containers as the sentence boundary", () => {
+    document.body.innerHTML = `<main><span>A contextual <em>quizzical</em> term appears.</span></main>`;
+    const node = document.querySelector("em")!.firstChild as Text;
+    const resolveContext = createSentenceContextResolver();
+
+    const context = resolveContext(node, 0, "quizzical".length);
+
+    expect(context).toMatchObject({
+      text: "A contextual quizzical term appears.",
+      startOffset: 13,
+      endOffset: 22
+    });
+  });
 });

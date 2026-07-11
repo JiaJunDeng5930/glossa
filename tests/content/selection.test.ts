@@ -220,23 +220,8 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  it("reuses rendered token metadata when a gloss wrapper is clicked", () => {
-    document.body.innerHTML = `
-      <p>
-        <span
-          data-glossa-token="t-submit"
-          data-glossa-owned="1"
-          data-glossa-surface="Submit"
-          data-glossa-lemma="submit"
-          data-glossa-original-start="0"
-          data-glossa-original-end="6"
-          data-glossa-sentence="A submit button finishes the form."
-        >
-          <span data-glossa-token-label="t-submit">提交</span>
-          <span data-glossa-token-surface="t-submit">Submit</span>
-        </span>
-      </p>
-    `;
+  it("recomputes rendered token context when surrounding text changes", () => {
+    document.body.innerHTML = `<p>Updated <span data-glossa-token="t-submit" data-glossa-owned="1" data-glossa-surface="Submit" data-glossa-lemma="submit" data-glossa-original-start="0" data-glossa-original-end="6" data-glossa-sentence="A submit button finishes the form." data-glossa-sentence-start="2" data-glossa-sentence-end="8"><span data-glossa-token-label="t-submit">提交</span><span data-glossa-token-surface="t-submit">Submit</span></span> context appears.</p>`;
     const onWordSelected = vi.fn();
     const controller = createSelectionController({
       document,
@@ -250,8 +235,8 @@ describe("selection controller", () => {
     controller.detach();
 
     expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({
-      token: expect.objectContaining({ id: "t-submit", lemma: "submit", surface: "Submit" }),
-      sentence: "A submit button finishes the form."
+      token: expect.objectContaining({ id: "t-submit", lemma: "submit", surface: "Submit", startOffset: 8, endOffset: 14 }),
+      sentence: "Updated Submit context appears."
     }));
     expect(onWordSelected.mock.calls[0]?.[0].renderToken).toBeUndefined();
   });

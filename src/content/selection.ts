@@ -228,10 +228,17 @@ function selectionFromClick(element: Element, event: MouseEvent): WordSelection 
 }
 
 function selectionFromRenderedToken(element: HTMLElement): WordSelection | undefined {
-  const surface = element.dataset.glossaSurface ?? element.textContent?.trim() ?? "";
-  const lemma = element.dataset.glossaLemma ?? normalizeLemma(surface);
-  const startOffset = Number(element.dataset.glossaSentenceStart ?? element.dataset.glossaOriginalStart ?? 0);
-  const endOffset = Number(element.dataset.glossaSentenceEnd ?? element.dataset.glossaOriginalEnd ?? startOffset + surface.length);
+  // Wrapper metadata describes the initial render; the source node provides the current sentence after page mutations.
+  const current = currentRenderedContext(element);
+  const storedSurface = element.dataset.glossaSurface ?? element.textContent?.trim() ?? "";
+  const surface = current?.surface ?? storedSurface;
+  const lemma = current && current.surface !== storedSurface
+    ? normalizeLemma(surface)
+    : element.dataset.glossaLemma ?? normalizeLemma(surface);
+  const startOffset = current?.startOffset
+    ?? Number(element.dataset.glossaSentenceStart ?? element.dataset.glossaOriginalStart ?? 0);
+  const endOffset = current?.endOffset
+    ?? Number(element.dataset.glossaSentenceEnd ?? element.dataset.glossaOriginalEnd ?? startOffset + surface.length);
   if (!surface || !lemma || !Number.isFinite(startOffset) || !Number.isFinite(endOffset)) {
     return undefined;
   }
@@ -247,7 +254,31 @@ function selectionFromRenderedToken(element: HTMLElement): WordSelection | undef
     surface,
     lemma,
     token,
-    sentence: element.dataset.glossaSentence || surface
+    sentence: current?.sentence ?? element.dataset.glossaSentence ?? surface
+  };
+}
+
+function currentRenderedContext(element: HTMLElement): { surface: string; sentence: string; startOffset: number; endOffset: number } | undefined {
+  const source = element.querySelector<HTMLElement>("[data-glossa-token-surface]");
+  const textNode = Array.from(source?.childNodes ?? []).find((node): node is Text => node.nodeType === Node.TEXT_NODE);
+  if (!textNode) {
+    return undefined;
+  }
+  const raw = textNode.nodeValue ?? "";
+  const surface = raw.trim();
+  const nodeStartOffset = raw.indexOf(surface);
+  if (!surface || nodeStartOffset < 0) {
+    return undefined;
+  }
+  const context = createSentenceContextResolver()(textNode, nodeStartOffset, nodeStartOffset + surface.length);
+  if (!context) {
+    return undefined;
+  }
+  return {
+    surface,
+    sentence: context.text,
+    startOffset: context.startOffset,
+    endOffset: context.endOffset
   };
 }
 
