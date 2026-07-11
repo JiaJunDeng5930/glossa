@@ -145,7 +145,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       };
       request.onsuccess = () => {
         const db = request.result;
-        const tx = db.transaction(["lexicon", "glossCache"], "readwrite");
+        const tx = db.transaction(["lexicon", "glossCache", "cardCache", "cardedWords"], "readwrite");
         tx.objectStore("lexicon").put({
           key: "en:archive",
           lemma: "archive",
@@ -184,6 +184,13 @@ test("options page captures shortcuts, previews style changes and saves prompts"
           display: "缓存",
           phrase: "cached"
         }, "gloss:cached");
+        tx.objectStore("cardCache").put({ cards: [{ front: "front", back: "back" }] }, "card:legacy");
+        tx.objectStore("cardedWords").put({
+          key: "en:seeded",
+          lang: "en",
+          lemma: "seeded",
+          createdAt: 1
+        }, "en:seeded");
         tx.oncomplete = () => {
           db.close();
           resolve();
@@ -195,10 +202,10 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
 
-  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
-  await expect(page.locator("#save-settings .save-label")).toHaveText("保存更改");
-  await expect(page.locator("#status")).toHaveText("Anki 选项已更新，等待保存");
-  await expect(page.locator("#status")).toHaveAttribute("data-state", "dirty");
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Basic");
+  await expect(page.locator("select[name=ankiModelName]")).toBeEnabled();
+  await expect(page.locator("#save-settings .save-label")).toHaveText("保存");
+  await expect(page.locator("#status")).toHaveText("");
 
   await expect(page.locator('.section-nav a[href="#reading-section"]')).toHaveAttribute("aria-current", "location");
   await page.setViewportSize({ width: 1280, height: 6000 });
@@ -241,10 +248,12 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("input[name=cardSuccessBackgroundColor]").fill("#228833");
   await page.locator("input[name=cardErrorBackgroundColor]").fill("#cc2222");
   await page.locator("input[name=glossBackgroundOpacity]").fill("0.65");
+  await expect(page.locator("#gloss-background-opacity-value")).toHaveText("65%");
+  await expect(page.locator("input[name=glossBackgroundOpacity]")).toHaveAttribute("aria-valuetext", "65%");
   await page.locator("select[name=glossFontFamily]").selectOption("Georgia, Times New Roman, serif");
   await page.locator("input[name=glossFontSize]").fill("18");
   await expect(page.locator("select[name=knownWordList] option")).toHaveCount(7);
-  await expect(page.locator("select[name=knownWordList]")).toContainText("托福 4510 词");
+  await expect(page.locator("select[name=knownWordList]")).toContainText("托福 6586 词");
   await page.locator("select[name=knownWordList]").selectOption("toefl");
   await page.locator("input[name=glossCacheTtlHours]").fill("48");
   await page.locator("input[name=autoTranslateEnabled]").check();
@@ -252,6 +261,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("select[name=reasoningEffort]").selectOption("high");
   await page.locator("input[name=aiRequestTimeoutSeconds]").fill("45");
   await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
+  await page.locator("#refresh-anki").click();
   await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
   await expect(page.locator("select[name=ankiDeck] option")).toHaveCount(3);
   await expect(page.locator("select[name=ankiModelName] option")).toHaveCount(1);
@@ -270,8 +280,13 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#known-words-summary")).toHaveText("共 3 个已掌握词汇。");
   await page.locator("#open-known-words").click();
   await expect(page.locator("#known-words-dialog")).toBeVisible();
-  await expect(page.locator("#known-words-nav button")).toHaveCount(26);
+  await expect(page.locator("#known-words-nav button")).toHaveCount(3);
+  await page.locator("#known-word-input").fill("two words");
+  await page.locator("#known-word-input").press("Enter");
+  await expect(page.locator("#known-words-status")).toHaveText("请输入一个英文单词，可包含连字符或撇号");
+  await expect(page.locator("#known-word-input")).toHaveValue("two words");
   await page.setViewportSize({ width: 320, height: 720 });
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).minWidth)).toBe("0px");
   const narrowKnownWordsNav = await page.locator("#known-words-nav").evaluate((nav) => {
     const firstButton = nav.querySelector("button")!;
     const buttonRect = firstButton.getBoundingClientRect();
@@ -285,6 +300,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   expect(narrowKnownWordsNav.scrollWidth).toBeLessThanOrEqual(narrowKnownWordsNav.clientWidth + 1);
   expect(narrowKnownWordsNav.buttonWidth).toBeGreaterThanOrEqual(24);
   expect(narrowKnownWordsNav.buttonHeight).toBeGreaterThanOrEqual(28);
+  expect(await page.locator("#known-words-list").evaluate((list) => getComputedStyle(list).overflowY)).toBe("visible");
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator("#known-words-nav button", { hasText: "L" }).click();
   await expect(page.locator("#known-words-l")).toBeInViewport();
@@ -329,9 +345,19 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     });
   })).toMatchObject({ key: "en:legacy", lemma: "legacy", createdAt: 777 });
   await page.locator("#known-word-input").fill("calibrate");
-  await page.locator("#add-known-word").click();
+  await page.locator("#known-word-input").press("Enter");
   await expect(page.locator("#known-words-list")).toContainText("calibrate");
-  await page.locator("#clear-known-words").click();
+  const cancelClearDialog = page.waitForEvent("dialog", { timeout: 5_000 });
+  const cancelClearClick = page.locator("#clear-known-words").click();
+  const cancelDialog = await cancelClearDialog;
+  await cancelDialog.dismiss();
+  await cancelClearClick;
+  await expect(page.locator("#known-words-list")).toContainText("calibrate");
+  const confirmClearDialog = page.waitForEvent("dialog", { timeout: 5_000 });
+  const confirmClearClick = page.locator("#clear-known-words").click();
+  const confirmDialog = await confirmClearDialog;
+  await confirmDialog.accept();
+  await confirmClearClick;
   await expect(page.locator("#known-words-summary")).toHaveText("当前没有已掌握词汇。");
   await expect(page.locator("#known-words-list")).not.toContainText("calibrate");
   expect(await page.evaluate(async () => {
@@ -397,7 +423,11 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   });
   expect(buttonPositions).toEqual({ aiBelowReasoning: true, ankiBelowDeck: true });
 
+  await page.locator("input[name=aiEndpoint]").fill("https://custom-ai.test/v1");
   await page.locator("select[name=provider]").selectOption("glossa-backend");
+  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://custom-ai.test/v1");
+  await expect(page.locator("[data-ai-field=api-key]")).toBeHidden();
+  await expect(page.locator("[data-ai-field=reasoning]")).toBeVisible();
   await page.locator("textarea[name=glossPrompt]").fill("Use compact contextual labels.");
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
@@ -414,24 +444,54 @@ test("options page captures shortcuts, previews style changes and saves prompts"
     modelVersion: "gpt-4.1-mini"
   });
 
+  await page.locator("select[name=provider]").selectOption("openai-completions");
+  await expect(page.locator("[data-ai-field=api-key]")).toBeVisible();
+  await expect(page.locator("[data-ai-field=reasoning]")).toBeHidden();
   await page.locator("select[name=provider]").selectOption("openai-chat-completions");
   await page.locator("select[name=reasoningEffort]").selectOption("high");
-  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
+  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://custom-ai.test/v1");
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#test-ai .test-label")).not.toBeVisible();
   await expect(page.locator("#test-ai .test-icon-success")).toBeVisible();
   await expect(page.locator("#test-ai")).toHaveCSS("width", "44px");
-  await expect(page.locator("#status")).toHaveText("");
+  await expect(page.locator("#ai-status")).toHaveText("AI 连接可用");
+  await expect(page.locator("#status")).toHaveText("有未保存的更改");
 
   await page.locator("#test-anki").click();
   await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#test-anki .test-label")).not.toBeVisible();
   await expect(page.locator("#test-anki .test-icon-success")).toBeVisible();
   await expect(page.locator("#test-anki")).toHaveCSS("width", "44px");
-  await expect(page.locator("#status")).toHaveText("");
+  await expect(page.locator("#anki-status")).toHaveText("Anki 连接可用");
+  await expect(page.locator("#status")).toHaveText("有未保存的更改");
 
-  await page.locator("button[type=submit]").click();
+  const resetHistoryDialog = page.waitForEvent("dialog", { timeout: 5_000 });
+  const resetHistoryClick = page.locator("#reset-card-history").click();
+  const historyDialog = await resetHistoryDialog;
+  expect(historyDialog.message()).toContain("Anki 中已有卡片会保留");
+  await historyDialog.accept();
+  await resetHistoryClick;
+  await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有卡片保持不变");
+  expect(await page.evaluate(async () => {
+    return await new Promise<Record<string, number>>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction(["cardCache", "cardedWords"], "readonly");
+        const cardCache = tx.objectStore("cardCache").count();
+        const cardedWords = tx.objectStore("cardedWords").count();
+        tx.oncomplete = () => {
+          db.close();
+          resolve({ cardCache: cardCache.result, cardedWords: cardedWords.result });
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  })).toEqual({ cardCache: 0, cardedWords: 0 });
+
+  await page.locator("#save-settings").click();
   await expect(page.locator("#status")).toHaveText("已保存");
   await expect(page.locator("#status")).toHaveAttribute("data-state", "success");
   await expect(page.locator("#save-settings .save-label")).toHaveText("保存");
@@ -473,7 +533,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   expect(storedSettings).not.toHaveProperty("learningWindowDays");
   expect(storedSettings).not.toHaveProperty("promptVersion");
   expect(storedSettings).not.toHaveProperty("modelVersion");
-  expect(storedSettings.ai as Record<string, unknown>).not.toHaveProperty("endpoint");
+  expect(storedSettings.ai as Record<string, unknown>).toHaveProperty("endpoint", "https://custom-ai.test/v1");
   expect(storedSettings.anki as Record<string, unknown>).not.toHaveProperty("endpoint");
   expect(await page.evaluate(async () => {
     return await new Promise<unknown>((resolve, reject) => {
@@ -505,7 +565,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#save-settings .save-label")).toHaveText("保存");
 });
 
-test("options page disables Anki selectors until refresh reaches AnkiConnect", async ({ page }) => {
+test("options page waits for an explicit refresh before reading Anki options", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
   await page.route("https://options.test/", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));
   await page.goto("https://options.test/");
@@ -513,8 +573,10 @@ test("options page disables Anki selectors until refresh reaches AnkiConnect", a
   await page.addStyleTag({ path: resolve("dist/assets/options.css") });
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
+    const actions: string[] = [];
     Reflect.set(window, "__glossaStore", store);
     Reflect.set(window, "__ankiUp", false);
+    Reflect.set(window, "__ankiActions", actions);
     Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
       if (!url.includes("8765")) {
         return new Response(JSON.stringify({ result: null }), {
@@ -526,6 +588,7 @@ test("options page disables Anki selectors until refresh reaches AnkiConnect", a
         throw new TypeError("fetch failed");
       }
       const body = JSON.parse(init?.body as string) as { action: string; params?: { modelName?: string } };
+      actions.push(body.action);
       const resultByAction: Record<string, unknown> = {
         version: 6,
         deckNames: ["Glossa"],
@@ -554,9 +617,12 @@ test("options page disables Anki selectors until refresh reaches AnkiConnect", a
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
 
-  await expect(page.locator("select[name=ankiDeck]")).toBeDisabled();
-  await expect(page.locator("select[name=ankiModelName]")).toBeDisabled();
+  await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
+  await expect(page.locator("select[name=ankiModelName]")).toBeEnabled();
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Glossa");
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Basic");
   await expect(page.locator("#refresh-anki")).toBeEnabled();
+  expect(await page.evaluate(() => Reflect.get(window, "__ankiActions"))).toEqual([]);
 
   await page.evaluate(() => Reflect.set(window, "__ankiUp", true));
   await page.locator("#refresh-anki").click();
@@ -565,6 +631,12 @@ test("options page disables Anki selectors until refresh reaches AnkiConnect", a
   await expect(page.locator("select[name=ankiModelName]")).toBeEnabled();
   await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Glossa");
   await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
+  expect(await page.evaluate(() => Reflect.get(window, "__ankiActions"))).toEqual([
+    "version",
+    "deckNames",
+    "modelNames",
+    "modelFieldNames"
+  ]);
 });
 
 test("options page creates the carded-word store on a fresh IndexedDB", async ({ page }) => {

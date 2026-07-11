@@ -153,6 +153,7 @@ export function applyAppearancePreview(targets: AppearancePreviewTargets, appear
 }
 
 export async function testAiSettings(settings: GlossaSettings): Promise<void> {
+  // This check confirms that the configured transport accepts a request; normal gloss and card calls validate their own output contracts.
   const endpoint = settings.ai.provider === "glossa-backend"
     ? `${settings.ai.endpoint.replace(/\/+$/, "")}/gloss`
     : settings.ai.endpoint;
