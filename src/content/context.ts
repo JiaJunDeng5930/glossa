@@ -99,9 +99,15 @@ function buildSnapshot(boundary: Node, doc: Document): ContextSnapshot {
 }
 
 function isContextText(node: Text, boundary: Node): boolean {
+  const sourceSurface = node.parentElement?.closest("[data-glossa-token-surface]");
+  const sourceWrapper = sourceSurface?.closest("[data-glossa-token]");
   let element = node.parentElement;
   while (element) {
-    if (element.matches(EXCLUDED_SELECTOR)) {
+    // Existing wrappers contribute their source surface; generated label and measurement nodes remain excluded.
+    const isSourceScaffold = sourceSurface !== null
+      && sourceSurface !== undefined
+      && (element === sourceSurface || sourceSurface.contains(element) || element === sourceWrapper);
+    if (element.matches(EXCLUDED_SELECTOR) && !isSourceScaffold) {
       return false;
     }
     const style = element.ownerDocument.defaultView?.getComputedStyle(element);

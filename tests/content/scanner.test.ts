@@ -50,6 +50,27 @@ describe("content scanner", () => {
     });
   });
 
+  it("keeps rendered source words in sentence context during rescans", async () => {
+    document.body.innerHTML = `
+      <main>
+        <p>A <span data-glossa-token="patient" data-glossa-owned="1" class="notranslate" translate="no">
+          <span data-glossa-token-label="patient" data-glossa-owned="1">耐心</span>
+          <span data-glossa-token-surface="patient" data-glossa-owned="1" translate="no">patient</span>
+        </span> reader notices subtle patterns.</p>
+      </main>
+    `;
+
+    const result = await scanDocumentText(document, new Set());
+    const subtle = result.tokens.find((token) => token.surface === "subtle");
+
+    expect(subtle).toMatchObject({
+      sentenceText: "A patient reader notices subtle patterns.",
+      startOffset: 25,
+      endOffset: 31
+    });
+    expect(result.tokens.map((token) => token.surface)).not.toContain("patient");
+  });
+
   it("skips hidden, editable, code, no-translate and extension-owned text", async () => {
     document.body.innerHTML = `
       <main>
