@@ -28,7 +28,6 @@
 }
 
 html {
-  min-width: 320px;
   overflow-x: clip;
   background: var(--paper);
   scroll-behavior: smooth;
@@ -36,7 +35,6 @@ html {
 
 body {
   margin: 0;
-  min-width: 320px;
   overflow-x: clip;
   color: var(--ink);
   background:
