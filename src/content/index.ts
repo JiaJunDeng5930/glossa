@@ -2,6 +2,7 @@ import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
+import { mergeStoredSettings } from "../shared/settings";
 import { matchesShortcut } from "../shared/shortcut";
 import GLOSSA_THEME from "../shared/theme.json";
 import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
@@ -53,16 +54,16 @@ async function boot(): Promise<void> {
     reportError("settings.get", settingsResponse.type === "error" ? settingsResponse.payload : new Error(`Unexpected settings response ${settingsResponse.type}`), settingsResponse.requestId);
     return;
   }
-  const settings = settingsResponse.payload.settings;
-  const knownWords = await loadKnownWords(settings.knownWordList);
+  let settings = settingsResponse.payload.settings;
+  let knownWords = await loadKnownWords(settings.knownWordList);
   const overlay = createGlossOverlay(document, settings?.appearance);
   let scanVersion = 0;
   let scanTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let pageUrl = urlWithoutHash(location.href);
   let stopped = false;
   const lifecycleCleanups: Array<() => void> = [];
-  const autoTranslateEnabled = settings?.autoTranslateEnabled ?? false;
-  const wordClickTimeout = wordClickTimeoutMs(settings);
+  let autoTranslateEnabled = settings?.autoTranslateEnabled ?? false;
+  let wordClickTimeout = wordClickTimeoutMs(settings);
   let translationEnabled = autoTranslateEnabled;
   let selectionController: ReturnType<typeof createSelectionController> | undefined;
   let observer: MutationObserver | undefined;
@@ -212,6 +213,7 @@ async function boot(): Promise<void> {
       }
     });
 
+    // Zero-candidate scans stay silent so ordinary reading has no empty-state interruption.
     if (!session) {
       return;
     }
@@ -575,6 +577,40 @@ async function boot(): Promise<void> {
   };
 
   const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
+  const storageChanges = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.storage?.onChanged;
+  const onStoredSettingsChanged: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
+    const settingsChange = changes.settings;
+    if (areaName !== "local" || !settingsChange) {
+      return;
+    }
+    void (async () => {
+      const previousList = settings.knownWordList;
+      const nextSettings = mergeStoredSettings(settingsChange.newValue);
+      settings = nextSettings;
+      autoTranslateEnabled = nextSettings.autoTranslateEnabled;
+      wordClickTimeout = wordClickTimeoutMs(nextSettings);
+      overlay.setAppearance(nextSettings.appearance);
+      selectionController?.setShortcut(nextSettings.shortcutKey);
+      // The automatic setting becomes the next route default while the user's current-route choice stays stable.
+      if (nextSettings.knownWordList === previousList) {
+        return;
+      }
+      knownWords = await loadKnownWords(nextSettings.knownWordList);
+      if (stopped) {
+        return;
+      }
+      scanVersion += 1;
+      closeAllGlossSessions();
+      overlay.clear();
+      if (translationEnabled) {
+        await scanAndRender("settings-known-word-list");
+      }
+    })().catch((error) => handleRuntimeError("settings.changed", error));
+  };
+  if (storageChanges) {
+    storageChanges.addListener(onStoredSettingsChanged);
+    registerLifecycleCleanup(() => storageChanges.removeListener(onStoredSettingsChanged));
+  }
   const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
     if (isTranslationStateMessage(message)) {
       sendResponse({ ok: true, enabled: translationEnabled } satisfies TranslationControlResponse);
@@ -815,6 +851,7 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     prompt.dataset.glossaOwned = "1";
     prompt.dataset.glossaDuplicateCardPrompt = "1";
     prompt.setAttribute("role", "dialog");
+    prompt.setAttribute("aria-modal", "true");
     prompt.setAttribute("aria-label", "重复制卡确认");
     prompt.style.cssText = [
       "position:fixed",
@@ -913,11 +950,23 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       }
       resolve(confirmed);
     };
+    // The configured timeout resolves through the same safe cancel path as Escape and the cancel button.
     timer = globalThis.setTimeout(() => finish(false), input.timeoutMs);
     duplicatePromptResolvers.set(doc, finish);
     confirm.addEventListener("click", () => finish(true), { once: true });
     cancel.addEventListener("click", () => finish(false), { once: true });
     prompt.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") {
+        const activeElement = doc.activeElement;
+        if (event.shiftKey && activeElement === confirm) {
+          event.preventDefault();
+          cancel.focus();
+        } else if (!event.shiftKey && activeElement === cancel) {
+          event.preventDefault();
+          confirm.focus();
+        }
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();

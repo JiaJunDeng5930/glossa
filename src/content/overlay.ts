@@ -9,6 +9,7 @@ export interface GlossOverlay {
   applyStalePendingOutcome(outcome: GlossTokenPayload): RenderSummary;
   applyCardFeedback(input: CardFeedbackInput): RenderSummary;
   setSelectionMode(active: boolean): void;
+  setAppearance(appearance: AppearanceSettings): void;
   markStalePendingAsError(tokenIds: Iterable<string>, message: string): void;
   clear(): void;
   pruneDisconnected(): number;
@@ -422,6 +423,13 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         delete host.dataset.glossaSelecting;
       }
     },
+    setAppearance(nextAppearance) {
+      appearance = nextAppearance;
+      applyAppearance(host, nextAppearance);
+      for (const node of renderedNodes) {
+        applyAppearance(node, nextAppearance);
+      }
+    },
     markStalePendingAsError(tokenIds, message) {
       for (const tokenId of tokenIds) {
         const existing = findRenderedToken(tokenId);
@@ -557,7 +565,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     );
     wrapper.className = "notranslate";
     wrapper.setAttribute("translate", "no");
-    applyUserMessage(wrapper, candidate.userMessage);
+    applyAccessibleStatus(wrapper, candidate.status, candidate.display, candidate.feedback, candidate.userMessage);
     applyAppearance(wrapper, appearance);
 
     const label = doc.createElement("span");
@@ -618,25 +626,40 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     node.dataset.glossaDisplay = nextDisplay;
     node.dataset.glossaDisplayKind = nextKind;
     node.dataset.glossaStatus = status;
-    applyUserMessage(node, userMessage);
     if (nextFeedback) {
       node.dataset.glossaFeedback = nextFeedback;
     } else {
       delete node.dataset.glossaFeedback;
     }
+    applyAccessibleStatus(node, status, nextDisplay, nextFeedback, userMessage);
     rememberMutationTarget(node);
   }
 
-  function applyUserMessage(node: HTMLElement, message: string | undefined): void {
+  function applyAccessibleStatus(
+    node: HTMLElement,
+    status: GlossTokenPayload["status"],
+    display: string,
+    feedback: CardFeedback | undefined,
+    message: string | undefined
+  ): void {
     if (message) {
       node.dataset.glossaUserMessage = message;
-      node.title = message;
-      node.setAttribute("aria-label", message);
-      return;
+    } else {
+      delete node.dataset.glossaUserMessage;
     }
-    delete node.dataset.glossaUserMessage;
-    node.removeAttribute("title");
-    node.removeAttribute("aria-label");
+    const surface = node.dataset.glossaSurface ?? "单词";
+    const description = message
+      ?? (feedback === "card-pending"
+        ? `${surface}：正在制卡`
+        : feedback === "card-success"
+          ? `${surface}：制卡完成`
+          : feedback === "card-error"
+            ? `${surface}：制卡失败`
+            : status === "pending"
+              ? `${surface}：正在生成释义`
+              : `${surface}：${display}`);
+    node.title = description;
+    node.setAttribute("aria-label", description);
   }
 
   function readTokenStatus(node: HTMLElement): GlossTokenPayload["status"] {
@@ -679,7 +702,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       node.dataset.glossaDisplayKind = "gloss";
       node.dataset.glossaStatus = readTokenStatus(node);
       delete node.dataset.glossaFeedback;
-      applyUserMessage(node, undefined);
+      applyAccessibleStatus(node, readTokenStatus(node), glossDisplay, undefined, undefined);
       rememberMutationTarget(node);
       return;
     }
