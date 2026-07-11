@@ -44,18 +44,25 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.evaluate(() => {
     const store: Record<string, unknown> = {};
     const aiRequests: Array<{ url: string; body: unknown }> = [];
+    const pendingAiResponses: Array<() => void> = [];
     Reflect.set(window, "__glossaStore", store);
     Reflect.set(window, "__aiRequests", aiRequests);
+    Reflect.set(window, "__pendingAiResponses", pendingAiResponses);
+    Reflect.set(window, "__releaseNextAiResponse", () => pendingAiResponses.shift()?.());
     Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
       if (!url.includes("8765")) {
         aiRequests.push({
           url,
           body: init?.body ? JSON.parse(init.body as string) : undefined
         });
-        return new Response(JSON.stringify({ result: null }), {
+        const respond = () => new Response(JSON.stringify({ result: null }), {
           status: 200,
           headers: { "content-type": "application/json" }
         });
+        if (Reflect.get(window, "__holdAiResponses")) {
+          return await new Promise<Response>((resolve) => pendingAiResponses.push(() => resolve(respond())));
+        }
+        return respond();
       }
       const body = JSON.parse(init?.body as string) as { action: string; params?: { modelName?: string } };
       const resultByAction: Record<string, unknown> = {
@@ -472,6 +479,24 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await page.locator("input[name=modelVersion]").fill("gpt-4.1-mini");
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
+
+  await page.evaluate(() => Reflect.set(window, "__holdAiResponses", true));
+  await page.locator("input[name=modelVersion]").fill("model-a");
+  await page.locator("#test-ai").click();
+  await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__pendingAiResponses") as unknown[]).length)).toBe(1);
+  await page.locator("input[name=modelVersion]").fill("model-b");
+  await page.locator("#test-ai").click();
+  await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__pendingAiResponses") as unknown[]).length)).toBe(2);
+  await page.evaluate(() => (Reflect.get(window, "__releaseNextAiResponse") as () => void)());
+  await page.waitForTimeout(50);
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "loading");
+  await page.evaluate(() => (Reflect.get(window, "__releaseNextAiResponse") as () => void)());
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
+  await page.locator("input[name=modelVersion]").fill("model-c");
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "idle");
+  await expect(page.locator("#ai-status")).toHaveText("");
+  await page.evaluate(() => Reflect.set(window, "__holdAiResponses", false));
+  await page.locator("input[name=modelVersion]").fill("gpt-4.1-mini");
 
   await page.locator("#test-anki").click();
   await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "success");
