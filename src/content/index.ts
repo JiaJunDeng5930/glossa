@@ -142,7 +142,7 @@ async function boot(): Promise<void> {
     }
   };
 
-  const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
+  const scanAndRender = async (reason: string, options: { manualActivation?: boolean; forceRefreshKeys?: ReadonlySet<string> } = {}) => {
     if (stopped) {
       return;
     }
@@ -183,6 +183,10 @@ async function boot(): Promise<void> {
             }
           }
           for (const token of chunk.tokens) {
+            // Only labels already visible on this page can cross the known-word gate for regeneration.
+            if (options.forceRefreshKeys?.has(glossRefreshKey(token))) {
+              token.forceRefresh = true;
+            }
             tokenMap.set(token.id, token);
           }
           const sent = await sendGlossChunk(session, chunk, () => version === scanVersion);
@@ -604,6 +608,7 @@ async function boot(): Promise<void> {
       const nextSettings = mergeStoredSettings(settingsChange.newValue);
       const knownWordListChanged = nextSettings.knownWordList !== previousSettings.knownWordList;
       const generationSettingsChanged = glossOutputSettingsChanged(previousSettings, nextSettings);
+      const forceRefreshKeys = generationSettingsChanged ? renderedGlossRefreshKeys(document) : undefined;
       settings = nextSettings;
       autoTranslateEnabled = nextSettings.autoTranslateEnabled;
       wordClickTimeout = wordClickTimeoutMs(nextSettings);
@@ -630,7 +635,7 @@ async function boot(): Promise<void> {
       overlay.clear();
       if (translationEnabled) {
         const reason = knownWordListChanged ? "settings-known-word-list" : "settings-gloss-generation";
-        await scanAndRender(reason);
+        await scanAndRender(reason, forceRefreshKeys ? { forceRefreshKeys } : {});
       }
     })().catch((error) => handleRuntimeError("settings.changed", error));
   };
@@ -796,6 +801,27 @@ async function boot(): Promise<void> {
       session.pendingTokenIds.delete(outcome.tokenId);
     }
   }
+}
+
+function renderedGlossRefreshKeys(doc: Document): Set<string> {
+  const keys = new Set<string>();
+  for (const node of doc.querySelectorAll<HTMLElement>("[data-glossa-token]")) {
+    const carriesGloss = node.dataset.glossaGlossDisplay !== undefined
+      || (node.dataset.glossaStatus === "ready" && node.dataset.glossaDisplayKind === "gloss");
+    const sentenceText = node.dataset.glossaSentence;
+    const lemma = node.dataset.glossaLemma;
+    const startOffset = Number(node.dataset.glossaSentenceStart);
+    const endOffset = Number(node.dataset.glossaSentenceEnd);
+    if (!carriesGloss || !sentenceText || !lemma || !Number.isFinite(startOffset) || !Number.isFinite(endOffset)) {
+      continue;
+    }
+    keys.add(glossRefreshKey({ sentenceText, lemma, startOffset, endOffset }));
+  }
+  return keys;
+}
+
+function glossRefreshKey(input: { sentenceText: string; lemma: string; startOffset: number; endOffset: number }): string {
+  return JSON.stringify([input.sentenceText, input.lemma, input.startOffset, input.endOffset]);
 }
 
 function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {

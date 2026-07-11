@@ -200,7 +200,8 @@ test("content bundle replaces active glosses after generation settings change", 
     modelVersion: "gpt-original"
   });
   await page.evaluate(() => {
-    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+    Reflect.set(window, "__glossaRefreshFlags", []);
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string; forceRefresh?: boolean }> }> } }, emit: (response: unknown) => void) => {
       const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
       const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
       const settings = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
@@ -208,6 +209,7 @@ test("content bundle replaces active glosses after generation settings change", 
         .flatMap((sentence) => sentence.tokens)
         .find((candidate) => candidate.surface.toLowerCase() === "dynamic");
       if (token) {
+        (Reflect.get(window, "__glossaRefreshFlags") as Array<boolean | undefined>).push(token.forceRefresh);
         const display = settings.modelVersion === "gpt-revised" ? "新版" : "旧版";
         emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, targetText: token.surface, display }));
       }
@@ -224,6 +226,7 @@ test("content bundle replaces active glosses after generation settings change", 
   });
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "新版");
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaRefreshFlags"))).toEqual([undefined, true]);
 });
 
 test("content bundle reloads the selected word list and rescans the open page", async ({ page }) => {

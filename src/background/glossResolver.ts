@@ -17,6 +17,7 @@ import { GLOSS_TARGET_LANG } from "../shared/types";
 export interface GlossResolver {
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
   clearMemory(): void;
+  invalidateGeneration(): void;
 }
 
 export interface GlossResolverSession {
@@ -64,7 +65,8 @@ interface ReusedMiss {
 
 type InFlightResult =
   | { ok: true; item: GlossItem }
-  | { ok: false; error: ErrorPayload };
+  | { ok: false; error: ErrorPayload }
+  | { ok: false; cancelled: true };
 
 interface InFlightGloss {
   promise: Promise<InFlightResult>;
@@ -95,6 +97,8 @@ interface AiFrame {
   misses: Miss[];
   createdAt: number;
   timer: ReturnType<typeof globalThis.setTimeout>;
+  controller: AbortController;
+  cancelled: boolean;
 }
 
 const DEFAULT_MAX_MEMORY_ENTRIES = 512;
@@ -106,6 +110,7 @@ const DEFAULT_AI_FRAME_MAX_MS = 50;
 export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
   const inFlight = new Map<string, InFlightGloss>();
+  let generation = 0;
   const maxMemoryEntries = deps.maxMemoryEntries ?? DEFAULT_MAX_MEMORY_ENTRIES;
   const lookupLimit = pLimit(deps.lookupConcurrency ?? DEFAULT_LOOKUP_CONCURRENCY);
   const writeLimit = pLimit(1);
@@ -145,6 +150,11 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   }
 
   const createSession = (pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession => {
+    const sessionGeneration = generation;
+    const sessionSink: GlossResolverSink = {
+      emit: (payload) => sink.emit(payload),
+      isActive: () => sessionGeneration === generation && sink.isActive?.() !== false
+    };
     const startedAt = nowMs();
     const tasks = new Set<Promise<void>>();
     const glossCacheReads = createReadCoalescer(
@@ -185,10 +195,10 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
 
     const emit = (payload: Omit<GlossTokenPayload, "scanId">): void => {
       stats[payload.status] += 1;
-      if (sink.isActive?.() === false) {
+      if (sessionSink.isActive?.() === false) {
         return;
       }
-      sink.emit(payload);
+      sessionSink.emit(payload);
     };
 
     return {
@@ -212,7 +222,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 lexiconReads,
                 glossCacheReads,
                 aiOutlet,
-                sink,
+                sink: sessionSink,
                 emit,
                 track,
                 trackWrite
@@ -279,6 +289,11 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     createSession,
     clearMemory() {
       memoryCache.clear();
+    },
+    invalidateGeneration() {
+      generation += 1;
+      memoryCache.clear();
+      aiOutlet.invalidate();
     }
   };
 }
@@ -328,9 +343,10 @@ async function resolveToken(input: {
     }
 
     const record = await currentRecord(input.lexiconReads, input.deps.storage, input.token, input.now, input.trackWrite);
+    // A currently rendered known word may refresh its label; an explicit ignore remains authoritative.
     if (input.sink.isActive?.() === false) {
       return;
-    } else if (record?.state === "known" || record?.state === "ignored") {
+    } else if (record?.state === "ignored" || (record?.state === "known" && input.token.forceRefresh !== true)) {
       input.emit({ tokenId: input.token.id, status: "hidden" });
       return;
     }
@@ -387,6 +403,7 @@ function createAiOutlet(input: {
 }) {
   const serialAi = pLimit(1);
   let currentFrame: AiFrame | undefined;
+  const frames = new Set<AiFrame>();
 
   const enqueue = (miss: Miss): void => {
     const key = aiFrameKey(miss.settings);
@@ -399,8 +416,11 @@ function createAiOutlet(input: {
         settings: miss.settings,
         misses: [],
         createdAt: nowMs(),
-        timer: globalThis.setTimeout(() => flushFrame("time"), input.aiFrameMaxMs)
+        timer: globalThis.setTimeout(() => flushFrame("time"), input.aiFrameMaxMs),
+        controller: new AbortController(),
+        cancelled: false
       };
+      frames.add(currentFrame);
     }
     currentFrame.misses.push(miss);
     if (currentFrame.misses.length >= input.aiFrameMaxItems) {
@@ -415,10 +435,39 @@ function createAiOutlet(input: {
     }
     currentFrame = undefined;
     globalThis.clearTimeout(frame.timer);
-    void serialAi(() => executeFrame(input, frame, trigger));
+    void serialAi(async () => {
+      try {
+        if (!frame.cancelled) {
+          await executeFrame(input, frame, trigger);
+        }
+      } finally {
+        frames.delete(frame);
+      }
+    });
   };
 
-  return { enqueue, flushFrame };
+  const invalidate = (): void => {
+    currentFrame = undefined;
+    for (const frame of frames) {
+      cancelFrame(input.inFlight, frame);
+    }
+    frames.clear();
+    serialAi.clearQueue();
+  };
+
+  return { enqueue, flushFrame, invalidate };
+}
+
+function cancelFrame(inFlight: Map<string, InFlightGloss>, frame: AiFrame): void {
+  if (frame.cancelled) {
+    return;
+  }
+  frame.cancelled = true;
+  globalThis.clearTimeout(frame.timer);
+  frame.controller.abort();
+  for (const miss of frame.misses) {
+    resolveInFlightMiss(inFlight, miss, { ok: false, cancelled: true });
+  }
 }
 
 async function executeFrame(
@@ -434,16 +483,26 @@ async function executeFrame(
   const queueElapsed = elapsedMs(frame.createdAt);
   const requestStartedAt = nowMs();
   try {
+    if (frame.cancelled) {
+      return;
+    }
     const response = await deps.ai.glossFrame({
       settings: frame.settings,
       items: frame.misses.map((miss) => ({
         sentence: miss.sentence,
-        token: miss.token
-      }))
+        token: tokenForAi(miss.token)
+      })),
+      signal: frame.controller.signal
     });
+    if (frame.cancelled) {
+      return;
+    }
     const unresolved = new Set(frame.misses);
     const writeStartedAt = nowMs();
     for (const item of response.items) {
+      if (frame.cancelled) {
+        return;
+      }
       const miss = frame.misses.find((candidate) => unresolved.has(candidate) && candidate.token.id === item.tokenId);
       if (!miss) {
         continue;
@@ -498,6 +557,9 @@ async function executeFrame(
       }
     });
   } catch (error) {
+    if (frame.cancelled) {
+      return;
+    }
     const payload = diagnosticPayloadFrom(error, {
       reason: "service-error",
       message: "Gloss lookup failed",
@@ -522,6 +584,17 @@ async function executeFrame(
       }
     });
   }
+}
+
+function tokenForAi(token: TokenCandidate): TokenCandidate {
+  return {
+    id: token.id,
+    sentenceId: token.sentenceId,
+    surface: token.surface,
+    lemma: token.lemma,
+    startOffset: token.startOffset,
+    endOffset: token.endOffset
+  };
 }
 
 function createReadCoalescer<T>(
@@ -637,7 +710,7 @@ async function emitReusedMiss(
     const item = rehydrateCachedGloss(result.item, miss.token);
     miss.emit({ tokenId: miss.token.id, status: "ready", item });
     miss.trackWrite(() => persistShownRecord(storage, miss.token, miss.now));
-  } else {
+  } else if ("error" in result) {
     miss.emit({ tokenId: miss.token.id, status: "error", message: result.error.message, error: result.error });
   }
 }

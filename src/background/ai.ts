@@ -13,6 +13,7 @@ export interface GlossFrameItem {
 export interface GlossFrameBackendInput {
   settings: GlossaSettings;
   items: GlossFrameItem[];
+  signal?: AbortSignal;
 }
 
 export interface AnkiCardInput {
@@ -36,7 +37,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
           prompt: input.settings.prompts.gloss,
           targetLang: GLOSS_TARGET_LANG,
           items: input.items
-        });
+        }, input.signal);
         return parseJsonOutput(output, validateGlossBackendOutput);
       }
       return postJson(fetchImpl, `${trimSlash(input.settings.ai.endpoint)}/gloss`, {
@@ -48,7 +49,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
         reasoningEffort: input.settings.ai.reasoningEffort,
         promptVersion: input.settings.promptVersion,
         modelVersion: input.settings.modelVersion
-      }, undefined, input.settings.ai.requestTimeoutMs, validateGlossBackendOutput);
+      }, undefined, input.settings.ai.requestTimeoutMs, validateGlossBackendOutput, input.signal);
     },
     async ankiCard(input) {
       if (isOpenAiProvider(input.settings.ai.provider)) {
@@ -74,7 +75,7 @@ export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
   };
 }
 
-async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettings, systemInstruction: string, payload: unknown): Promise<string> {
+async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettings, systemInstruction: string, payload: unknown, signal?: AbortSignal): Promise<string> {
   if (settings.ai.provider === "openai-chat-completions") {
     const response = await postJson(fetchImpl, settings.ai.endpoint, {
       model: settings.modelVersion,
@@ -83,7 +84,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
         { role: "user", content: JSON.stringify(payload) }
       ],
       ...reasoningBody(settings)
-    }, settings.ai.apiKey, settings.ai.requestTimeoutMs, validateOpenAiChatCompletionResponse);
+    }, settings.ai.apiKey, settings.ai.requestTimeoutMs, validateOpenAiChatCompletionResponse, signal);
     return response.choices[0]?.message.content ?? "";
   }
   if (settings.ai.provider === "openai-completions") {
@@ -91,7 +92,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
       model: settings.modelVersion,
       prompt: `${systemInstruction}\n\n${JSON.stringify(payload)}`,
       temperature: 0
-    }, settings.ai.apiKey, settings.ai.requestTimeoutMs, validateOpenAiCompletionResponse);
+    }, settings.ai.apiKey, settings.ai.requestTimeoutMs, validateOpenAiCompletionResponse, signal);
     return response.choices[0]?.text ?? "";
   }
   const response = await postJson(fetchImpl, settings.ai.endpoint, {
@@ -101,7 +102,7 @@ async function callOpenAiForTask(fetchImpl: typeof fetch, settings: GlossaSettin
       { role: "user", content: JSON.stringify(payload) }
     ],
     ...reasoningBody(settings)
-  }, settings.ai.apiKey, settings.ai.requestTimeoutMs, validateOpenAiResponse);
+  }, settings.ai.apiKey, settings.ai.requestTimeoutMs, validateOpenAiResponse, signal);
   return response.output_text ?? response.output?.flatMap((item) => item.content ?? []).map((part) => part.text ?? "").join("") ?? "";
 }
 
@@ -149,7 +150,7 @@ function parseJsonOutput<T>(value: string, validate: JsonValidator<T>): T {
   return validate(parsed);
 }
 
-async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey?: string, timeoutMs = 30_000, validate?: JsonValidator<T>): Promise<T> {
+async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey?: string, timeoutMs = 30_000, validate?: JsonValidator<T>, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) {
     headers.authorization = `Bearer ${apiKey}`;
@@ -157,6 +158,12 @@ async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, 
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
+    const abortFromCaller = (): void => controller.abort();
+    if (signal?.aborted) {
+      controller.abort();
+    } else {
+      signal?.addEventListener("abort", abortFromCaller, { once: true });
+    }
     const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchImpl(url, {
@@ -177,12 +184,16 @@ async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, 
       return validate ? validate(parsed) : parsed as T;
     } catch (error) {
       const diagnosticError = requestDiagnosticErrorFrom(error, { reason: "service-error", message: "AI backend request failed", service: "ai" });
+      if (signal?.aborted) {
+        throw diagnosticError;
+      }
       if (!isRetryableAiRequestError(diagnosticError)) {
         throw diagnosticError;
       }
       lastError = diagnosticError;
     } finally {
       globalThis.clearTimeout(timeout);
+      signal?.removeEventListener("abort", abortFromCaller);
     }
   }
   throw diagnosticErrorFrom(lastError, { reason: "service-error", message: "AI backend request failed", service: "ai" });

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildGlossCacheKey } from "../../src/core/cache";
 import { createGlossResolver } from "../../src/background/glossResolver";
 import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossCacheEntry, type GlossTokenPayload, type SentenceCandidate, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossCacheEntry, type GlossTokenPayload, type SentenceCandidate, type TokenCandidate, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
 describe("gloss resolver lookup-first pipeline", () => {
   it("emits hidden, ready, pending and AI ready outcomes in lookup order", async () => {
@@ -208,6 +208,41 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
   });
 
+  it("refreshes a rendered known token while continuing to hide ignored tokens", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    await storage.lexicon.put(record("novel", "known"));
+    await storage.lexicon.put(record("ignored", "ignored"));
+    const ai = {
+      glossFrame: vi.fn(async (_input: { items: Array<{ token: TokenCandidate }> }) => ({
+        items: [{ tokenId: "t-novel", targetText: "novel", display: "新版" }]
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    await resolveScan(resolver, "https://example.test/page", [{
+      id: "s1",
+      text: "A novel ignored archive appears.",
+      tokens: [
+        { id: "t-novel", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7, forceRefresh: true },
+        { id: "t-ignored", sentenceId: "s1", surface: "ignored", lemma: "ignored", startOffset: 8, endOffset: 15, forceRefresh: true }
+      ]
+    }], settings, 200, { emit: (event) => events.push(event) });
+
+    expect(events).toEqual(expect.arrayContaining([
+      { tokenId: "t-novel", status: "pending" },
+      { tokenId: "t-novel", status: "ready", item: { tokenId: "t-novel", targetText: "novel", display: "新版" } },
+      { tokenId: "t-ignored", status: "hidden" }
+    ]));
+    expect(ai.glossFrame).toHaveBeenCalledWith(expect.objectContaining({
+      items: [expect.objectContaining({ token: expect.objectContaining({ id: "t-novel" }) })]
+    }));
+    expect(ai.glossFrame.mock.calls[0]?.[0].items[0]?.token).not.toHaveProperty("forceRefresh");
+  });
+
   it("keeps page memory replay independent from persistent gloss cache TTL", async () => {
     const storage = createMemoryStorage();
     const settings = { ...testSettings(), glossCacheTtlMs: 50 };
@@ -358,6 +393,80 @@ describe("gloss resolver lookup-first pipeline", () => {
       { tokenId: "t-new", status: "pending" },
       { tokenId: "t-new", status: "ready", item: { tokenId: "t-new", targetText: "obscure", display: "新钥" } }
     ]);
+  });
+
+  it("cancels obsolete AI frames before starting a new generation era", async () => {
+    const storage = createMemoryStorage();
+    const oldSettings = { ...testSettings(), modelVersion: "old-model" };
+    const newSettings = { ...testSettings(), modelVersion: "new-model" };
+    const ai = {
+      glossFrame: vi.fn((input: { settings: GlossaSettings; items: Array<{ token: { id: string; surface: string } }>; signal?: AbortSignal }) => {
+        if (input.settings.modelVersion === "old-model") {
+          return new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((_resolve, reject) => {
+            input.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+          });
+        }
+        return Promise.resolve({
+          items: input.items.map((item) => ({ tokenId: item.token.id, targetText: item.token.surface, display: "新版" }))
+        });
+      }),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const oldEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const newEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const oldScan = resolveScan(resolver, "https://example.test/page", [{
+      id: "s-old",
+      text: "A novel archive appears.",
+      tokens: [{ id: "t-old", sentenceId: "s-old", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], oldSettings, 100, { emit: (event) => oldEvents.push(event) });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+
+    resolver.invalidateGeneration();
+    const newScan = resolveScan(resolver, "https://example.test/page", [{
+      id: "s-new",
+      text: "An obscure archive appears.",
+      tokens: [{ id: "t-new", sentenceId: "s-new", surface: "obscure", lemma: "obscure", startOffset: 3, endOffset: 10 }]
+    }], newSettings, 200, { emit: (event) => newEvents.push(event) });
+    await Promise.all([oldScan, newScan]);
+
+    expect(ai.glossFrame.mock.calls.map(([input]) => input.settings.modelVersion)).toEqual(["old-model", "new-model"]);
+    expect(oldEvents).toEqual([{ tokenId: "t-old", status: "pending" }]);
+    expect(newEvents).toEqual([
+      { tokenId: "t-new", status: "pending" },
+      { tokenId: "t-new", status: "ready", item: { tokenId: "t-new", targetText: "obscure", display: "新版" } }
+    ]);
+  });
+
+  it("drops obsolete lookups that are still waiting for storage", async () => {
+    const storage = createMemoryStorage();
+    let releaseLexiconRead: ((value: Map<string, VocabularyRecord>) => void) | undefined;
+    storage.lexicon.getMany = vi.fn(() => new Promise<Map<string, VocabularyRecord>>((resolve) => {
+      releaseLexiconRead = resolve;
+    }));
+    const ai = {
+      glossFrame: vi.fn(async () => ({
+        items: [{ tokenId: "t-old", targetText: "novel", display: "旧版" }]
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    const oldScan = resolveScan(resolver, "https://example.test/page", [{
+      id: "s-old",
+      text: "A novel archive appears.",
+      tokens: [{ id: "t-old", sentenceId: "s-old", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], testSettings(), 100, { emit: (event) => events.push(event) });
+    await vi.waitFor(() => expect(storage.lexicon.getMany).toHaveBeenCalledTimes(1));
+
+    resolver.invalidateGeneration();
+    releaseLexiconRead?.(new Map());
+    await oldScan;
+
+    expect(events).toEqual([]);
+    expect(ai.glossFrame).not.toHaveBeenCalled();
   });
 
   it("splits in-flight AI reuse by API key for the same cache entry", async () => {

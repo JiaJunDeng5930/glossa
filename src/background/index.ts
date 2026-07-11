@@ -32,8 +32,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (!glossOutputSettingsChanged(previous, next)) {
     return;
   }
-  // A generation-setting change starts a new cache era while visual-only settings keep existing results reusable.
-  glossResolver.clearMemory();
+  // A generation-setting change starts a new cache era and retires older lookups before replacement scans begin.
+  glossResolver.invalidateGeneration();
   void storage.glossCache.clear().catch((error) => {
     trace({
       component: "service-worker",

@@ -456,13 +456,14 @@ export function toSerializableSentence(sentence: ScannedSentence): SentenceCandi
   return {
     id: sentence.id,
     text: sentence.text,
-    tokens: sentence.tokens.map(({ id, sentenceId, surface, lemma, startOffset, endOffset }) => ({
+    tokens: sentence.tokens.map(({ id, sentenceId, surface, lemma, startOffset, endOffset, forceRefresh }) => ({
       id,
       sentenceId,
       surface,
       lemma,
       startOffset,
-      endOffset
+      endOffset,
+      ...(forceRefresh ? { forceRefresh: true } : {})
     }))
   };
 }
