@@ -1,5 +1,3 @@
-// @behavior glossa.page_translation Activated pages receive inline glosses for eligible text and route word-click card creation through extension messages.
-// @behavior glossa.page_translation.activation Page activation streams DOM tokens through gloss ports and reconciles mutation-driven rescans.
 import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
@@ -16,7 +14,6 @@ import { createSelectionController, type WordSelection } from "./selection";
 const SCAN_CHUNK_MAX_TOKENS = 64;
 const SCAN_CHUNK_MAX_MS = 16;
 const MAX_UNACKED_SCAN_CHUNKS = 4;
-// @behavior glossa.card_creation.duplicate_gate.prompt_supersede_state Duplicate-card prompt resolver state tracks the active prompt promise per document.
 const duplicatePromptResolvers = new WeakMap<Document, (confirmed: boolean) => void>();
 
 interface ChunkAck {
@@ -41,22 +38,17 @@ interface GlossSession {
 }
 
 async function boot(): Promise<void> {
-  // @behavior glossa.page_translation.activation.settings_request Content startup reads settings through the runtime envelope before attaching page listeners.
   const settingsRequest = createContentMessage("settings.get", {});
   let settingsResponse: BackgroundResponseMessage;
-  // @behavior glossa.page_translation.activation.settings_request.read_failure Settings read failures are handled before startup attaches page listeners.
   try {
     settingsResponse = await runtimeMessage(settingsRequest);
   } catch (error) {
-    // @behavior glossa.page_translation.activation.settings_failure.context_invalidated Extension context invalidation during settings read stops boot through the outer handler.
     if (isExtensionContextInvalidated(error)) {
       throw error;
     }
-    // @behavior glossa.page_translation.activation.settings_failure Settings-read failures emit diagnostics and stop content startup before page listeners attach.
     reportError("settings.get", error, settingsRequest.requestId);
     return;
   }
-  // @behavior glossa.page_translation.activation.settings_error_response Settings error responses emit diagnostics and stop content startup before page listeners attach.
   if (settingsResponse.type !== "settings.response") {
     reportError("settings.get", settingsResponse.type === "error" ? settingsResponse.payload : new Error(`Unexpected settings response ${settingsResponse.type}`), settingsResponse.requestId);
     return;
@@ -78,7 +70,6 @@ async function boot(): Promise<void> {
   const glossSessions = new Set<GlossSession>();
   let scanInProgress = 0;
 
-  // @behavior glossa.page_translation.activation.stop_cleanup Stopping content translation cancels prompts, scans, ports, listeners, selection mode, and rendered overlays.
   const stopContentScript = (reason: string): void => {
     if (stopped) {
       return;
@@ -110,7 +101,6 @@ async function boot(): Promise<void> {
     reportError(operation, error, requestId);
   };
 
-  // @behavior glossa.page_translation.activation.lifecycle_cleanup Lifecycle cleanups release page event listeners, runtime listeners, observers, and selection handlers when content stops.
   const registerLifecycleCleanup = (cleanup: () => void): void => {
     if (stopped) {
       cleanup();
@@ -575,7 +565,6 @@ async function boot(): Promise<void> {
     if (!(event instanceof KeyboardEvent)) {
       return;
     }
-    // @behavior glossa.page_translation.shortcut_selection.plugin_shortcut_chord A Glossa shortcut chord keeps its extension action while shortcut selection mode exits through its own key listener afterward.
     if (matchesShortcut(event, settings?.translateShortcutKey ?? "Alt+G")) {
       event.preventDefault();
       event.stopPropagation();
@@ -584,7 +573,6 @@ async function boot(): Promise<void> {
   };
 
   const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
-  // @behavior glossa.page_translation.activation.popup_message The popup activation message enables translation and returns a typed success or failure response.
   const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
     if (!isTranslateActivationMessage(message)) {
       return false;
@@ -628,18 +616,15 @@ async function boot(): Promise<void> {
         sentence: selection.sentence,
         token: selection.token
       }), wordClickTimeout).then((response) => {
-        // @behavior glossa.card_creation.duplicate_gate.content_prompt Duplicate-card responses open a page prompt before content retries the word-click request.
         if (response.type === "word.card.duplicate") {
           return promptDuplicateCardCreation(document, {
             surface: response.payload.surface,
             timeoutMs: response.payload.promptMs
           }).then((confirmed) => {
-            // @behavior glossa.card_creation.duplicate_gate.content_cancel Duplicate-card timeout or cancellation clears the pending card feedback.
             if (!confirmed) {
               overlay.applyCardFeedback({ tokenId: selection.token.id, feedback: "card-cancelled" });
               return undefined;
             }
-            // @behavior glossa.card_creation.duplicate_gate.content_confirm Confirming the duplicate-card prompt resends the word-click request with duplicate approval.
             return runtimeMessage(createContentMessage("word.clicked", {
               pageUrl: location.href,
               sentence: selection.sentence,
@@ -670,7 +655,6 @@ async function boot(): Promise<void> {
     }
   });
 
-  // @behavior glossa.card_creation.note_request.content_feedback Content maps card responses into inline success or failure feedback.
   function applyCardResponse(selection: WordSelection, response: BackgroundResponseMessage): void {
     const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
     const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
@@ -707,15 +691,12 @@ async function boot(): Promise<void> {
   });
   const onScroll = (): void => scheduleScan("scroll");
   const scrollObservedShadowRoots = new WeakSet<ShadowRoot>();
-  // @behavior glossa.page_translation.candidate_scan.overflow_scroll Element scroll events reschedule viewport scans so newly visible overflow-container text becomes eligible.
   addLifecycleEventListener(document, "scroll", onScroll, { passive: true, capture: true });
   addLifecycleEventListener(window, "scroll", onScroll, { passive: true });
-  // @behavior glossa.page_translation.activation.observer_cleanup Stopping content translation disconnects the active mutation observer through the lifecycle cleanup registry.
   registerLifecycleCleanup(() => observer?.disconnect());
   observer.observe(document.body, { childList: true, characterData: true, subtree: true });
   observeOpenShadowRoots(document.body);
 
-  // @behavior glossa.page_translation.candidate_scan.shadow_root_observation Open shadow roots are observed recursively for scroll and DOM changes until content translation stops.
   function observeOpenShadowRoots(root: ParentNode): void {
     if (stopped) {
       return;
@@ -724,7 +705,6 @@ async function boot(): Promise<void> {
       if (element.shadowRoot) {
         if (!scrollObservedShadowRoots.has(element.shadowRoot)) {
           scrollObservedShadowRoots.add(element.shadowRoot);
-          // @behavior glossa.page_translation.candidate_scan.overflow_scroll.shadow_root Shadow-root scroll events reschedule viewport scans for newly visible Web Component content.
           addLifecycleEventListener(element.shadowRoot, "scroll", onScroll, { passive: true, capture: true });
         }
         observer?.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
@@ -733,21 +713,17 @@ async function boot(): Promise<void> {
     }
   }
 
-  // @behavior glossa.page_translation.inline_rendering.pending_state Pending token ids stay tracked only while their rendered pending gloss remains active.
   function updatePendingTokenState(session: GlossSession, outcome: GlossTokenPayload, render: { result: string }): void {
-    // @behavior glossa.page_translation.inline_rendering.pending_state.add Pending outcomes add a token to the pending set only when rendering accepted the pending gloss.
     if (outcome.status === "pending" && render.result !== "skipped") {
       session.pendingTokenIds.add(outcome.tokenId);
       return;
     }
-    // @behavior glossa.page_translation.inline_rendering.pending_state.remove Terminal gloss outcomes remove the token from the pending set.
     if (outcome.status === "ready" || outcome.status === "hidden" || outcome.status === "error") {
       session.pendingTokenIds.delete(outcome.tokenId);
     }
   }
 }
 
-// @behavior glossa.extension_contracts.request_effects.runtime_request Content runtime messages use callback-compatible sendMessage with timeout and response validation.
 function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
   return new Promise((resolve, reject) => {
     const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
@@ -760,7 +736,6 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
       callback: (response: unknown) => void
     ) => Promise<unknown> | void;
     let settled = false;
-    // @constraint glossa.extension_contracts.request_effects.runtime_timeout Runtime message requests reject with a typed timeout after the configured budget.
     const timeout = globalThis.setTimeout(() => {
       if (settled) {
         return;
@@ -774,7 +749,6 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
       });
       rejectMessage(messageTimeoutError(message));
     }, timeoutMs);
-    // @behavior glossa.extension_contracts.request_effects.runtime_settlement Runtime message requests accept the first callback, promise, or timeout result and ignore later channels.
     const finish = (callback: () => void): void => {
       if (settled) {
         return;
@@ -785,7 +759,6 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
     };
     const resolveMessage = (value: unknown): void => {
       finish(() => {
-        // @behavior glossa.extension_contracts.request_effects.runtime_validation Runtime response validation happens inside settlement so validation failures reject once.
         try {
           resolve(validateBackgroundResponse(value, message));
         } catch (error) {
@@ -806,38 +779,30 @@ function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000):
         try {
           error = chrome.runtime.lastError;
         } catch (lastError) {
-          // @behavior glossa.extension_contracts.request_effects.runtime_last_error_access Runtime lastError access failures reject the pending request.
           rejectMessage(lastError);
           return;
         }
         if (error) {
-          // @behavior glossa.extension_contracts.request_effects.runtime_last_error_value Runtime lastError values reject the pending request with the reported message.
           rejectMessage(new Error(error.message));
         } else {
           resolveMessage(response);
         }
       }) as Promise<unknown> | void;
     } catch (error) {
-      // @behavior glossa.extension_contracts.request_effects.runtime_send_failure Synchronous sendMessage failures reject the pending runtime request through the shared settlement path.
       rejectMessage(error);
       return;
     }
     if (maybePromise && typeof maybePromise.then === "function") {
-      // @behavior glossa.extension_contracts.request_effects.runtime_promise_channel Promise-based sendMessage results share the same settlement path as callback results.
       maybePromise.then(resolveMessage, rejectMessage);
     }
   });
 }
 
-// @behavior glossa.card_creation.duplicate_gate.prompt The duplicate-card prompt resolves true only from the confirmation control and otherwise resolves false.
 function promptDuplicateCardCreation(doc: Document, input: { surface: string; timeoutMs: number }): Promise<boolean> {
-  // @behavior glossa.card_creation.duplicate_gate.prompt_supersede Starting a duplicate-card prompt resolves the previous prompt as cancellation before replacing its DOM.
   cancelDuplicateCardPrompt(doc);
   return new Promise((resolve) => {
-    // @behavior glossa.card_creation.duplicate_gate.prompt.keyboard_focus Duplicate-card confirmation manages initial focus and restores the prior page control when it closes.
     const previousFocus = doc.activeElement;
     const prompt = doc.createElement("div");
-    // @constraint glossa.card_creation.duplicate_gate.prompt_dom The duplicate-card prompt is extension-owned page UI anchored at the top right of the viewport.
     prompt.dataset.glossaOwned = "1";
     prompt.dataset.glossaDuplicateCardPrompt = "1";
     prompt.setAttribute("role", "dialog");
@@ -863,7 +828,6 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     ].join(";");
     const style = doc.createElement("style");
     style.dataset.glossaOwned = "1";
-    // @constraint glossa.card_creation.duplicate_gate.prompt.responsive_layout Duplicate-card confirmation stacks its message above two equal controls on viewports up to 360 pixels wide.
     style.textContent = `
       [data-glossa-duplicate-card-prompt="1"] button:focus-visible {
         outline: 3px solid rgba(227, 179, 77, 0.72);
@@ -893,18 +857,14 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
     text.textContent = `${input.surface} 已经制过卡，继续制卡？`;
     text.style.cssText = "min-width:0;overflow-wrap:anywhere;font-weight:650;letter-spacing:0.005em";
     prompt.setAttribute("aria-describedby", text.id);
-    // @behavior glossa.card_creation.duplicate_gate.prompt_controls The duplicate-card prompt exposes one confirmation control and one cancellation control.
     const confirm = doc.createElement("button");
-    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.confirm_label The duplicate-card confirmation control uses visible text and an aria label for the continue action.
     confirm.type = "button";
     confirm.textContent = "继续制卡";
     confirm.setAttribute("aria-label", "继续制卡");
     const cancel = doc.createElement("button");
     cancel.type = "button";
-    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.cancel_label The duplicate-card cancellation control uses visible text and an aria label for the cancel action.
     cancel.textContent = "取消";
     cancel.setAttribute("aria-label", "取消制卡");
-    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.confirm_style The duplicate-card confirmation control uses the shared theme accent as its primary action color.
     confirm.style.cssText = [
       "min-width:88px",
       "height:36px",
@@ -916,7 +876,6 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       "box-shadow:0 7px 16px rgba(200,71,36,0.17)",
       "cursor:pointer"
     ].join(";");
-    // @constraint glossa.card_creation.duplicate_gate.prompt_controls.cancel_style The duplicate-card cancellation control stays visually secondary inside the paper confirmation prompt.
     cancel.style.cssText = [
       "min-width:54px",
       "height:36px",
@@ -927,7 +886,6 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       "font:740 14px/1 ui-sans-serif,system-ui",
       "cursor:pointer"
     ].join(";");
-    // @constraint glossa.card_creation.duplicate_gate.prompt_dom.children The duplicate-card prompt contains its scoped style, description, primary action, and cancellation action.
     prompt.append(style, text, confirm, cancel);
     let settled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -941,18 +899,15 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       }
       duplicatePromptResolvers.delete(doc);
       prompt.remove();
-      // @behavior glossa.card_creation.duplicate_gate.prompt.keyboard_focus.restore Closing the duplicate-card prompt restores the connected page control that held focus before it opened.
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected && previousFocus !== doc.body) {
         previousFocus.focus({ preventScroll: true });
       }
       resolve(confirmed);
     };
-    // @behavior glossa.card_creation.duplicate_gate.prompt_timeout Duplicate-card prompt timeout resolves as cancellation.
     timer = globalThis.setTimeout(() => finish(false), input.timeoutMs);
     duplicatePromptResolvers.set(doc, finish);
     confirm.addEventListener("click", () => finish(true), { once: true });
     cancel.addEventListener("click", () => finish(false), { once: true });
-    // @behavior glossa.card_creation.duplicate_gate.prompt.escape Pressing Escape cancels the active duplicate-card confirmation.
     prompt.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -961,12 +916,10 @@ function promptDuplicateCardCreation(doc: Document, input: { surface: string; ti
       }
     });
     (doc.body ?? doc.documentElement).append(prompt);
-    // @behavior glossa.card_creation.duplicate_gate.prompt.keyboard_focus.initial Opening the duplicate-card prompt moves keyboard focus to its primary confirmation control.
     confirm.focus({ preventScroll: true });
   });
 }
 
-// @behavior glossa.card_creation.duplicate_gate.prompt_cleanup Duplicate-card prompt cleanup resolves the active prompt as cancellation and removes prompt DOM.
 function cancelDuplicateCardPrompt(doc: Document): void {
   const resolver = duplicatePromptResolvers.get(doc);
   if (resolver) {

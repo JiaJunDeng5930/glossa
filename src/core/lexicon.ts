@@ -1,4 +1,3 @@
-// @behavior glossa.word_memory.known_word_filter Configured known-word lists load into normalized entries for vocabulary filtering.
 import { KNOWN_WORD_LIST_IDS, type KnownWordListId } from "../shared/types";
 import { normalizeLemma } from "./state";
 

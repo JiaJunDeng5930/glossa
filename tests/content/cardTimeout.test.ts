@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import { wordClickTimeoutMs } from "../../src/content/cardTimeout";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
-// @verifies glossa.card_creation.note_request.content_timeout
 describe("card creation content timeout", () => {
-  // @verifies glossa.card_creation.note_request.content_timeout.budget
   it("covers the configured AI retry budget and concurrent Anki write budget", () => {
     expect(wordClickTimeoutMs({
       ...DEFAULT_SETTINGS,

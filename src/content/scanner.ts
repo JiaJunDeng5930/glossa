@@ -1,4 +1,3 @@
-// @behavior glossa.page_translation.candidate_scan Viewport-visible editable-safe text nodes produce DOM-grounded English token candidates.
 import { isKnownLemma } from "../core/lexicon";
 import { normalizeLemma } from "../core/state";
 import type { SentenceCandidate, TokenCandidate } from "../shared/types";
@@ -17,13 +16,9 @@ export interface ScannedSentence extends SentenceCandidate {
   tokens: ScannedToken[];
 }
 
-// @constraint glossa.page_translation.candidate_scan.chunk_contract Scan chunks contain the chunk index plus the sentence and token candidates emitted for that batch.
 export interface ScanChunk {
-  // @constraint glossa.page_translation.candidate_scan.chunk_contract.index Scan chunks expose their zero-based batch index.
   chunkIndex: number;
-  // @constraint glossa.page_translation.candidate_scan.chunk_contract.sentences Scan chunks carry the sentence candidates produced in that batch.
   sentences: ScannedSentence[];
-  // @constraint glossa.page_translation.candidate_scan.chunk_contract.tokens Scan chunks carry the token candidates produced in that batch.
   tokens: ScannedToken[];
 }
 
@@ -44,7 +39,6 @@ export interface ScanOptions {
   minWordLength?: number;
   minContextChars?: number;
   requireRenderableRange?: boolean;
-  // @constraint glossa.page_translation.candidate_scan.viewport_option Scan options expose a viewport-range filter for content activation scans.
   requireViewportRange?: boolean;
 }
 
@@ -86,14 +80,12 @@ const SKIPPED_SELECTOR = [
   "#glossa-overlay"
 ].join(",");
 
-// @constraint glossa.page_translation.candidate_scan.chunk_stream Chunk scanning streams DOM-grounded candidates and returns aggregate scan stats.
 export async function scanDocumentTextInChunks(
   doc: Document,
   knownWords: ReadonlySet<string>,
   options: ScanChunkOptions,
   onChunk: (chunk: ScanChunk) => Promise<boolean | void> | boolean | void
 ): Promise<ScanStats> {
-  // @constraint glossa.page_translation.candidate_scan.chunk_stream.stats Chunk scanning returns one aggregate stats object for the full document scan.
   const stats = createScanStats();
   const textNodes = doc.body ? collectTextNodes(doc.body, stats) : [];
   const lemmaCounts = new Map<string, number>();
@@ -375,7 +367,6 @@ function hasRenderableRange(textNode: Text, startOffset: number, endOffset: numb
       if (rect.width <= 0 || rect.height <= 0) {
         return false;
       }
-      // @behavior glossa.page_translation.candidate_scan.viewport_tokens Candidate token ranges must intersect the currently visible scrollport area before content sends them for translation.
       return !requireViewportRange || intersectsVisibleArea(rect, textNode, doc);
     });
   } catch {
@@ -405,7 +396,6 @@ function intersectsVisibleArea(rect: DOMRect, textNode: Text, doc: Document): bo
     const clipsX = clipsOverflow(style.overflowX || style.overflow);
     const clipsY = clipsOverflow(style.overflowY || style.overflow);
     if (clipsX || clipsY) {
-      // @behavior glossa.page_translation.candidate_scan.overflow_clip Candidate token visibility is clipped by scroll-container ancestors before translation lookup starts.
       const clipRect = element.getBoundingClientRect();
       if (clipsX) {
         left = Math.max(left, clipRect.left);
@@ -436,13 +426,11 @@ function nextClipAncestor(element: Element): Element | null {
   if (element.parentElement) {
     return element.parentElement;
   }
-  // @behavior glossa.page_translation.candidate_scan.overflow_clip.shadow_host Shadow-root token visibility continues through the host element before checking outer scroll containers.
   const root = element.getRootNode();
   return root instanceof ShadowRoot ? root.host : null;
 }
 
 function clipsOverflow(value: string): boolean {
-  // @constraint glossa.page_translation.candidate_scan.overflow_clip.values Overflow clipping applies to CSS values that create a scrollport or clip box.
   return value === "auto" || value === "scroll" || value === "hidden" || value === "clip";
 }
 

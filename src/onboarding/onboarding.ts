@@ -1,4 +1,3 @@
-// @behavior glossa.onboarding First-run onboarding teaches one Glossa action or setting per page and persists completed setup choices through shared settings storage.
 import { defaultEndpointForProvider } from "../shared/settings";
 import {
   applyAppearancePreview,
@@ -20,11 +19,9 @@ import { createExtensionStorage } from "../storage/db";
 
 const storage = createExtensionStorage();
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
-// @constraint glossa.onboarding.step_collection Onboarding step state comes from the page's data-step sections.
 const steps = Array.from(document.querySelectorAll<HTMLElement>("[data-step]"));
 const progress = document.querySelector<HTMLElement>("#progress")!;
 const continueButton = document.querySelector<HTMLButtonElement>("#continue")!;
-// @constraint glossa.onboarding.status_output Onboarding status state is written to the shared status output element.
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
 const knownWordListSelect = form.elements.namedItem("knownWordList") as HTMLSelectElement;
@@ -46,13 +43,11 @@ populateKnownWordSelect(knownWordListSelect);
 void loadSettings();
 
 continueButton.addEventListener("click", () => {
-  // @behavior glossa.onboarding.step_advance_serialization Continue clicks are ignored while a step save is pending so one user action advances at most one onboarding page.
   if (continueInFlight) {
     return;
   }
   continueInFlight = true;
   continueButton.disabled = true;
-  // @behavior glossa.onboarding.step_advance_serialization.cleanup Continue serialization releases the pending state after the step save settles.
   void continueOnboarding().finally(() => {
     continueInFlight = false;
     continueButton.disabled = false;
@@ -60,7 +55,6 @@ continueButton.addEventListener("click", () => {
 });
 
 form.addEventListener("submit", (event) => {
-  // @behavior glossa.onboarding.submit_safety The onboarding form suppresses native submission so entered API keys stay out of navigation URLs.
   event.preventDefault();
 });
 
@@ -77,12 +71,10 @@ refreshAnkiButton.addEventListener("click", () => {
 });
 
 testAiButton.addEventListener("click", () => {
-  // @behavior glossa.onboarding.ai_check The onboarding AI step runs the shared settings-page AI connection test against the current onboarding form.
   void runSettingsConnectionTest(testAiButton, () => testAiSettings(readCurrentSettings()), "ai", setStatus, "AI 连接成功");
 });
 
 testAnkiButton.addEventListener("click", () => {
-  // @behavior glossa.onboarding.anki_check The onboarding Anki step runs the shared settings-page Anki catalog validation against the current onboarding form.
   void runSettingsConnectionTest(testAnkiButton, () => testAnkiSettings(readCurrentSettings()), "anki", setStatus, "Anki 已连接");
 });
 
@@ -94,14 +86,12 @@ async function loadSettings(): Promise<void> {
   setAnkiSelectsEnabled(false);
   updatePreview(settings);
   showStep(0);
-  // @behavior glossa.onboarding.anki_refresh.explicit_request Initial onboarding load keeps Anki refresh idle so users can edit the endpoint before the first catalog request.
   setTestState(refreshAnkiButton, "idle");
 }
 
 async function continueOnboarding(): Promise<void> {
   setStatus("");
   settings = readCurrentSettings();
-  // @behavior glossa.onboarding.settings_save Completing a setup step writes the current onboarding form through the shared settings form normalizer.
   await storage.settings.set(settings);
   if (currentStep >= steps.length - 1) {
     window.close();
@@ -110,16 +100,13 @@ async function continueOnboarding(): Promise<void> {
   showStep(currentStep + 1);
 }
 
-// @constraint glossa.onboarding.single_topic Only the current onboarding step is visible so each page presents one action or setting.
 function showStep(index: number): void {
   currentStep = index;
-  // @constraint glossa.onboarding.single_topic.visibility_write Step rendering hides every inactive page section.
   steps.forEach((step, stepIndex) => {
     step.hidden = stepIndex !== index;
   });
   progress.textContent = `${index + 1} / ${steps.length}`;
   continueButton.textContent = index === steps.length - 1 ? "完成" : "继续";
-  // @behavior glossa.onboarding.step_focus Each rendered onboarding step moves programmatic focus to its heading without adding the heading to sequential keyboard navigation.
   const heading = steps[index]?.querySelector<HTMLHeadingElement>("h1");
   if (heading) {
     heading.tabIndex = -1;
@@ -140,11 +127,9 @@ function updatePreview(nextSettings: GlossaSettings): void {
   }, nextSettings.appearance);
 }
 
-// @behavior glossa.onboarding.anki_refresh The onboarding Anki step refreshes deck and model choices from AnkiConnect while keeping defaults available on failure.
 async function refreshAnkiOptions(nextSettings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
   setTestState(refreshAnkiButton, "loading");
   setAnkiSelectsEnabled(false);
-  // @behavior glossa.onboarding.anki_refresh.failure_state Anki refresh failures keep configured defaults visible and mark refresh as an error state.
   try {
     const catalog = await loadAnkiCatalog(nextSettings.anki.endpoint, nextSettings.anki.requestTimeoutMs);
     const deck = pickExistingValue(nextSettings.anki.deck, catalog.decks);
@@ -169,9 +154,7 @@ function setAnkiSelectsEnabled(enabled: boolean): void {
   ankiModelNameSelect.disabled = !enabled;
 }
 
-// @behavior glossa.onboarding.status_state Onboarding status output marks AI and Anki successes as success and other visible messages as errors.
 function setStatus(value: string): void {
   statusOutput.value = value;
-  // @behavior glossa.onboarding.status_state.dataset Onboarding status output stores a success state for successful AI or Anki checks and an error state for other messages.
   statusOutput.dataset.state = value === "AI 连接成功" || value === "Anki 已连接" ? "success" : value ? "error" : "";
 }

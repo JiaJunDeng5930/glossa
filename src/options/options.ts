@@ -1,4 +1,3 @@
-// @behavior glossa.settings_save User edits on the options page persist translation, provider, Anki, prompt, shortcut, and appearance settings.
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey } from "../core/state";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
@@ -48,7 +47,6 @@ populateKnownWordLists();
 populateKnownWordsNav();
 setupSectionNavigation();
 setSaveState("clean");
-// @behavior glossa.settings_save.options_load.failure_status Settings load failures expose a reopening instruction in the options status output.
 void loadSettings().catch(() => setStatus("设置加载失败，请重新打开页面", "error"));
 
 form.addEventListener("submit", (event) => {
@@ -71,13 +69,11 @@ refreshAnkiButton.addEventListener("click", () => {
 resetGlossPromptButton.addEventListener("click", () => {
   setInput("glossPrompt", DEFAULT_SETTINGS.prompts.gloss);
   updatePreview(readFormSettings());
-  // @behavior glossa.settings_save.status_state.editing.gloss_prompt_reset Resetting the gloss prompt marks the form as edited.
   markSettingsDirty();
 });
 
 resetAnkiPromptButton.addEventListener("click", () => {
   setInput("ankiPrompt", DEFAULT_SETTINGS.prompts.ankiCard);
-  // @behavior glossa.settings_save.status_state.editing.anki_prompt_reset Resetting the Anki prompt marks the form as edited.
   markSettingsDirty();
 });
 
@@ -150,14 +146,12 @@ document.addEventListener("keyup", (event) => {
 
 form.addEventListener("input", () => {
   updatePreview(readFormSettings());
-  // @behavior glossa.settings_save.status_state.editing.control_input Each settings control input marks the form as edited.
   markSettingsDirty();
 });
 
 function readFormSettings(): GlossaSettings {
   const provider = readInput("provider") as AiSettings["provider"];
   const apiKey = readInput("apiKey").trim();
-  // @constraint glossa.settings_save.options_write.font_size_bounds Saved gloss font size is clamped to the supported options-page range.
   const fontSize = Math.max(9, Math.min(24, Number(readInput("glossFontSize")) || DEFAULT_SETTINGS.appearance.fontSize));
   return {
     shortcutKey: readInput("shortcutKey").trim() || DEFAULT_SETTINGS.shortcutKey,
@@ -223,12 +217,10 @@ async function testAi(settings: GlossaSettings): Promise<void> {
       : settings.ai.provider === "openai-completions"
         ? { model: settings.modelVersion, prompt: "Return {\"items\":[]} as JSON.", temperature: 0 }
         : { model: settings.modelVersion, input: "Return {\"items\":[]} as JSON.", ...reasoningBody(settings) };
-  // @behavior glossa.ai_requests.failure.timeout.options_check AI connection checks use the configured AI request timeout.
   await postConnectionTest(endpoint, body, "ai", settings.ai.apiKey, settings.ai.requestTimeoutMs);
 }
 
 async function testAnki(settings: GlossaSettings): Promise<void> {
-  // @behavior glossa.card_creation.note_request.timeout.options_check Anki connection checks use the configured Anki request timeout.
   const catalog = await loadAnkiCatalog(settings.anki.endpoint, settings.anki.requestTimeoutMs);
   if (!catalog.decks.includes(settings.anki.deck)) {
     throw createDiagnosticError("service-error", "Anki deck was not found", { service: "anki" });
@@ -254,19 +246,14 @@ function setChecked(name: string, value: boolean): void {
   (form.elements.namedItem(name) as HTMLInputElement).checked = value;
 }
 
-// @constraint glossa.settings_save.status_state.output_values Options status output uses empty, dirty, pending, success, and error semantic values.
 type StatusState = "dirty" | "pending" | "success" | "error" | "";
-// @constraint glossa.settings_save.status_state.save_lifecycle.values The settings save lifecycle uses clean, dirty, saving, and error states.
 type SettingsSaveState = "clean" | "dirty" | "saving" | "error";
 
-// @behavior glossa.settings_save.status_state Options status output distinguishes edited, pending, successful, and failed operations.
 function setStatus(value: string, state: StatusState = value ? "error" : ""): void {
   statusOutput.value = value;
-  // @behavior glossa.settings_save.status_state.dataset Options status output exposes its semantic state to styling and assistive inspection.
   statusOutput.dataset.state = state;
 }
 
-// @behavior glossa.settings_save.status_state.save_button The save button mirrors the current settings save lifecycle through its label, dataset, and disabled state.
 function setSaveState(state: SettingsSaveState): void {
   const labels: Record<SettingsSaveState, string> = {
     clean: "保存",
@@ -274,18 +261,13 @@ function setSaveState(state: SettingsSaveState): void {
     saving: "保存中…",
     error: "重试保存"
   };
-  // @behavior glossa.settings_save.status_state.save_button.dataset The save button exposes its lifecycle state through a data attribute.
   saveButton.dataset.state = state;
-  // @behavior glossa.settings_save.status_state.save_button.pending_disabled The save button stays disabled while a settings write is active.
   saveButton.disabled = state === "saving";
-  // @behavior glossa.settings_save.status_state.save_button.label The save button label identifies clean, edited, active-write, and retry states.
   saveLabel.textContent = labels[state];
 }
 
-// @behavior glossa.settings_save.status_state.editing Editing any settings control marks the current form revision as unsaved.
 function markSettingsDirty(message = "有未保存的更改"): void {
   settingsRevision += 1;
-  // @behavior glossa.settings_save.status_state.editing.during_save Edits made during an active settings write advance the revision while preserving the active-write presentation.
   if (saveButton.dataset.state === "saving") {
     return;
   }
@@ -293,13 +275,10 @@ function markSettingsDirty(message = "有未保存的更改"): void {
   setStatus(message, "dirty");
 }
 
-// @behavior glossa.settings_save.status_state.save_lifecycle Settings saving exposes progress, success, retry, and edits made during an active write.
 async function persistSettings(): Promise<void> {
   const submittedRevision = settingsRevision;
   setSaveState("saving");
-  // @behavior glossa.settings_save.status_state.save_lifecycle.pending_status An active settings write announces its pending state in the options status output.
   setStatus("正在保存…", "pending");
-  // @behavior glossa.settings_save.status_state.save_lifecycle.write_attempt Each settings submission resolves into a saved, still-edited, or retry state.
   try {
     await saveSettings(readFormSettings());
     if (settingsRevision === submittedRevision) {
@@ -310,13 +289,11 @@ async function persistSettings(): Promise<void> {
     setSaveState("dirty");
     setStatus("保存完成，仍有未保存的更改", "dirty");
   } catch {
-    // @behavior glossa.settings_save.status_state.save_lifecycle.failure_status Failed settings writes keep the save action available and announce a retry instruction.
     setSaveState("error");
     setStatus("设置保存失败，请重试", "error");
   }
 }
 
-// @behavior glossa.settings_save.section_navigation Options navigation marks the section nearest the reading marker as the current location while the page scrolls.
 function setupSectionNavigation(): void {
   const entries = Array.from(document.querySelectorAll<HTMLAnchorElement>(".section-nav a[href^='#']")).flatMap((link) => {
     const section = document.getElementById(link.hash.slice(1));
@@ -328,7 +305,6 @@ function setupSectionNavigation(): void {
   let animationFrame: number | undefined;
   const render = (): void => {
     animationFrame = undefined;
-    // @behavior glossa.settings_save.section_navigation.document_end The final section becomes current at the document end only after the page has scrolled away from the top.
     const atDocumentEnd = window.scrollY > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
     let activeEntry = atDocumentEnd ? entries.at(-1)! : entries[0]!;
     if (!atDocumentEnd) {
@@ -339,7 +315,6 @@ function setupSectionNavigation(): void {
         if (sectionTop > readingMarker) {
           break;
         }
-        // @behavior glossa.settings_save.section_navigation.shared_row Equal-top sections keep the first navigation entry for their shared row current.
         if (sectionTop > activeTop) {
           activeEntry = entry;
           activeTop = sectionTop;
@@ -370,7 +345,6 @@ function setAnkiSelectsEnabled(enabled: boolean): void {
   ankiModelNameSelect.disabled = !enabled;
 }
 
-// @behavior glossa.word_memory.known_management The options page lists known vocabulary records and lets users add or remove known words manually.
 async function refreshKnownWords(): Promise<void> {
   const records = await extensionStorage.lexicon.listByState("known");
   renderKnownWords(records);
@@ -384,9 +358,7 @@ async function addKnownWord(): Promise<void> {
   const now = Date.now();
   const key = vocabularyKey("en", lemma);
   const existing = await extensionStorage.lexicon.get(key);
-  // @behavior glossa.word_memory.known_management.add_known Adding a known word writes a known vocabulary record keyed by normalized English lemma.
   const shown = markRecordShown(existing ?? createCandidateRecord(lemma, lemma, "en", now), now);
-  // @behavior glossa.word_memory.known_management.preserve_card_history_add Adding a known word preserves existing Anki note history in the lexicon and carded-word store.
   if ((existing?.ankiNoteIds.length ?? 0) > 0) {
     await extensionStorage.cardedWords.put(key, {
       key,
@@ -447,7 +419,6 @@ function renderKnownWordsSection(letter: string, records: VocabularyRecord[]): H
   return section;
 }
 
-// @behavior glossa.word_memory.known_management.preserve_card_history_remove Removing a known word preserves existing Anki note history in the carded-word store.
 async function removeKnownWord(record: VocabularyRecord): Promise<void> {
   const key = vocabularyKey(record.lang, record.lemma);
   await preserveCardHistory(record);
@@ -455,7 +426,6 @@ async function removeKnownWord(record: VocabularyRecord): Promise<void> {
   await refreshKnownWords();
 }
 
-// @behavior glossa.word_memory.known_management.clear_known Clearing known words deletes every known lexicon record while preserving existing Anki note history.
 async function clearKnownWords(): Promise<void> {
   const records = await extensionStorage.lexicon.listByState("known");
   await Promise.all(records.map(async (record) => {
@@ -479,7 +449,6 @@ async function preserveCardHistory(record: VocabularyRecord): Promise<void> {
 
 async function clearGlossCache(): Promise<void> {
   setStatus("");
-  // @behavior glossa.settings_save.clear_gloss_cache The options page clears persisted translation labels while leaving vocabulary state unchanged.
   try {
     await runtimeMessage(createOptionsMessage("gloss.cache.clear", {}));
     setStatus("翻译缓存已清空", "success");
@@ -605,7 +574,6 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
     setAnkiSelectsEnabled(true);
     setTestState(refreshAnkiButton, "idle");
     if (ankiDeckSelect.value !== previousDeck || ankiModelNameSelect.value !== previousModelName) {
-      // @behavior glossa.settings_save.status_state.editing.anki_catalog_refresh Anki catalog refresh marks automatically changed deck or model selections as edited during initial and manual loads.
       markSettingsDirty("Anki 选项已更新，等待保存");
     } else if (options.reportStatus) {
       setStatus("");
@@ -625,7 +593,6 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
   }
 }
 
-// @behavior glossa.card_creation.note_request.timeout.anki_catalog Anki catalog refresh applies the selected timeout to every AnkiConnect catalog action.
 async function loadAnkiCatalog(endpoint: string, timeoutMs: number): Promise<AnkiCatalog> {
   await ankiAction<number>(endpoint, "version", undefined, timeoutMs);
   const decks = await ankiAction<string[]>(endpoint, "deckNames", undefined, timeoutMs);
@@ -646,7 +613,6 @@ async function loadAnkiCatalog(endpoint: string, timeoutMs: number): Promise<Ank
   return { decks, modelNames: compatibleModels };
 }
 
-// @behavior glossa.card_creation.note_request.timeout.anki_action Anki option-page actions pass their timeout into the shared connection request helper.
 async function ankiAction<T>(endpoint: string, action: string, params?: Record<string, unknown>, timeoutMs = DEFAULT_SETTINGS.anki.requestTimeoutMs): Promise<T> {
   const response = await postConnectionTest(endpoint, {
     action,
@@ -684,7 +650,6 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-// @behavior glossa.ai_requests.failure.timeout.connection_helper Option-page connection requests abort after the supplied timeout, defaulting to 30 seconds.
 async function postConnectionTest(endpoint: string, body: unknown, service: Extract<ErrorService, "ai" | "anki">, apiKey?: string, timeoutMs = DEFAULT_SETTINGS.ai.requestTimeoutMs): Promise<unknown> {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
@@ -736,7 +701,6 @@ function finishShortcutCapture(): void {
   shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
   capturingShortcutName = undefined;
   pendingShortcut = "";
-  // @behavior glossa.settings_save.status_state.editing.shortcut_capture Completing shortcut capture marks the form as edited.
   markSettingsDirty("快捷键已记录，等待保存");
 }
 
@@ -768,7 +732,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-// @constraint glossa.settings_save.timeout_seconds Timeout settings are stored in milliseconds after positive second values are rounded to whole milliseconds.
 function secondsToMs(value: string, fallbackMs: number): number {
   const seconds = Math.max(1, Number(value) || fallbackMs / 1_000);
   return Math.round(seconds * 1_000);
@@ -778,9 +741,7 @@ function msToSeconds(value: number): number {
   return Math.max(1, Math.round(value / 1_000));
 }
 
-// @constraint glossa.settings_save.gloss_cache_ttl.hour_input Gloss cache TTL settings are stored in milliseconds after positive hour values are rounded to whole milliseconds.
 function hoursToMs(value: string, fallbackMs: number): number {
-  // @constraint glossa.settings_save.gloss_cache_ttl.hour_input.fallback Invalid gloss cache TTL hour input falls back to the configured default duration.
   const hours = Math.max(1, Number(value) || fallbackMs / 3_600_000);
   return Math.round(hours * 3_600_000);
 }
@@ -798,9 +759,7 @@ function hexToRgb(hex: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
-// @behavior glossa.settings_save.options_load Options page loading reads normalized settings through extension storage before populating controls.
 async function loadSettings(): Promise<void> {
-  // @constraint glossa.settings_save.options_load.storage_read Options page settings reads delegate storage and Chrome runtime errors to the shared storage API.
   const settings = await extensionStorage.settings.get();
   setInput("shortcutKey", settings.shortcutKey);
   shortcutCapture.textContent = settings.shortcutKey;
@@ -819,7 +778,6 @@ async function loadSettings(): Promise<void> {
   setInput("glossFontSize", String(settings.appearance.fontSize));
   setInput("provider", settings.ai.provider);
   setInput("aiEndpoint", settings.ai.endpoint);
-  // @constraint glossa.settings_save.options_load.api_key_field The options page writes the stored API key only into the API key input control.
   setInput("apiKey", settings.ai.apiKey ?? "");
   setInput("reasoningEffort", settings.ai.reasoningEffort);
   setInput("aiRequestTimeoutSeconds", String(msToSeconds(settings.ai.requestTimeoutMs)));
@@ -837,8 +795,6 @@ async function loadSettings(): Promise<void> {
   void refreshAnkiOptions(settings, { reportStatus: false });
 }
 
-// @behavior glossa.settings_save.options_write Options page saving writes normalized settings through extension storage.
 async function saveSettings(settings: GlossaSettings): Promise<void> {
-  // @constraint glossa.settings_save.options_write.storage_write Options page settings writes delegate storage and Chrome runtime errors to the shared storage API.
   await extensionStorage.settings.set(settings);
 }

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rust Comment Requirement Automation"
-  short_description: "Build Rust gates for comment requirements"
-  default_prompt: "Use $rust-comment-requirement-automation to implement Rust xtask tooling for one-sentence source-comment requirements."

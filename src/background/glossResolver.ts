@@ -1,4 +1,3 @@
-// @behavior glossa.page_translation.lookup_order Gloss scans emit lookup-first token outcomes from page memory, fresh gloss cache, lexicon state, and framed AI work.
 import pLimit from "p-limit";
 
 import { buildGlossCacheKey } from "../core/cache";
@@ -16,7 +15,6 @@ import type { ErrorPayload, GlossaSettings, GlossCacheEntry, GlossItem, GlossTok
 import { GLOSS_TARGET_LANG } from "../shared/types";
 
 export interface GlossResolver {
-  // @constraint glossa.page_translation.lookup_order.session_interface Gloss resolver callers create explicit sessions before streaming scan chunks and finishing.
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
 }
 
@@ -197,7 +195,6 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
         const chunkStartedAt = nowMs();
         stats.chunks += 1;
         stats.tokens += sentences.reduce((total, sentence) => total + sentence.tokens.length, 0);
-        // @behavior glossa.page_translation.lookup_order.chunk_error_trace Lookup chunk tasks emit success or failure diagnostic traces around token lookup.
         const task = (async () => {
           const tokenTasks = sentences.flatMap((sentence) => {
             return sentence.tokens.map((token) => lookupLimit(async () => {
@@ -313,7 +310,6 @@ async function resolveToken(input: {
     }
 
     const cached = await input.glossCacheReads.get(cacheKey);
-    // @behavior glossa.page_translation.lookup_order.fresh_cache_precedes_lexicon Database-fresh persisted gloss cache hits return ready before known or ignored lexicon state gates run.
     if (input.sink.isActive?.() === false) {
       return;
     } else if (cached) {
@@ -325,7 +321,6 @@ async function resolveToken(input: {
     }
 
     const record = await currentRecord(input.lexiconReads, input.deps.storage, input.token, input.now, input.trackWrite);
-    // @behavior glossa.page_translation.lookup_order.lexicon_hidden_after_cache Lexicon known and ignored states hide tokens after the fresh cache gate has missed.
     if (input.sink.isActive?.() === false) {
       return;
     } else if (record?.state === "known" || record?.state === "ignored") {
@@ -447,7 +442,6 @@ async function executeFrame(
         continue;
       }
       const readyItem = rehydrateCachedGloss(item, miss.token);
-      // @behavior glossa.page_translation.lookup_order.gloss_cache_created_at AI gloss results persist cache creation time with the display result.
       try {
         await deps.storage.glossCache.put(miss.dbCacheKey, { ...readyItem, createdAt: miss.now });
         deps.remember(miss.memoryKey, readyItem);
@@ -667,7 +661,6 @@ async function currentRecord(
   }
   const current = transitionExpiredLearning(record, now);
   if (current !== record) {
-    // @behavior glossa.word_memory.learning_lifecycle.expired_learning_persistence Expired learning state transitions discovered during lookup are written back to the lexicon store.
     trackWrite(() => storage.lexicon.put(current));
   }
   return current;
@@ -677,7 +670,6 @@ async function persistShownRecord(storage: ExtensionStorage, token: TokenCandida
   const key = vocabularyKey("en", token.lemma);
   const record = await storage.lexicon.get(key);
   const current = record ? transitionExpiredLearning(record, now) : createCandidateRecord(token.lemma, token.surface, "en", now);
-  // @behavior glossa.word_memory.learning_lifecycle.shown_persistence Ready gloss outcomes write the displayed vocabulary state back to the lexicon store.
   await storage.lexicon.put(markRecordShown(current, now));
 }
 
@@ -698,7 +690,6 @@ function aiInFlightKey(settings: GlossaSettings, cacheKey: string): string {
   return `${aiFrameKey(settings)}\n${cacheKey}`;
 }
 
-// @constraint glossa.ai_requests.failure.timeout.live_grouping Concurrent gloss AI request grouping includes the configured AI timeout so overlapping scans use their own transport budgets.
 function aiFrameKey(settings: GlossaSettings): string {
   return [
     settings.ai.provider,

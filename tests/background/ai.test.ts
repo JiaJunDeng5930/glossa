@@ -4,10 +4,6 @@ import { createAiBackend } from "../../src/background/ai";
 import { DEFAULT_SETTINGS, type GlossaSettings, type TokenCandidate } from "../../src/shared/types";
 
 describe("AI backend adapters", () => {
-  // @verifies glossa.ai_requests.openai.responses
-  // @verifies glossa.ai_requests.backend_interface.json_helper
-  // @verifies glossa.ai_requests.reasoning_effort
-  // @verifies glossa.ai_requests.failure.timeout_cleanup
   it("sends reasoning effort to the Responses API and parses output_text", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "{\"items\":[]}" }));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
@@ -22,8 +18,6 @@ describe("AI backend adapters", () => {
     clearTimeoutSpy.mockRestore();
   });
 
-  // @verifies glossa.ai_requests.openai.chat_completions
-  // @verifies glossa.ai_requests.reasoning_effort
   it("supports Chat Completions request and response shape", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       choices: [{ message: { content: "{\"items\":[{\"tokenId\":\"t1\",\"targetText\":\"submit\",\"display\":\"提交\"}]}" } }]
@@ -46,7 +40,6 @@ describe("AI backend adapters", () => {
     expect(result.items[0]).toMatchObject({ display: "提交" });
   });
 
-  // @verifies glossa.ai_requests.glossa_backend.gloss_frame
   it("sends frame-shaped gloss batches to the backend", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       items: [{ tokenId: "t1", targetText: "submit", display: "提交" }]
@@ -69,8 +62,6 @@ describe("AI backend adapters", () => {
     expect(result.items[0]).toMatchObject({ display: "提交" });
   });
 
-  // @verifies glossa.ai_requests.openai.legacy_completions
-  // @verifies glossa.ai_requests.reasoning_effort
   it("supports legacy Completions request and response shape", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       choices: [{ text: "{\"cards\":[{\"front\":\"<b>Submit</b> the form.\",\"back\":\"提交\"}]}" }]
@@ -96,7 +87,6 @@ describe("AI backend adapters", () => {
     expect(result.cards[0]).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
   });
 
-  // @verifies glossa.ai_requests.glossa_backend.anki_card
   it("sends card requests to the glossa backend", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       cards: [{ front: "<b>Submit</b> the form.", back: "提交" }]
@@ -117,7 +107,6 @@ describe("AI backend adapters", () => {
     expect(result.cards[0]).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
   });
 
-  // @verifies glossa.ai_requests.failure.http_status
   it("classifies HTTP auth failures as AI diagnostic errors", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "bad key" }, 401));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
@@ -128,7 +117,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  // @verifies glossa.ai_requests.failure.http_status
   it("classifies HTTP missing endpoint failures after one AI request attempt", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "missing" }, 404));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
@@ -139,8 +127,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  // @verifies glossa.ai_requests.failure.request_error
-  // @verifies glossa.ai_requests.failure.retry_limit
   it("classifies network failures as AI diagnostic errors", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError("fetch failed");
@@ -153,8 +139,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  // @verifies glossa.ai_requests.failure.request_error
-  // @verifies glossa.ai_requests.failure.retry_limit
   it("retries recoverable AI request errors before returning a valid response", async () => {
     let attempt = 0;
     const fetchImpl = vi.fn(async () => {
@@ -172,7 +156,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  // @verifies glossa.ai_requests.failure.invalid_json
   it("classifies invalid model JSON as an AI response diagnostic error", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "not json" }));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
@@ -183,7 +166,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  // @verifies glossa.ai_requests.failure.invalid_json
   it("classifies malformed backend JSON after one AI request attempt", async () => {
     const fetchImpl = vi.fn(async () => textResponse("not json"));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
@@ -194,7 +176,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  // @verifies glossa.ai_requests.failure.invalid_json
   it("classifies invalid gloss response shapes after one AI request attempt", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       items: [{ tokenId: "t1", display: "提交" }]
@@ -209,7 +190,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  // @verifies glossa.ai_requests.failure.invalid_json
   it("classifies invalid Anki card response shapes after one AI request attempt", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       cards: [{ front: "<b>Submit</b> the form.", back: 42 }]
@@ -226,7 +206,6 @@ describe("AI backend adapters", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  // @verifies glossa.ai_requests.failure.timeout
   it("aborts slow AI transport attempts after the timeout", async () => {
     vi.useFakeTimers();
     try {
@@ -253,8 +232,6 @@ describe("AI backend adapters", () => {
     }
   });
 
-  // @verifies glossa.ai_requests.failure.timeout
-  // @verifies glossa.ai_requests.failure.timeout.setting
   it("uses the configured AI request timeout", async () => {
     vi.useFakeTimers();
     try {

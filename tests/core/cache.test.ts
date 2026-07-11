@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { buildCardCacheKey, buildGlossCacheKey } from "../../src/core/cache";
 
-// @verifies glossa.cache_identity.request_parts
-// @verifies glossa.cache_identity.request_parts.gloss_key_fields
 describe("cache keys", () => {
   it("builds stable gloss keys from target language, sentence text and token span", async () => {
     const input = {

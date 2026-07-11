@@ -1,4 +1,3 @@
-// @constraint glossa.extension_contracts.message_envelopes Runtime requests, responses, and gloss-port traffic use versioned envelopes and nested payload structure checks before payloads are accepted.
 import { KNOWN_WORD_LIST_IDS } from "./types";
 import type {
   AiProvider,
@@ -126,14 +125,12 @@ export function validateContentMessage(value: unknown): ContentToBackgroundMessa
     throw new Error("Unexpected message route");
   }
   if (envelope.type === "settings.get") {
-    // @constraint glossa.extension_contracts.message_envelopes.content_payloads Content settings requests must carry an empty payload.
     if (!isEmptyPayload(envelope.payload)) {
       throw new Error("Malformed settings.get payload");
     }
     return envelope as ContentToBackgroundMessage;
   }
   if (envelope.type === "word.clicked") {
-    // @constraint glossa.extension_contracts.message_envelopes.word_click_payloads Word-click requests must carry page, sentence, token, and optional duplicate approval fields.
     if (!isUserWordClickPayload(envelope.payload)) {
       throw new Error("Malformed word.clicked payload");
     }
@@ -151,7 +148,6 @@ export function validateOptionsMessage(value: unknown): OptionsToBackgroundMessa
     throw new Error("Unexpected message route");
   }
   if (envelope.type === "gloss.cache.clear") {
-    // @constraint glossa.extension_contracts.message_envelopes.options_payloads Options cache-clear requests must carry an empty payload.
     if (!isEmptyPayload(envelope.payload)) {
       throw new Error("Malformed gloss.cache.clear payload");
     }
@@ -168,11 +164,9 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
   if (envelope.requestId !== request.requestId) {
     throw new Error("Response requestId mismatch");
   }
-  // @constraint glossa.extension_contracts.message_envelopes.background_route Background responses must come from the service worker and target the original requester.
   if (envelope.source !== "service-worker" || envelope.target !== request.source) {
     throw new Error("Unexpected response route");
   }
-  // @constraint glossa.extension_contracts.message_envelopes.background_response_types Background responses accept only settings, word-click, duplicate-card, cache-clear, and error envelope types.
   if (
     envelope.type !== "settings.response"
     && envelope.type !== "word.clicked.ok"
@@ -183,35 +177,30 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
     throw new Error("Unknown response type");
   }
   if (envelope.type === "settings.response") {
-    // @constraint glossa.extension_contracts.message_envelopes.settings_response_payload Settings responses must contain a fully typed settings object.
     if (!isSettingsGetResponsePayload(envelope.payload)) {
       throw new Error("Malformed settings.response payload");
     }
     return envelope as BackgroundResponseMessage;
   }
   if (envelope.type === "word.clicked.ok") {
-    // @constraint glossa.extension_contracts.message_envelopes.word_clicked_ok_payload Word-click success responses may contain numeric note ids only.
     if (!isWordClickedOkPayload(envelope.payload)) {
       throw new Error("Malformed word.clicked.ok payload");
     }
     return envelope as BackgroundResponseMessage;
   }
   if (envelope.type === "word.card.duplicate") {
-    // @constraint glossa.extension_contracts.message_envelopes.duplicate_payload Duplicate-card responses must contain language, lemma, surface, and prompt duration fields.
     if (!isWordCardDuplicatePayload(envelope.payload)) {
       throw new Error("Malformed word.card.duplicate payload");
     }
     return envelope as BackgroundResponseMessage;
   }
   if (envelope.type === "gloss.cache.cleared") {
-    // @constraint glossa.extension_contracts.message_envelopes.cache_cleared_payload Cache-clear responses must carry an empty payload.
     if (!isEmptyPayload(envelope.payload)) {
       throw new Error("Malformed gloss.cache.cleared payload");
     }
     return envelope as BackgroundResponseMessage;
   }
   if (envelope.type === "error") {
-    // @constraint glossa.extension_contracts.message_envelopes.error_payload Error responses must carry a structured error payload.
     if (!isErrorPayload(envelope.payload)) {
       throw new Error("Malformed error payload");
     }
@@ -222,28 +211,21 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
 
 export function validateGlossPortInbound(value: unknown): GlossPortInboundMessage {
   const message = validateGlossPortEnvelope(value);
-  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_start Gloss scan start messages must identify the scan and page before background lookup accepts them.
   if (message.type === "gloss.scan.start") {
     const payload = requirePlainPayload(message.payload);
     if (typeof payload.scanId !== "string" || typeof payload.pageUrl !== "string") {
       throw new Error("Malformed gloss.scan.start payload");
     }
-    // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_start.accepted Valid gloss scan start payloads are accepted as inbound gloss-port messages.
     return message as GlossPortInboundMessage;
   }
-  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk Gloss scan chunks must carry typed chunk payloads before background lookup accepts them.
   if (message.type === "gloss.scan.chunk") {
-    // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk.payload Gloss scan chunk payloads must pass nested sentence and token validation.
     if (!isGlossScanChunkPayload(message.payload)) {
       throw new Error("Malformed gloss.scan.chunk payload");
     }
-    // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_chunk.accepted Valid gloss scan chunks are accepted as inbound gloss-port messages.
     return message as GlossPortInboundMessage;
   }
-  // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_end Gloss scan end messages must identify the scan being closed.
   if (message.type === "gloss.scan.end") {
     const payload = requirePlainPayload(message.payload);
-    // @constraint glossa.extension_contracts.message_envelopes.gloss_scan_end.scan_id Gloss scan end payloads must carry a string scan id.
     if (typeof payload.scanId !== "string") {
       throw new Error("Malformed gloss.scan.end payload");
     }
@@ -252,7 +234,6 @@ export function validateGlossPortInbound(value: unknown): GlossPortInboundMessag
   throw new Error("Unknown gloss port message type");
 }
 
-// @constraint glossa.extension_contracts.message_envelopes.gloss_outbound_payloads Gloss outbound messages validate acknowledgement, token, done, and error payload shapes before use.
 export function validateGlossPortOutbound(value: unknown, scanId?: string): GlossPortOutboundMessage {
   const message = validateGlossPortEnvelope(value);
   if (message.type === "gloss.chunk.ack") {
@@ -269,18 +250,14 @@ export function validateGlossPortOutbound(value: unknown, scanId?: string): Glos
     }
     return message as GlossPortOutboundMessage;
   }
-  // @constraint glossa.extension_contracts.message_envelopes.gloss_token_outbound Gloss token outbound messages must validate the nested token payload before use.
   if (message.type === "gloss.token") {
-    // @constraint glossa.extension_contracts.message_envelopes.gloss_token_outbound.payload_source Gloss token outbound validation reads the payload without weakening it through a plain-object cast.
     const payload = message.payload;
-    // @constraint glossa.extension_contracts.message_envelopes.gloss_token_outbound.payload Gloss token outbound payloads must pass status-specific token validation.
     if (!isGlossTokenPayload(payload)) {
       throw new Error("Malformed gloss.token payload");
     }
     if (scanId && payload.scanId !== scanId) {
       throw new Error("Gloss port scanId mismatch");
     }
-    // @constraint glossa.extension_contracts.message_envelopes.gloss_token_outbound.accepted Valid gloss token payloads are accepted as outbound gloss-port messages.
     return message as GlossPortOutboundMessage;
   }
   if (message.type === "gloss.done") {
@@ -407,7 +384,6 @@ function isGlossTokenPayload(value: unknown): value is GlossTokenPayload {
   if (!isPlainObject(value)) {
     return false;
   }
-  // @constraint glossa.extension_contracts.message_envelopes.gloss_token_base Gloss token payloads must identify the scan, token, and known token status.
   if (typeof value.scanId !== "string" || typeof value.tokenId !== "string" || !isGlossTokenStatus(value.status)) {
     return false;
   }
@@ -420,11 +396,9 @@ function isGlossTokenPayload(value: unknown): value is GlossTokenPayload {
   if (value.error !== undefined && !isErrorPayload(value.error)) {
     return false;
   }
-  // @constraint glossa.extension_contracts.message_envelopes.gloss_token_ready Ready gloss token payloads must carry a complete gloss item.
   if (value.status === "ready" && !isGlossItem(value.item)) {
     return false;
   }
-  // @constraint glossa.extension_contracts.message_envelopes.gloss_token_error Error gloss token payloads must carry a structured error payload.
   if (value.status === "error" && !isErrorPayload(value.error)) {
     return false;
   }
@@ -533,7 +507,6 @@ function isAiSettings(value: unknown): value is GlossaSettings["ai"] {
   if (!isPlainObject(value)) {
     return false;
   }
-  // @constraint glossa.extension_contracts.message_envelopes.ai_settings_payload AI settings payloads must preserve provider, endpoint, optional API key, reasoning effort, and request timeout shape.
   return isAiProvider(value.provider)
     && typeof value.endpoint === "string"
     && (value.apiKey === undefined || typeof value.apiKey === "string")

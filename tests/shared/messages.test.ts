@@ -14,7 +14,6 @@ import {
 } from "../../src/shared/messages";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
-// @verifies glossa.extension_contracts.message_envelopes
 describe("extension message envelopes", () => {
   it("creates and validates content-to-background messages with request ids", () => {
     const message = createContentMessage("settings.get", {});
@@ -29,7 +28,6 @@ describe("extension message envelopes", () => {
     });
   });
 
-  // @verifies glossa.settings_save.clear_gloss_cache.background_request
   it("creates and validates options-to-background cache clear messages", () => {
     const message = createOptionsMessage("gloss.cache.clear", {});
 
@@ -92,8 +90,6 @@ describe("extension message envelopes", () => {
     });
   });
 
-  // @verifies glossa.card_creation.duplicate_gate.message_type
-  // @verifies glossa.extension_contracts.payload_consistency.duplicate_response
   it("validates duplicate-card background responses", () => {
     const request = createContentMessage("word.clicked", {
       pageUrl: "https://example.test",
@@ -273,7 +269,6 @@ describe("extension message envelopes", () => {
   });
 });
 
-// @verifies glossa.failure_reporting.trace_privacy
 describe("diagnostic trace sanitization", () => {
   it("removes query strings and fragments from trace URLs", () => {
     const event = sanitizeTraceEvent({

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { openOnboardingAfterInstall } from "../../src/background/onboarding";
 
-// @verifies glossa.onboarding.install_open
 describe("onboarding install hook", () => {
   it("opens the first-run onboarding page only after a fresh install", () => {
     const create = vi.fn();

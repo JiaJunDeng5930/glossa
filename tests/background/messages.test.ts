@@ -7,19 +7,7 @@ import { createContentMessage } from "../../src/shared/messages";
 import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossCacheEntry, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
-// @verifies glossa.extension_contracts.request_effects
-// @verifies glossa.extension_storage.typed_access
 describe("background message handler", () => {
-  // @verifies glossa.card_creation.duplicate_gate.success
-  // @verifies glossa.card_creation.duplicate_gate.learning_state
-  // @verifies glossa.card_creation.note_request.ids
-  // @verifies glossa.card_creation.note_request.empty_result
-  // @verifies glossa.card_creation.note_request.response_payload
-  // @verifies glossa.card_creation.duplicate_gate.record_key
-  // @verifies glossa.card_creation.duplicate_gate.record_lang
-  // @verifies glossa.card_creation.duplicate_gate.record_lemma
-  // @verifies glossa.card_creation.duplicate_gate.record_created_at
-  // @verifies glossa.card_creation.duplicate_gate.record_store
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
@@ -65,7 +53,6 @@ describe("background message handler", () => {
     });
   });
 
-  // @verifies glossa.card_creation.note_request.concurrent_cards
   it("starts generated card note writes in the same Anki request window", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
@@ -101,12 +88,6 @@ describe("background message handler", () => {
     await expect(response).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
   });
 
-  // @verifies glossa.card_creation.note_request.settled_result
-  // @verifies glossa.card_creation.note_request.settled_result_note_ids
-  // @verifies glossa.card_creation.note_request.settled_result_error
-  // @verifies glossa.card_creation.note_request.settled_success_ids
-  // @verifies glossa.card_creation.note_request.settled_failure_reason
-  // @verifies glossa.card_creation.note_request.partial_success_persistence
   it("persists successful note ids before reporting a partial Anki failure", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
@@ -146,7 +127,6 @@ describe("background message handler", () => {
     });
   });
 
-  // @verifies glossa.card_creation.note_request.full_failure
   it("reports Anki failure without card history when every note write fails", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
@@ -178,13 +158,6 @@ describe("background message handler", () => {
     expect(await storage.cardedWords.get("en:submit")).toBeUndefined();
   });
 
-  // @verifies glossa.card_creation.duplicate_gate
-  // @verifies glossa.card_creation.duplicate_gate.response
-  // @verifies glossa.card_creation.duplicate_gate.message_lang
-  // @verifies glossa.card_creation.duplicate_gate.message_lemma
-  // @verifies glossa.card_creation.duplicate_gate.message_surface
-  // @verifies glossa.card_creation.duplicate_gate.message_prompt_ms
-  // @verifies glossa.card_creation.duplicate_gate.prompt_setting
   it("returns duplicate-card confirmation before creating another note for a carded word", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
@@ -213,9 +186,6 @@ describe("background message handler", () => {
     expect(await storage.lexicon.get("en:submit")).toBeUndefined();
   });
 
-  // @verifies glossa.card_creation.duplicate_gate.inflight_serialization
-  // @verifies glossa.card_creation.duplicate_gate.inflight_lane
-  // @verifies glossa.card_creation.duplicate_gate.inflight_cleanup
   it("rechecks duplicate state after overlapping same-word card creation settles", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
@@ -258,7 +228,6 @@ describe("background message handler", () => {
     expect(anki.createNote).toHaveBeenCalledTimes(1);
   });
 
-  // @verifies glossa.card_creation.duplicate_gate.existing_note_history
   it("returns duplicate-card confirmation when existing vocabulary already has Anki note ids", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
@@ -291,8 +260,6 @@ describe("background message handler", () => {
     expect(anki.createNote).not.toHaveBeenCalled();
   });
 
-  // @verifies glossa.card_creation.duplicate_gate
-  // @verifies glossa.card_creation.duplicate_gate.message_confirmed
   it("creates another note for a carded word after explicit confirmation", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
@@ -316,8 +283,6 @@ describe("background message handler", () => {
     expect(await storage.cardedWords.get("en:submit")).toMatchObject({ createdAt: 1_000 });
   });
 
-  // @verifies glossa.cache_identity.card_content_cache
-  // @verifies glossa.cache_identity.card_content_cache.store
   it("reuses cached card content across provider and reasoning changes", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
@@ -356,7 +321,6 @@ describe("background message handler", () => {
     expect(anki.createNote).toHaveBeenCalledTimes(2);
   });
 
-  // @verifies glossa.cache_identity.card_content_cache
   it("strips legacy note ids when rewriting cached card content", async () => {
     const storage = createMemoryStorage();
     const settings = {

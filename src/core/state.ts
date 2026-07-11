@@ -1,5 +1,3 @@
-// @constraint glossa.word_memory Vocabulary identity, known-word filtering, cache keys, and state transitions stay deterministic across extension contexts.
-// @behavior glossa.word_memory.learning_lifecycle Vocabulary records persist as candidate, known, learning_active, or ignored according to display, click, and expiry events.
 import type { VocabularyRecord } from "../shared/types";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -31,7 +29,6 @@ export function createCandidateRecord(
   };
 }
 
-// @behavior glossa.word_memory.learning_lifecycle.shown_candidate_known Displaying a candidate vocabulary record changes that record to known.
 export function markRecordShown(record: VocabularyRecord, now: number): VocabularyRecord {
   return {
     ...record,
@@ -51,7 +48,6 @@ export function markRecordClicked(record: VocabularyRecord, now: number, learnin
   };
 }
 
-// @behavior glossa.word_memory.learning_lifecycle.expired_learning_known An expired learning_active vocabulary record changes to known.
 export function transitionExpiredLearning(record: VocabularyRecord, now: number): VocabularyRecord {
   if (record.state === "learning_active" && record.expiresAt !== undefined && record.expiresAt <= now) {
     const { expiresAt: _expiresAt, ...rest } = record;

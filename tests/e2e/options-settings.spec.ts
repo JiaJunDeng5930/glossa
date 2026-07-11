@@ -35,37 +35,6 @@ async function glossaDatabaseHasStore(page: Page, storeName: string): Promise<bo
   }, storeName);
 }
 
-// @verifies glossa.settings_save
-// @verifies glossa.settings_save.default_overrides
-// @verifies glossa.settings_save.default_overrides.merge
-// @verifies glossa.settings_save.default_overrides.provider_endpoint_defaults
-// @verifies glossa.settings_save.default_overrides.stored_shape
-// @verifies glossa.settings_save.default_overrides.stored_shape.ai
-// @verifies glossa.settings_save.default_overrides.stored_shape.anki
-// @verifies glossa.settings_save.default_overrides.stored_shape.appearance
-// @verifies glossa.settings_save.default_overrides.stored_shape.prompts
-// @verifies glossa.settings_save.default_overrides.write_filter
-// @verifies glossa.settings_save.clear_gloss_cache
-// @verifies glossa.settings_save.status_state
-// @verifies glossa.settings_save.status_state.editing
-// @verifies glossa.settings_save.status_state.save_lifecycle
-// @verifies glossa.settings_save.section_navigation
-// @verifies glossa.settings_save.timeout_seconds
-// @verifies glossa.word_memory.known_management
-// @verifies glossa.word_memory.known_management.add_known
-// @verifies glossa.word_memory.known_management.store_listing
-// @verifies glossa.word_memory.known_management.store_read
-// @verifies glossa.word_memory.known_management.preserve_card_history_add
-// @verifies glossa.word_memory.known_management.preserve_card_history_remove
-// @verifies glossa.word_memory.known_management.clear_known
-// @verifies glossa.extension_storage.typed_access.key_value_delete
-// @verifies glossa.extension_storage.typed_access.key_value_clear
-// @verifies glossa.extension_storage.typed_access.lexicon_delete
-// @verifies glossa.extension_storage.typed_access.lexicon_delete_impl
-// @verifies glossa.card_creation.duplicate_gate.record_store_upgrade
-// @verifies glossa.ai_requests.failure.timeout.options_check
-// @verifies glossa.ai_requests.failure.timeout.connection_helper
-// @verifies glossa.card_creation.note_request.timeout.options_check
 test("options page captures shortcuts, previews style changes and saves prompts", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
   await page.route("https://options.test/", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));
@@ -536,9 +505,6 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#save-settings .save-label")).toHaveText("保存");
 });
 
-// @verifies glossa.settings_save
-// @verifies glossa.card_creation.note_request.timeout.anki_catalog
-// @verifies glossa.card_creation.note_request.timeout.anki_action
 test("options page disables Anki selectors until refresh reaches AnkiConnect", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
   await page.route("https://options.test/", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));
@@ -601,7 +567,6 @@ test("options page disables Anki selectors until refresh reaches AnkiConnect", a
   await expect(page.locator("select[name=ankiModelName]")).toHaveValue("KaTeX and Markdown Basic");
 });
 
-// @verifies glossa.card_creation.duplicate_gate.record_store_upgrade
 test("options page creates the carded-word store on a fresh IndexedDB", async ({ page }) => {
   const html = await readFile(resolve("dist/options/options.html"), "utf8");
   await page.route("https://options-fresh-db.test/", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));

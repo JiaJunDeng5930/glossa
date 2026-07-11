@@ -1,5 +1,3 @@
-// @intent glossa.extension_storage Settings, vocabulary records, gloss cache entries, card cache entries, and carded-word records stay inside extension-owned storage.
-// @constraint glossa.extension_storage.typed_access Settings, lexicon, cache, and carded-word storage use one typed asynchronous access contract.
 import type { AnkiCardOutput, CardedWordRecord, GlossaSettings, GlossCacheEntry, VocabularyRecord, VocabularyState } from "../shared/types";
 import { mergeStoredSettings, settingsOverrides, type StoredGlossaSettings } from "../shared/settings";
 
@@ -7,27 +5,20 @@ export interface KeyValueStore<T> {
   get(key: string): Promise<T | undefined>;
   getMany(keys: string[]): Promise<Map<string, T>>;
   put(key: string, value: T): Promise<void>;
-  // @constraint glossa.extension_storage.typed_access.key_value_delete Key-value stores expose deletion through the typed storage contract.
   delete(key: string): Promise<void>;
-  // @constraint glossa.extension_storage.typed_access.key_value_clear Key-value stores expose full-store clearing through the typed storage contract.
   clear(): Promise<void>;
 }
 
-// @constraint glossa.cache_identity.gloss_cache_entry.fresh_store Gloss cache storage exposes fresh-read methods for TTL-aware database cache requests.
 export interface GlossCacheStore extends KeyValueStore<GlossCacheEntry> {
-  // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read Gloss cache reads return persisted entries only while their creation time is inside the requested TTL window.
   getFresh(key: string, now: number, ttlMs: number): Promise<GlossCacheEntry | undefined>;
-  // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read_many Batched gloss cache reads return only entries that are fresh for the request time and TTL.
   getFreshMany(keys: string[], now: number, ttlMs: number): Promise<Map<string, GlossCacheEntry>>;
 }
 
 export interface LexiconStore {
   get(key: string): Promise<VocabularyRecord | undefined>;
   getMany(keys: string[]): Promise<Map<string, VocabularyRecord>>;
-  // @behavior glossa.word_memory.known_management.store_listing The lexicon store can list vocabulary records by state for options-page known-word management.
   listByState(state: VocabularyState): Promise<VocabularyRecord[]>;
   put(record: VocabularyRecord): Promise<void>;
-  // @constraint glossa.extension_storage.typed_access.lexicon_delete The lexicon store exposes deletion through the typed storage contract.
   delete(key: string): Promise<void>;
 }
 
@@ -38,12 +29,9 @@ export interface SettingsStore {
 
 export interface ExtensionStorage {
   settings: SettingsStore;
-  // @constraint glossa.cache_identity.gloss_cache_entry.store Extension storage persists gloss cache entries with cache metadata.
   glossCache: GlossCacheStore;
   lexicon: LexiconStore;
-  // @constraint glossa.cache_identity.card_content_cache.store Card cache storage persists generated card content without note-write identifiers.
   cardCache: KeyValueStore<AnkiCardOutput>;
-  // @constraint glossa.card_creation.duplicate_gate.record_store Extension storage exposes a word-only carded-word store for duplicate-card gating.
   cardedWords: KeyValueStore<CardedWordRecord>;
 }
 
@@ -159,10 +147,8 @@ function createGlossCacheStore(): GlossCacheStore {
       }
       const entry = normalizeGlossCacheEntry(value, now);
       if (entry !== value) {
-        // @behavior glossa.cache_identity.gloss_cache_entry.legacy_created_at.single_read_backfill A single fresh read writes back a legacy gloss cache entry with request-time createdAt before returning it.
         await store.put(key, entry);
       }
-      // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read.expiry A gloss cache entry past createdAt plus TTL is returned as a cache miss.
       return isFreshGlossCacheEntry(entry, now, ttlMs) ? entry : undefined;
     },
     async getFreshMany(keys, now, ttlMs) {
@@ -172,10 +158,8 @@ function createGlossCacheStore(): GlossCacheStore {
       for (const [key, value] of values) {
         const entry = normalizeGlossCacheEntry(value, now);
         if (entry !== value) {
-          // @behavior glossa.cache_identity.gloss_cache_entry.legacy_created_at.batch_read_backfill A batched fresh read writes back each legacy gloss cache entry with request-time createdAt before returning it.
           backfills.push(store.put(key, entry));
         }
-        // @behavior glossa.cache_identity.gloss_cache_entry.fresh_read_many.expiry Batched gloss cache reads omit entries past createdAt plus TTL.
         if (isFreshGlossCacheEntry(entry, now, ttlMs)) {
           result.set(key, entry);
         }
@@ -194,7 +178,6 @@ function normalizeGlossCacheEntry(value: GlossCacheEntry, now: number): GlossCac
   if (Number.isFinite(value.createdAt)) {
     return value;
   }
-  // @behavior glossa.cache_identity.gloss_cache_entry.legacy_created_at Legacy gloss cache entries without createdAt receive request time before TTL freshness is evaluated.
   return { ...value, createdAt: now };
 }
 
@@ -203,7 +186,6 @@ function createLexiconStore(): LexiconStore {
   return {
     get: store.get,
     getMany: store.getMany,
-    // @behavior glossa.word_memory.known_management.store_read Known-word management reads lexicon records by state from IndexedDB.
     async listByState(state) {
       const db = await openDatabase();
       const tx = db.transaction("lexicon", "readonly");
@@ -216,7 +198,6 @@ function createLexiconStore(): LexiconStore {
     put(record) {
       return store.put(record.key, record);
     },
-    // @constraint glossa.extension_storage.typed_access.lexicon_delete_impl Lexicon deletion delegates to the shared IndexedDB key-value delete operation.
     delete(key) {
       return store.delete(key);
     }
@@ -227,7 +208,6 @@ let databasePromise: Promise<IDBDatabase> | undefined;
 
 function openDatabase(): Promise<IDBDatabase> {
   databasePromise ??= new Promise((resolve, reject) => {
-    // @constraint glossa.card_creation.duplicate_gate.record_store_upgrade IndexedDB schema version 2 creates the carded-word object store.
     const request = indexedDB.open("glossa", 2);
     request.onupgradeneeded = () => {
       const db = request.result;

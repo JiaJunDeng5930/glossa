@@ -1,8 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-npm run req:check:staged
-npm run req:check:all
 npm run typecheck
 npm run test
 npm run build

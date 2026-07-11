@@ -1,4 +1,3 @@
-// @behavior glossa.settings_save.default_overrides Saved settings contain only normalized values that differ from the current defaults.
 import {
   DEFAULT_SETTINGS,
   KNOWN_WORD_LIST_IDS,
@@ -10,19 +9,13 @@ import {
   type PromptSettings
 } from "./types";
 
-// @constraint glossa.settings_save.default_overrides.stored_shape Stored settings keep top-level values and nested setting groups as optional override fields.
 export type StoredGlossaSettings = Partial<Omit<GlossaSettings, "appearance" | "prompts" | "ai" | "anki">> & {
-  // @constraint glossa.settings_save.default_overrides.stored_shape.appearance Stored settings keep appearance overrides as partial nested fields.
   appearance?: Partial<AppearanceSettings>;
-  // @constraint glossa.settings_save.default_overrides.stored_shape.prompts Stored settings keep prompt overrides as partial nested fields.
   prompts?: Partial<PromptSettings>;
-  // @constraint glossa.settings_save.default_overrides.stored_shape.ai Stored settings keep AI overrides as partial nested fields.
   ai?: Partial<AiSettings>;
-  // @constraint glossa.settings_save.default_overrides.stored_shape.anki Stored settings keep Anki overrides as partial nested fields.
   anki?: Partial<AnkiSettings>;
 };
 
-// @behavior glossa.settings_save.default_overrides.merge Saved settings merge with the current defaults at read time so default updates reach unchanged fields.
 export function mergeStoredSettings(value: StoredGlossaSettings | undefined): GlossaSettings {
   const stored = value;
   const provider = stored?.ai?.provider ?? DEFAULT_SETTINGS.ai.provider;
@@ -46,7 +39,6 @@ export function mergeStoredSettings(value: StoredGlossaSettings | undefined): Gl
   };
 }
 
-// @behavior glossa.settings_save.default_overrides.write_filter Saving settings returns only values whose normalized form differs from the current defaults.
 export function settingsOverrides(settings: GlossaSettings): StoredGlossaSettings {
   const overrides: StoredGlossaSettings = {};
   assignIfChanged(overrides, "shortcutKey", settings.shortcutKey, DEFAULT_SETTINGS.shortcutKey);
@@ -84,7 +76,6 @@ export function settingsOverrides(settings: GlossaSettings): StoredGlossaSetting
   return overrides;
 }
 
-// @behavior glossa.settings_save.default_overrides.provider_endpoint_defaults Provider endpoint defaults follow the selected provider when no endpoint override is stored.
 export function defaultEndpointForProvider(provider: GlossaSettings["ai"]["provider"]): string {
   if (provider === "openai-chat-completions") {
     return "https://api.openai.com/v1/chat/completions";
@@ -123,9 +114,7 @@ function hasKeys(value: object): boolean {
   return Object.keys(value).length > 0;
 }
 
-// @constraint glossa.settings_save.default_overrides.positive_number Stored positive numeric settings override defaults.
 function positiveNumber(value: unknown, fallback: number): number {
-  // @constraint glossa.settings_save.default_overrides.positive_number.fallback Invalid numeric settings fall back to their default values.
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
