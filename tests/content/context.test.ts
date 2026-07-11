@@ -16,4 +16,32 @@ describe("sentence context resolver", () => {
     expect(contexts.every(Boolean)).toBe(true);
     expect(findCalls).toBe(0);
   });
+
+  it("excludes editable descendants from the surrounding sentence", () => {
+    document.body.innerHTML = `<p>Visible archive<span contenteditable="true"> private draft</span> appears clearly.</p>`;
+    const node = document.querySelector("p")!.firstChild as Text;
+    const resolveContext = createSentenceContextResolver();
+
+    const context = resolveContext(node, 8, 15);
+
+    expect(context).toMatchObject({
+      text: "Visible archive appears clearly.",
+      startOffset: 8,
+      endOffset: 15
+    });
+  });
+
+  it("uses rendered line breaks as sentence boundaries", () => {
+    document.body.innerHTML = `<p>Previous sentence without punctuation<br><em>quizzical</em> term appears.</p>`;
+    const node = document.querySelector("em")!.firstChild as Text;
+    const resolveContext = createSentenceContextResolver();
+
+    const context = resolveContext(node, 0, "quizzical".length);
+
+    expect(context).toMatchObject({
+      text: "quizzical term appears.",
+      startOffset: 0,
+      endOffset: "quizzical".length
+    });
+  });
 });

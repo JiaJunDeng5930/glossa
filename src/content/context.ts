@@ -11,6 +11,8 @@ const EXCLUDED_SELECTOR = [
   "option",
   "pre",
   "code",
+  "[contenteditable='true']",
+  "[contenteditable='']",
   "[hidden]",
   "[aria-hidden='true']",
   "[data-glossa-owned='1']",
@@ -83,11 +85,17 @@ function contextBoundary(node: Text): Node {
 function buildSnapshot(boundary: Node, doc: Document): ContextSnapshot {
   const segments = new WeakMap<Text, TextSegment>();
   let text = "";
-  const walker = doc.createTreeWalker(boundary, NodeFilter.SHOW_TEXT);
+  const walker = doc.createTreeWalker(boundary, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
   let current = walker.nextNode();
   while (current) {
-    const textNode = current as Text;
-    if (isContextText(textNode, boundary)) {
+    if (
+      current.nodeType === Node.ELEMENT_NODE
+      && (current as Element).tagName === "BR"
+      && isContextElement(current as Element, boundary)
+    ) {
+      text += "\n";
+    } else if (current.nodeType === Node.TEXT_NODE && isContextText(current as Text, boundary)) {
+      const textNode = current as Text;
       const value = textNode.nodeValue ?? "";
       const start = text.length;
       text += value;
@@ -101,7 +109,16 @@ function buildSnapshot(boundary: Node, doc: Document): ContextSnapshot {
 function isContextText(node: Text, boundary: Node): boolean {
   const sourceSurface = node.parentElement?.closest("[data-glossa-token-surface]");
   const sourceWrapper = sourceSurface?.closest("[data-glossa-token]");
-  let element = node.parentElement;
+  return isContextElement(node.parentElement, boundary, sourceSurface, sourceWrapper);
+}
+
+function isContextElement(
+  source: Element | null,
+  boundary: Node,
+  sourceSurface?: Element | null,
+  sourceWrapper?: Element | null
+): boolean {
+  let element = source;
   while (element) {
     // Existing wrappers contribute their source surface; generated label and measurement nodes remain excluded.
     const isSourceScaffold = sourceSurface !== null
