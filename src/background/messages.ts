@@ -70,6 +70,7 @@ async function handleWordClicked(
   deps: BackgroundMessageHandlerDeps,
   now: number
 ): Promise<{ kind: "created"; payload: WordClickedOkPayload } | { kind: "duplicate"; payload: WordCardDuplicatePayload }> {
+  // The hold-and-click gesture commits the card immediately; only an existing word-level card requires confirmation.
   const settings = await deps.storage.settings.get();
   const wordKey = vocabularyKey("en", payload.token.lemma);
   const existing = await deps.storage.lexicon.get(wordKey);
@@ -93,7 +94,8 @@ async function handleWordClicked(
     lang: "en",
     lemma: payload.token.lemma,
     targetLang: GLOSS_TARGET_LANG,
-    promptVersion: await promptCacheVersion(settings, settings.prompts.ankiCard)
+    promptVersion: await promptCacheVersion(settings, settings.prompts.ankiCard),
+    sentence: payload.sentence
   });
   const cachedCardOutput = await deps.storage.cardCache.get(cardKey);
   const cardOutput = cachedCardOutput ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
