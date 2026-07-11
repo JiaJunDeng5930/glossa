@@ -12,23 +12,23 @@
       <header class="popup-header">
         <div>
           <img class="brand-logo" src="../assets/logo.png" alt="Glossa">
-          <span>Reader control / 01</span>
+          <span>阅读控制</span>
         </div>
       </header>
       <section class="page-state" aria-label="当前页面">
         <div>
           <span>当前页面</span>
-          <strong>已准备</strong>
+          <strong id="page-state-label">正在检查…</strong>
         </div>
-        <span class="proof-mark">Ready</span>
+        <span id="page-state-mark" class="proof-mark" data-state="checking">检查中</span>
       </section>
-      <button id="translate-page" class="primary-command" type="button">
+      <button id="translate-page" class="primary-command" type="button" disabled>
         <svg aria-hidden="true" viewBox="0 0 24 24">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
           <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z"/>
           <path d="m9 9 1.5 1.5L14 7"/>
         </svg>
-        翻译本页
+        <span id="translate-page-label">正在检查…</span>
       </button>
       <button id="open-options" class="secondary-command" type="button">
         <svg aria-hidden="true" viewBox="0 0 24 24">

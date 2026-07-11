@@ -111,6 +111,15 @@ body {
   content: "";
 }
 
+.proof-mark[data-state="unavailable"] {
+  color: var(--red) !important;
+}
+
+.proof-mark[data-state="unavailable"]::before {
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(184, 71, 54, 0.1);
+}
+
 button {
   width: 100%;
   min-height: 43px;
@@ -184,7 +193,7 @@ button:focus-visible {
 }
 
 button:disabled {
-  cursor: progress;
+  cursor: default;
   opacity: 0.66;
   transform: none;
 }

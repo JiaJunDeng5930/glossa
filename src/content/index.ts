@@ -138,6 +138,7 @@ async function boot(): Promise<void> {
       closeAllGlossSessions();
       cancelDuplicateCardPrompt(document);
       overlay.clear();
+      // Manual activation belongs to one route; navigation restores the configured automatic default.
       translationEnabled = options.manualActivation === true || autoTranslateEnabled;
     }
     if (!translationEnabled) {
@@ -565,6 +566,7 @@ async function boot(): Promise<void> {
     if (!(event instanceof KeyboardEvent)) {
       return;
     }
+    // Selection hold exits in its own listener while this listener keeps matching extension chords actionable.
     if (matchesShortcut(event, settings?.translateShortcutKey ?? "Alt+G")) {
       event.preventDefault();
       event.stopPropagation();
@@ -574,11 +576,18 @@ async function boot(): Promise<void> {
 
   const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
   const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
-    if (!isTranslateActivationMessage(message)) {
+    if (isTranslationStateMessage(message)) {
+      sendResponse({ ok: true, enabled: translationEnabled } satisfies TranslationControlResponse);
       return false;
     }
-    void enableTranslation("popup").then(() => {
-      sendResponse({ ok: true });
+    if (!isTranslateActivationMessage(message) && !isTranslationToggleMessage(message)) {
+      return false;
+    }
+    const action = isTranslationToggleMessage(message)
+      ? toggleTranslation("popup")
+      : enableTranslation("popup");
+    void action.then(() => {
+      sendResponse({ ok: true, enabled: translationEnabled } satisfies TranslationControlResponse);
     }).catch((error) => {
       handleRuntimeError("content.activate", error);
       const payload = diagnosticPayloadFrom(error, {
@@ -586,7 +595,7 @@ async function boot(): Promise<void> {
         message: "Translation activation failed",
         service: "runtime"
       });
-      sendResponse({ ok: false, message: payload.message, error: payload } satisfies TranslateActivationResponse);
+      sendResponse({ ok: false, message: payload.message, error: payload } satisfies TranslationControlResponse);
     });
     return true;
   };
@@ -1021,4 +1030,18 @@ function isTranslateActivationMessage(value: unknown): value is { type: "glossa.
     && value.type === "glossa.activateTranslation";
 }
 
-type TranslateActivationResponse = { ok: true } | { ok: false; message: string; error?: ErrorPayload };
+function isTranslationStateMessage(value: unknown): value is { type: "glossa.getTranslationState" } {
+  return typeof value === "object"
+    && value !== null
+    && "type" in value
+    && value.type === "glossa.getTranslationState";
+}
+
+function isTranslationToggleMessage(value: unknown): value is { type: "glossa.toggleTranslation" } {
+  return typeof value === "object"
+    && value !== null
+    && "type" in value
+    && value.type === "glossa.toggleTranslation";
+}
+
+type TranslationControlResponse = { ok: true; enabled: boolean } | { ok: false; message: string; error?: ErrorPayload };
