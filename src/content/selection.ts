@@ -1,4 +1,3 @@
-// @behavior glossa.page_translation.shortcut_selection Holding the configured shortcut freezes page interaction and lets clicking an English page word select that clicked word and its surrounding text for card creation.
 import { normalizeLemma } from "../core/state";
 import { isShortcutRelease, matchesShortcut } from "../shared/shortcut";
 import type { TokenCandidate } from "../shared/types";
@@ -52,15 +51,12 @@ export function createSelectionController(options: SelectionControllerOptions): 
       consumeEvent(event);
       return;
     }
-    // @behavior glossa.page_translation.shortcut_selection.freeze_keys Shortcut key press and release events are consumed while shortcut selection mode is active.
     if (active) {
-      // @behavior glossa.page_translation.shortcut_selection.strict_key_hold A keydown outside the configured shortcut exits selection mode so page-owned chorded shortcuts stay with the page.
       setActive(false);
     }
   };
   const onKeyUp = (event: KeyboardEvent) => {
     if (active && isShortcutRelease(event, options.shortcutKey)) {
-      // @behavior glossa.page_translation.shortcut_selection.chord_modifier_release Releasing any key in a configured selection chord exits selection mode so page input is not frozen after a partial chord release.
       setActive(false);
       consumeEvent(event);
       return;
@@ -74,7 +70,6 @@ export function createSelectionController(options: SelectionControllerOptions): 
       return;
     }
     const element = event.target instanceof Element ? event.target : null;
-    // @behavior glossa.page_translation.shortcut_selection.duplicate_prompt_controls Duplicate-card prompt controls receive clicks during shortcut selection mode.
     if (isDuplicatePromptControl(element)) {
       return;
     }
@@ -100,17 +95,14 @@ export function createSelectionController(options: SelectionControllerOptions): 
     if (isDuplicatePromptControl(element)) {
       return;
     }
-    // @behavior glossa.page_translation.shortcut_selection.freeze_pointer Pointer preparation events are consumed while shortcut selection mode is active so page controls cannot act before the word click is selected.
     consumeEvent(event);
   };
   const onPageScroll = (event: Event) => {
     if (!active) {
       return;
     }
-    // @behavior glossa.page_translation.shortcut_selection.freeze_scroll Wheel and touch scrolling are consumed while shortcut selection mode is active.
     consumeEvent(event);
   };
-  // @constraint glossa.page_translation.shortcut_selection.freeze_scroll.lifecycle Scroll-blocking listeners are registered only while shortcut selection mode is active.
   function attachScrollBlockers(): void {
     if (scrollBlockersAttached) {
       return;
@@ -131,7 +123,6 @@ export function createSelectionController(options: SelectionControllerOptions): 
     if (!active) {
       return;
     }
-    // @behavior glossa.page_translation.shortcut_selection.focus_loss Window or document focus loss exits selection mode because OS-level shortcuts can hide key releases from the page.
     setActive(false);
   };
 
@@ -277,7 +268,6 @@ function textPointFromCoordinates(doc: Document, x: number, y: number): { node: 
   return undefined;
 }
 
-// @behavior glossa.page_translation.shortcut_selection.word_boundary Plain-text click selection accepts English word offsets and requires rendered text geometry when the browser returns a word-end offset.
 function wordAtClickPoint(node: Text, offset: number, x: number, y: number): RegExpMatchArray | undefined {
   const text = node.nodeValue ?? "";
   for (const match of text.matchAll(/[A-Za-z][A-Za-z'-]*/g)) {

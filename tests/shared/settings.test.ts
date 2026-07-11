@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import { mergeStoredSettings, settingsOverrides } from "../../src/shared/settings";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
-// @verifies glossa.settings_save.default_overrides.merge
-// @verifies glossa.settings_save.default_overrides.write_filter
 describe("settings default overrides", () => {
   it("merges stored overrides with current defaults", () => {
     const merged = mergeStoredSettings({ anki: { deck: "Research" }, glossCacheTtlMs: 48 * 60 * 60 * 1_000 });

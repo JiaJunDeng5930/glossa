@@ -1,4 +1,3 @@
-// @behavior glossa.failure_reporting Provider, request, and runtime failures become diagnostic payloads with stable reasons.
 import type { ErrorPayload, ErrorReason, ErrorService } from "./types";
 
 export class GlossaDiagnosticError extends Error {

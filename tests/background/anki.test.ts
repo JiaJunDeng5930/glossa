@@ -4,12 +4,6 @@ import { createAnkiClient } from "../../src/background/anki";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
 describe("AnkiConnect adapter diagnostics", () => {
-  // @verifies glossa.card_creation.note_request
-  // @verifies glossa.card_creation.note_request.fields
-  // @verifies glossa.card_creation.note_request.tags
-  // @verifies glossa.card_creation.note_request.payload
-  // @verifies glossa.card_creation.note_request.http_call
-  // @verifies glossa.card_creation.note_request.timeout_cleanup
   it("uses the configured Anki model when creating notes", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ result: 42, error: null }));
     const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
@@ -35,7 +29,6 @@ describe("AnkiConnect adapter diagnostics", () => {
     clearTimeoutSpy.mockRestore();
   });
 
-  // @verifies glossa.card_creation.failure.request_error
   it("classifies unavailable AnkiConnect as a network diagnostic error", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError("fetch failed");
@@ -46,7 +39,6 @@ describe("AnkiConnect adapter diagnostics", () => {
     });
   });
 
-  // @verifies glossa.card_creation.failure.service_error
   it("classifies AnkiConnect service errors as service diagnostics", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ result: null, error: "deck missing" }));
 
@@ -55,7 +47,6 @@ describe("AnkiConnect adapter diagnostics", () => {
     });
   });
 
-  // @verifies glossa.card_creation.failure.invalid_response
   it("classifies malformed AnkiConnect JSON as an invalid response diagnostic", async () => {
     const fetchImpl = vi.fn(async () => new Response("{", {
       status: 200,
@@ -67,7 +58,6 @@ describe("AnkiConnect adapter diagnostics", () => {
     });
   });
 
-  // @verifies glossa.card_creation.failure.http_status
   it("classifies AnkiConnect HTTP failures as service diagnostics with status", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "offline" }, 503));
 
@@ -76,7 +66,6 @@ describe("AnkiConnect adapter diagnostics", () => {
     });
   });
 
-  // @verifies glossa.card_creation.note_request.timeout
   it("aborts slow AnkiConnect note requests after the timeout", async () => {
     vi.useFakeTimers();
     try {
@@ -99,8 +88,6 @@ describe("AnkiConnect adapter diagnostics", () => {
     }
   });
 
-  // @verifies glossa.card_creation.note_request.timeout
-  // @verifies glossa.card_creation.note_request.timeout.setting
   it("uses the configured Anki request timeout", async () => {
     vi.useFakeTimers();
     try {

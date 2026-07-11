@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { KNOWN_WORD_LISTS, createKnownWordSet } from "../../src/core/lexicon";
 
-// @verifies glossa.word_memory.known_word_filter
 describe("known-word lists", () => {
   it("exposes curriculum, exam and frequency filters", () => {
     expect(KNOWN_WORD_LISTS.map((list) => list.id)).toEqual([

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { scanDocumentTextInChunks, type ScanChunk, type ScanChunkOptions, type ScanStats } from "../../src/content/scanner";
 
-// @verifies glossa.page_translation.candidate_scan
 describe("content scanner", () => {
   it("extracts English word candidates with sentence context and skips inert text", async () => {
     document.body.innerHTML = `
@@ -121,7 +120,6 @@ describe("content scanner", () => {
     }
   });
 
-  // @verifies glossa.page_translation.candidate_scan.overflow_clip
   it("clips viewport token eligibility through overflow ancestors", async () => {
     document.body.innerHTML = `
       <main>
@@ -172,7 +170,6 @@ describe("content scanner", () => {
     }
   });
 
-  // @verifies glossa.page_translation.candidate_scan.overflow_clip.shadow_host
   it("clips shadow-root token eligibility through overflow ancestors outside the host", async () => {
     document.body.innerHTML = `
       <main>

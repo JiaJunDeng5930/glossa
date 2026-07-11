@@ -9,17 +9,10 @@
     "e2e:bootstrap": "playwright install chromium",
     "preview:ui": "node scripts/serve-ui-preview.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:unit && npm run test:requirements",
-    "test:unit": "vitest run --exclude 'tests/requirements/**'",
-    "test:requirements": "vitest run tests/requirements/tool.test.ts --testTimeout=120000 && vitest run tests/requirements/anchoring-regressions.test.ts tests/requirements/source-snapshot-regressions.test.ts tests/requirements/full-source-regressions.test.ts --testTimeout=120000",
+    "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/check-playwright-chromium.mjs && playwright test",
-    "verify": "npm run req:check:all && npm run typecheck && npm run test && npm run build && npm run test:e2e",
-    "req:scan": "node scripts/run-requirements.mjs scan",
-    "req:fmt-agents": "node scripts/run-requirements.mjs fmt-agents",
-    "req:check:staged": "node scripts/run-requirements.mjs check --staged",
-    "req:check:all": "node scripts/run-requirements.mjs check --all",
-    "req:check": "node scripts/run-requirements.mjs check",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e",
     "prepare": "node scripts/install-hooks.mjs"
   },
   "devDependencies": {
@@ -28,7 +21,6 @@
     "@types/node": "^22.15.3",
     "esbuild": "^0.25.3",
     "jsdom": "^26.1.0",
-    "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"
   },

@@ -16,13 +16,6 @@ async function visibleStepCount(page: Page): Promise<number> {
   return await page.locator("[data-step]:not([hidden])").count();
 }
 
-// @verifies glossa.onboarding
-// @verifies glossa.onboarding.single_topic
-// @verifies glossa.onboarding.step_focus
-// @verifies glossa.onboarding.settings_save
-// @verifies glossa.onboarding.ai_check
-// @verifies glossa.onboarding.anki_check
-// @verifies glossa.onboarding.submit_safety
 test("onboarding keeps one visible topic per page and saves setup choices", async ({ page }) => {
   await loadOnboarding(page);
   await page.evaluate(() => {
@@ -126,7 +119,6 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
   await expect(page.locator("#refresh-anki")).toHaveAttribute("data-state", "idle");
   await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__ankiRequests") as unknown[]).length)).toBe(0);
-  // @verifies glossa.onboarding.anki_refresh.explicit_request
   await expect(page.locator("select[name=ankiDeck]")).toBeDisabled();
   await page.locator("input[name=ankiEndpoint]").fill("http://127.0.0.1:8766");
   await page.locator("#refresh-anki").click();
@@ -171,7 +163,6 @@ test("onboarding keeps one visible topic per page and saves setup choices", asyn
   await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__onboardingClosed"))).toBe(true);
 });
 
-// @verifies glossa.onboarding.step_advance_serialization
 test("onboarding serializes continue clicks during pending step saves", async ({ page }) => {
   await loadOnboarding(page);
   await page.evaluate(() => {

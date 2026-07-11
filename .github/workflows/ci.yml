@@ -17,10 +17,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            npm run req:check -- --base "origin/${{ github.base_ref }}"
-          else
-            npm run req:check
-          fi
       - run: npm run verify

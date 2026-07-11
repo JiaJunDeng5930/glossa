@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSelectionController } from "../../src/content/selection";
 
-// @verifies glossa.page_translation.shortcut_selection
 describe("selection controller", () => {
   afterEach(() => {
     Reflect.deleteProperty(document, "caretPositionFromPoint");
@@ -42,7 +41,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.freeze_pointer
   it("freezes page pointer preparation while preserving click selection for button text", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;
@@ -76,8 +74,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.freeze_scroll
-  // @verifies glossa.page_translation.shortcut_selection.freeze_keys
   it("freezes wheel, touch, and shortcut key events while the shortcut is held", () => {
     document.body.innerHTML = `<main id="page">Readable content</main>`;
     const page = document.querySelector<HTMLElement>("#page")!;
@@ -116,7 +112,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.freeze_scroll.lifecycle
   it("attaches scroll blockers only while selection mode is active", () => {
     const addSpy = vi.spyOn(document, "addEventListener");
     const removeSpy = vi.spyOn(document, "removeEventListener");
@@ -143,7 +138,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.strict_key_hold
   it("leaves selection mode when another key joins a modifier-only shortcut", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;
@@ -178,7 +172,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.focus_loss
   it("leaves selection mode when the page loses focus during a shortcut hold", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;
@@ -266,7 +259,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.chord_modifier_release
   it("leaves combination selection when a chord modifier is released", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;
@@ -315,7 +307,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.word_boundary
   it("ignores plain-text clicks that resolve at a word end boundary", () => {
     document.body.innerHTML = `<p id="target">Save  draft</p>`;
     const target = document.querySelector<HTMLParagraphElement>("#target")!;
@@ -357,7 +348,6 @@ describe("selection controller", () => {
     controller.detach();
   });
 
-  // @verifies glossa.page_translation.shortcut_selection.duplicate_prompt_controls
   it("lets duplicate prompt controls receive clicks while the shortcut is held", () => {
     document.body.innerHTML = `<div data-glossa-owned="1" data-glossa-duplicate-card-prompt="1"><button id="confirm">Confirm</button></div>`;
     const button = document.querySelector<HTMLButtonElement>("#confirm")!;

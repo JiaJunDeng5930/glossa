@@ -1,8 +1,5 @@
-// @constraint glossa.cache_identity Repeated translation and card requests use stable cache identity for equivalent inputs.
-// @constraint glossa.cache_identity.request_parts Gloss cache identity uses language, sentence text, and token position while card cache identity also uses the card prompt version.
 import { hashText } from "../shared/hash";
 
-// @constraint glossa.cache_identity.request_parts.gloss_key_fields Gloss cache key input exposes target language, sentence text, token text, and token span.
 export interface GlossCacheKeyInput {
   targetLang: string;
   sentence: string;

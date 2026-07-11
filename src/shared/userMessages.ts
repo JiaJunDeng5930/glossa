@@ -1,4 +1,3 @@
-// @behavior glossa.failure_reporting.user_copy Diagnostic payloads shown to users become stable Chinese UI messages.
 import type { ErrorPayload, ErrorService } from "./types";
 
 export function userMessageForError(error: ErrorPayload | undefined, fallbackService: ErrorService): string {

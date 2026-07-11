@@ -1,4 +1,3 @@
-// @behavior glossa.extension_contracts.restart_continuity The service worker continues answering runtime messages and gloss-port scans with storage-backed results after restart.
 import { createAnkiClient } from "./anki";
 import { createAiBackend } from "./ai";
 import { createGlossResolver } from "./glossResolver";
@@ -20,7 +19,6 @@ const handleMessage = createBackgroundMessageHandler({
   anki
 });
 
-// @behavior glossa.onboarding.install_open.listener The service worker registers the onboarding install hook during background startup.
 chrome.runtime.onInstalled.addListener(openOnboardingAfterInstall);
 
 chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse) => {
@@ -38,7 +36,6 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
       result: "ok"
     });
     if (message.type === "gloss.cache.clear") {
-      // @behavior glossa.settings_save.clear_gloss_cache.background_request The service worker clears the persisted translation cache for options-page clear requests.
       await storage.glossCache.clear();
       sendResponse(createBackgroundResponse(message, "gloss.cache.cleared", {}));
       return;
@@ -146,7 +143,6 @@ chrome.runtime.onConnect.addListener((port) => {
       }
     })().catch((error) => {
       const scanId = scanIdFrom(rawMessage);
-      // @constraint glossa.page_translation.gloss_session_error Gloss session failures emit a diagnostic trace and a gloss error payload for the active scan.
       trace({
         component: "service-worker",
         operation: "gloss.session",

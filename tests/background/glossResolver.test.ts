@@ -5,9 +5,6 @@ import { createGlossResolver } from "../../src/background/glossResolver";
 import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossCacheEntry, type GlossTokenPayload, type SentenceCandidate, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
-// @verifies glossa.page_translation.lookup_order
-// @verifies glossa.cache_identity.gloss_cache_entry
-// @verifies glossa.cache_identity.text_hash
 describe("gloss resolver lookup-first pipeline", () => {
   it("emits hidden, ready, pending and AI ready outcomes in lookup order", async () => {
     const storage = createMemoryStorage();
@@ -399,7 +396,6 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
-  // @verifies glossa.ai_requests.failure.timeout.live_grouping
   it("splits in-flight AI reuse by timeout for the same cache entry", async () => {
     const storage = createMemoryStorage();
     const shortTimeoutSettings: GlossaSettings = {
@@ -627,7 +623,6 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
-  // @verifies glossa.page_translation.lookup_order.chunk_error_trace
   it("shares in-flight AI failures with duplicate lookups", async () => {
     const storage = createMemoryStorage();
     const settings = testSettings();

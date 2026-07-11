@@ -8,7 +8,6 @@ async function loadPopup(page: Page): Promise<void> {
   await page.addStyleTag({ path: resolve("dist/assets/popup.css") });
 }
 
-// @verifies glossa.translation_start_popup
 test("popup translate button activates the current tab", async ({ page }) => {
   await loadPopup(page);
   await expect.poll(async () => page.evaluate(() => document.body.getBoundingClientRect().width)).toBe(300);
@@ -44,7 +43,6 @@ test("popup translate button activates the current tab", async ({ page }) => {
   }]);
 });
 
-// @verifies glossa.translation_start_popup.shortcut_hint
 test("popup shortcut hint reflects the saved translation shortcut", async ({ page }) => {
   await loadPopup(page);
   await page.evaluate(() => {
@@ -80,7 +78,6 @@ test("popup shortcut hint reflects the saved translation shortcut", async ({ pag
   await expect(page.locator("#translate-shortcut-hint kbd")).toHaveText(["Ctrl", "Shift", "K"]);
 });
 
-// @verifies glossa.translation_start_popup
 test("popup translate button reports structured activation errors", async ({ page }) => {
   await loadPopup(page);
   await page.evaluate(() => {
@@ -113,7 +110,6 @@ test("popup translate button reports structured activation errors", async ({ pag
   await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__glossaPopupClosed"))).toBeFalsy();
 });
 
-// @verifies glossa.translation_start_popup
 test("popup translate button reports malformed activation responses", async ({ page }) => {
   await loadPopup(page);
   await page.evaluate(() => {

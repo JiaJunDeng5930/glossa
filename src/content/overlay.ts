@@ -1,4 +1,3 @@
-// @behavior glossa.page_translation.inline_rendering Ready, pending, hidden, and error gloss outcomes keep the source word on its original text baseline.
 import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossTokenPayload } from "../shared/types";
 import GLOSSA_THEME from "../shared/theme.json";
 import { userMessageForError } from "../shared/userMessages";
@@ -21,7 +20,6 @@ export interface RenderSummary {
   reason?: "missing-token" | "stale-token" | "stale-scan" | "detached-node" | "changed-text" | "invisible-range" | "overlap";
 }
 
-// @behavior glossa.card_creation.duplicate_gate.feedback_state Card feedback includes a cancellation state that clears duplicate-card pending UI.
 export type CardFeedback = "card-pending" | "card-success" | "card-error" | "card-cancelled";
 
 export interface CardFeedbackInput {
@@ -51,7 +49,6 @@ interface TextSegment {
 
 const STYLE_ID = "glossa-inline-style";
 const FINGERPRINT_CONTEXT_CHARS = 16;
-// @constraint glossa.page_translation.inline_rendering.label_measurement Visible inline labels and hidden width probes share one font weight so reserved text flow matches rendered badge width.
 const INLINE_LABEL_FONT_WEIGHT = 750;
 
 export function createGlossOverlay(doc: Document, appearance: AppearanceSettings = DEFAULT_SETTINGS.appearance): GlossOverlay {
@@ -63,7 +60,6 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
   applyAppearance(host, appearance);
   const shadow = host.attachShadow({ mode: "open" });
   const style = doc.createElement("style");
-  // @constraint glossa.page_translation.shortcut_selection.selection_note Selection mode displays an extension-owned note while the shortcut selection host state is active.
   style.textContent = `
     :host {
       all: initial;
@@ -109,7 +105,6 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       transform: translateY(0);
     }
   `;
-  // @constraint glossa.page_translation.shortcut_selection.reduced_motion Selection mode removes veil and note transitions when the page requests reduced motion.
   style.textContent += `
     @media (prefers-reduced-motion: reduce) {
       .selection-veil,
@@ -158,7 +153,6 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     inlineStyle.id = STYLE_ID;
     inlineStyle.dataset.glossaOwned = "1";
     inlineStyle.setAttribute("translate", "no");
-    // @constraint glossa.page_translation.inline_rendering.label_accessibility Inline gloss labels remain non-interactive and honor reduced-motion preferences during their entrance effect.
     inlineStyle.textContent = `
       [data-glossa-token] {
         display: inline-block;
@@ -387,7 +381,6 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       pruneDisconnectedNodes();
       const existing = findRenderedToken(input.tokenId);
       if (existing) {
-        // @behavior glossa.card_creation.duplicate_gate.feedback_clear Cancelling duplicate card creation restores the wrapper display instead of showing a failure badge.
         if (input.feedback === "card-cancelled") {
           clearCardFeedback(existing);
           return { result: "updated" };
@@ -400,7 +393,6 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       if (!input.token) {
         return { result: "skipped", reason: "missing-token" };
       }
-      // @behavior glossa.card_creation.duplicate_gate.feedback_skip Cancellation feedback without a rendered wrapper is ignored.
       if (input.feedback === "card-cancelled") {
         return { result: "skipped", reason: "missing-token" };
       }
@@ -587,7 +579,6 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     displayKind: BadgeDisplayKind = "gloss",
     userMessage?: string
   ): void {
-    // @behavior glossa.card_creation.note_request.feedback_display Inline card feedback preserves translated gloss text when success or error only changes the wrapper background.
     const nextFeedback = feedback ?? readFeedback(node);
     const nextKind = visibleDisplayKind(displayKind, nextFeedback);
     const nextDisplay = visibleDisplay(display, displayKind, nextFeedback);
@@ -642,7 +633,6 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
 
   function readFeedback(node: HTMLElement): CardFeedback | undefined {
     const feedback = node.dataset.glossaFeedback;
-    // @constraint glossa.card_creation.duplicate_gate.feedback_dataset_state Cancellation is a transient input and is not persisted in token dataset feedback.
     return feedback === "card-pending" || feedback === "card-success" || feedback === "card-error" ? feedback : undefined;
   }
 
@@ -841,7 +831,6 @@ function applyAppearance(host: HTMLElement, appearance: AppearanceSettings): voi
   host.style.setProperty("--glossa-font-size", `${appearance.fontSize ?? DEFAULT_SETTINGS.appearance.fontSize}px`);
 }
 
-// @behavior glossa.card_creation.note_request.feedback_badge Manual card feedback uses loading, success, and error badges when no gloss text exists.
 function feedbackFallback(feedback: Exclude<CardFeedback, "card-cancelled">): string {
   if (feedback === "card-pending") {
     return "...";

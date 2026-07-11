@@ -1,4 +1,3 @@
-// @behavior glossa.shortcuts Keyboard events match stored shortcut definitions through normalized key combinations.
 const MODIFIER_LABELS = {
   Control: "Ctrl",
   Alt: "Alt",

@@ -7,7 +7,6 @@ import {
   transitionExpiredLearning
 } from "../../src/core/state";
 
-// @verifies glossa.word_memory.learning_lifecycle
 describe("vocabulary state machine", () => {
   it("moves shown candidates into the known state", () => {
     const now = Date.parse("2026-05-03T00:00:00.000Z");
