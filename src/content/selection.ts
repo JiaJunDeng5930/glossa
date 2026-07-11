@@ -1,6 +1,7 @@
 import { normalizeLemma } from "../core/state";
 import { isShortcutRelease, matchesShortcut } from "../shared/shortcut";
 import type { TokenCandidate } from "../shared/types";
+import { createSentenceContextResolver } from "./context";
 import { createSourceFingerprint, type ScannedToken } from "./scanner";
 
 export interface WordSelection {
@@ -45,6 +46,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
     options.onSelectionModeChange?.(active);
   };
 
+  // A held shortcut owns pointer input; any second key exits the hold so page and extension chords resolve normally.
   const onKeyDown = (event: KeyboardEvent) => {
     if (matchesShortcut(event, options.shortcutKey)) {
       setActive(true);
@@ -184,24 +186,28 @@ function selectionFromClick(element: Element, event: MouseEvent): WordSelection 
     return undefined;
   }
   const surface = match[0];
-  const startOffset = match.index ?? 0;
-  const endOffset = startOffset + surface.length;
+  const nodeStartOffset = match.index ?? 0;
+  const nodeEndOffset = nodeStartOffset + surface.length;
+  const context = createSentenceContextResolver()(textPoint.node, nodeStartOffset, nodeEndOffset);
+  if (!context) {
+    return undefined;
+  }
   const lemma = normalizeLemma(surface);
-  const sourceFingerprint = createSourceFingerprint(textPoint.node.nodeValue ?? "", startOffset, endOffset);
+  const sourceFingerprint = createSourceFingerprint(textPoint.node.nodeValue ?? "", nodeStartOffset, nodeEndOffset);
   const token: TokenCandidate = {
     id: `manual:${lemma}:${sourceFingerprint}`,
     sentenceId: "manual",
     surface,
     lemma,
-    startOffset,
-    endOffset
+    startOffset: context.startOffset,
+    endOffset: context.endOffset
   };
   const renderToken: ScannedToken = {
     ...token,
     textNode: textPoint.node,
-    nodeStartOffset: startOffset,
-    nodeEndOffset: endOffset,
-    sentenceText: textPoint.sentence,
+    nodeStartOffset,
+    nodeEndOffset,
+    sentenceText: context.text,
     sourceText: surface,
     sourceFingerprint,
     scanVersion: 0
@@ -211,15 +217,15 @@ function selectionFromClick(element: Element, event: MouseEvent): WordSelection 
     lemma,
     token,
     renderToken,
-    sentence: textPoint.sentence
+    sentence: context.text
   };
 }
 
 function selectionFromRenderedToken(element: HTMLElement): WordSelection | undefined {
   const surface = element.dataset.glossaSurface ?? element.textContent?.trim() ?? "";
   const lemma = element.dataset.glossaLemma ?? normalizeLemma(surface);
-  const startOffset = Number(element.dataset.glossaOriginalStart ?? 0);
-  const endOffset = Number(element.dataset.glossaOriginalEnd ?? startOffset + surface.length);
+  const startOffset = Number(element.dataset.glossaSentenceStart ?? element.dataset.glossaOriginalStart ?? 0);
+  const endOffset = Number(element.dataset.glossaSentenceEnd ?? element.dataset.glossaOriginalEnd ?? startOffset + surface.length);
   if (!surface || !lemma || !Number.isFinite(startOffset) || !Number.isFinite(endOffset)) {
     return undefined;
   }
@@ -235,21 +241,17 @@ function selectionFromRenderedToken(element: HTMLElement): WordSelection | undef
     surface,
     lemma,
     token,
-    sentence: element.parentElement?.textContent?.trim() || surface
+    sentence: element.dataset.glossaSentence || surface
   };
 }
 
-function textPointFromClick(element: Element, event: MouseEvent): { node: Text; offset: number; sentence: string } | undefined {
+function textPointFromClick(element: Element, event: MouseEvent): { node: Text; offset: number } | undefined {
   const doc = element.ownerDocument;
   const fromPoint = textPointFromCoordinates(doc, event.clientX, event.clientY);
   if (!fromPoint?.node || !element.contains(fromPoint.node)) {
     return undefined;
   }
-  return {
-    node: fromPoint.node,
-    offset: fromPoint.offset,
-    sentence: element.textContent?.trim() || fromPoint.node.nodeValue?.trim() || ""
-  };
+  return fromPoint;
 }
 
 function textPointFromCoordinates(doc: Document, x: number, y: number): { node: Text; offset: number } | undefined {

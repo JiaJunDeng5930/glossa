@@ -31,6 +31,25 @@ describe("content scanner", () => {
     expect(result.stats.rejectedBySubtree).toBeGreaterThan(0);
   });
 
+  it("keeps one sentence context across inline markup", async () => {
+    document.body.innerHTML = "<main><p>A <em>quizzical</em> bank appears in a complicated context.</p></main>";
+
+    const result = await scanDocumentText(document, new Set());
+    const quizzical = result.tokens.find((token) => token.surface === "quizzical");
+    const bank = result.tokens.find((token) => token.surface === "bank");
+
+    expect(quizzical).toMatchObject({
+      sentenceText: "A quizzical bank appears in a complicated context.",
+      startOffset: 2,
+      endOffset: 11
+    });
+    expect(bank).toMatchObject({
+      sentenceText: "A quizzical bank appears in a complicated context.",
+      startOffset: 12,
+      endOffset: 16
+    });
+  });
+
   it("skips hidden, editable, code, no-translate and extension-owned text", async () => {
     document.body.innerHTML = `
       <main>

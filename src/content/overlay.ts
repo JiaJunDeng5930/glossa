@@ -180,12 +180,20 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         font-size: var(--glossa-font-size);
         font-weight: ${INLINE_LABEL_FONT_WEIGHT};
         line-height: 1.15;
+        box-sizing: border-box;
+        max-width: min(10em, 40vw);
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
         box-shadow: 0 1px 2px rgba(23, 24, 20, 0.12);
         pointer-events: none;
         transform: translateX(-50%);
         transform-origin: 50% 100%;
         animation: glossa-label-enter 180ms cubic-bezier(0.2, 0.72, 0.2, 1) both;
+      }
+      [data-glossa-token-label]::before,
+      [data-glossa-token-width]::before {
+        content: attr(data-glossa-visual);
       }
       [data-glossa-token][data-glossa-status="pending"] [data-glossa-token-label] {
         min-width: 2.1em;
@@ -261,6 +269,8 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         font-size: var(--glossa-font-size);
         font-weight: ${INLINE_LABEL_FONT_WEIGHT};
         line-height: 1.15;
+        box-sizing: border-box;
+        max-width: min(10em, 40vw);
         white-space: nowrap;
       }
       @keyframes glossa-label-enter {
@@ -533,6 +543,9 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     wrapper.dataset.glossaLemma = candidate.token.lemma;
     wrapper.dataset.glossaOriginalStart = String(candidate.token.nodeStartOffset);
     wrapper.dataset.glossaOriginalEnd = String(candidate.token.nodeEndOffset);
+    wrapper.dataset.glossaSentence = candidate.token.sentenceText;
+    wrapper.dataset.glossaSentenceStart = String(candidate.token.startOffset);
+    wrapper.dataset.glossaSentenceEnd = String(candidate.token.endOffset);
     const text = candidate.token.textNode.nodeValue ?? "";
     wrapper.dataset.glossaContextBefore = text.slice(
       Math.max(0, candidate.token.nodeStartOffset - FINGERPRINT_CONTEXT_CHARS),
@@ -551,14 +564,14 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     label.dataset.glossaOwned = "1";
     label.dataset.glossaTokenLabel = candidate.token.id;
     label.dataset.glossaLabel = candidate.token.id;
+    label.dataset.glossaVisual = candidate.display;
     label.setAttribute("translate", "no");
-    label.textContent = candidate.display;
 
     const width = doc.createElement("span");
     width.dataset.glossaOwned = "1";
     width.dataset.glossaTokenWidth = candidate.token.id;
+    width.dataset.glossaVisual = candidate.display;
     width.setAttribute("translate", "no");
-    width.textContent = candidate.display;
 
     const surface = doc.createElement("span");
     surface.dataset.glossaOwned = "1";
@@ -597,10 +610,10 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     const label = node.querySelector<HTMLElement>("[data-glossa-token-label]");
     const width = node.querySelector<HTMLElement>("[data-glossa-token-width]");
     if (label) {
-      label.textContent = nextDisplay;
+      label.dataset.glossaVisual = nextDisplay;
     }
     if (width) {
-      width.textContent = nextDisplay;
+      width.dataset.glossaVisual = nextDisplay;
     }
     node.dataset.glossaDisplay = nextDisplay;
     node.dataset.glossaDisplayKind = nextKind;
@@ -657,10 +670,10 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       const label = node.querySelector<HTMLElement>("[data-glossa-token-label]");
       const width = node.querySelector<HTMLElement>("[data-glossa-token-width]");
       if (label) {
-        label.textContent = glossDisplay;
+        label.dataset.glossaVisual = glossDisplay;
       }
       if (width) {
-        width.textContent = glossDisplay;
+        width.dataset.glossaVisual = glossDisplay;
       }
       node.dataset.glossaDisplay = glossDisplay;
       node.dataset.glossaDisplayKind = "gloss";

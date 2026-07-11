@@ -41,6 +41,24 @@ describe("selection controller", () => {
     controller.detach();
   });
 
+  it("uses the complete sentence when a clicked word sits inside inline markup", () => {
+    document.body.innerHTML = `<p>A <em id="target">quizzical</em> bank appears in a complicated context.</p>`;
+    const target = document.querySelector<HTMLElement>("#target")!;
+    const onWordSelected = vi.fn();
+    installCaretPosition(target.firstChild as Text, 2);
+    const controller = createSelectionController({ document, shortcutKey: "Alt", onWordSelected });
+    controller.attach();
+
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    controller.detach();
+
+    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({
+      sentence: "A quizzical bank appears in a complicated context.",
+      token: expect.objectContaining({ startOffset: 2, endOffset: 11 })
+    }));
+  });
+
   it("freezes page pointer preparation while preserving click selection for button text", () => {
     document.body.innerHTML = `<button id="save">Save draft</button>`;
     const button = document.querySelector<HTMLButtonElement>("#save")!;
@@ -212,6 +230,7 @@ describe("selection controller", () => {
           data-glossa-lemma="submit"
           data-glossa-original-start="0"
           data-glossa-original-end="6"
+          data-glossa-sentence="A submit button finishes the form."
         >
           <span data-glossa-token-label="t-submit">提交</span>
           <span data-glossa-token-surface="t-submit">Submit</span>
@@ -228,13 +247,13 @@ describe("selection controller", () => {
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
     document.querySelector("[data-glossa-token-surface]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    controller.detach();
 
     expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({
-      token: expect.objectContaining({ id: "t-submit", lemma: "submit", surface: "Submit" })
+      token: expect.objectContaining({ id: "t-submit", lemma: "submit", surface: "Submit" }),
+      sentence: "A submit button finishes the form."
     }));
     expect(onWordSelected.mock.calls[0]?.[0].renderToken).toBeUndefined();
-
-    controller.detach();
   });
 
   it("supports captured shortcut combinations", () => {

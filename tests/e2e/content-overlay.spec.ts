@@ -36,7 +36,7 @@ test("content bundle waits for manual activation before requesting glosses", asy
     });
   });
 
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "手动");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "手动");
   expect(await sentMessageTypes(page)).toContain("gloss.scan.chunk");
 });
 
@@ -67,7 +67,7 @@ test("content bundle toggles page translation with the configured shortcut", asy
 
   await pressTranslationShortcut(page);
 
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "快捷");
   expect(await sentMessageTypes(page)).toContain("gloss.scan.chunk");
 
   const scanCount = (await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk").length;
@@ -87,7 +87,7 @@ test("content bundle toggles page translation with the configured shortcut", asy
 
   await pressTranslationShortcut(page);
 
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "快捷");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "快捷");
   expect((await sentMessageTypes(page)).filter((type) => type === "gloss.scan.chunk").length).toBe(scanCount + 1);
 });
 
@@ -114,7 +114,7 @@ test("content bundle keeps plugin shortcut chords while exiting selection mode",
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "??");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "??");
   expect(await page.locator("#glossa-overlay").evaluate((host) => {
     const veil = host.shadowRoot!.querySelector<HTMLElement>(".selection-veil")!;
     const note = host.shadowRoot!.querySelector<HTMLElement>(".selection-note")!;
@@ -160,7 +160,7 @@ test("content bundle drops pending shortcut glosses after translation is toggled
   await page.waitForTimeout(300);
 
   await pressTranslationShortcut(page);
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...");
 
   await pressTranslationShortcut(page);
   await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
@@ -224,6 +224,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
     const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
     return sent.some((message) => message.type === "gloss.scan.chunk");
   });
+  await expect(page.locator("main p")).toHaveText("Press the submit button to finish.");
   await page.keyboard.down("Alt");
   await expect(page.locator("#glossa-overlay")).toHaveAttribute("data-glossa-selecting", "true");
   await clickWord(page, "#save", "Save");
@@ -239,7 +240,7 @@ test("content bundle renders inline glosses and captures shortcut word selection
   await page.waitForFunction(() => {
     return Array.from(document.querySelectorAll<HTMLElement>("[data-glossa-token]")).some((node) => {
       return node.dataset.glossaFeedback === "card-success"
-        && node.querySelector("[data-glossa-token-label]")?.textContent === "✓";
+        && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "✓";
     });
   });
 });
@@ -353,7 +354,7 @@ test("content bundle marks an existing gloss after confirmed card creation", asy
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "提交");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "提交");
 
   await page.keyboard.down("Alt");
   await page.locator("[data-glossa-token]").click();
@@ -362,7 +363,7 @@ test("content bundle marks an existing gloss after confirmed card creation", asy
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-success"
-      && node.querySelector("[data-glossa-token-label]")?.textContent === "提交";
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "提交";
   });
 });
 
@@ -419,7 +420,7 @@ test("content bundle marks card failures with the shared badge renderer", async 
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-error"
-      && node.querySelector("[data-glossa-token-label]")?.textContent === "×"
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "×"
       && node.title === "Anki 服务未启动或无法访问";
   });
   expect(await page.evaluate(() => {
@@ -448,7 +449,7 @@ test("content bundle marks card failures with the shared badge renderer", async 
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-success"
       && node.dataset.glossaDisplayKind === "feedback"
-      && node.querySelector("[data-glossa-token-label]")?.textContent === "✓";
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "✓";
   });
 });
 
@@ -525,7 +526,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-pending"
       && node.dataset.glossaDisplayKind === "feedback"
-      && node.querySelector("[data-glossa-token-label]")?.textContent === "...";
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...";
   });
 
   await page.evaluate(() => {
@@ -536,7 +537,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-success"
-      && node.querySelector("[data-glossa-token-label]")?.textContent === "✓";
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "✓";
   });
 });
 
@@ -796,7 +797,7 @@ test("content bundle keeps waiting for slow card creation Anki errors", async ({
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-error"
-      && node.querySelector("[data-glossa-token-label]")?.textContent === "×"
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "×"
       && node.title === "Anki 卡片模板不存在";
   }, undefined, { timeout: 10_000 });
 });
@@ -824,7 +825,7 @@ test("content bundle scans text added after boot", async ({ page }) => {
 
   await page.waitForFunction(() => {
     const host = document.querySelector("#glossa-overlay");
-    return document.querySelector("[data-glossa-token-label]")?.textContent === "动态" && host !== null;
+    return document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "动态" && host !== null;
   });
 });
 
@@ -859,13 +860,15 @@ test("content bundle scans only currently viewport-visible text and keeps render
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "奇特");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "奇特");
   expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).not.toContain("Obscure");
 
   await page.locator("#offscreen").scrollIntoViewIfNeeded();
   await page.waitForFunction(() => document.querySelectorAll("[data-glossa-token-label]").length >= 2);
 
-  const labels = await page.locator("[data-glossa-token-label]").allTextContents();
+  const labels = await page.locator("[data-glossa-token-label]").evaluateAll((nodes) => {
+    return nodes.map((node) => (node as HTMLElement).dataset.glossaVisual ?? "");
+  });
   expect(labels).toEqual(expect.arrayContaining(["奇特", "晦涩"]));
 });
 
@@ -902,7 +905,7 @@ test("content bundle rescans newly visible text inside overflow scrollers", asyn
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "奇特");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "奇特");
   expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).not.toContain("Obscure");
 
   await page.locator("#scroller").evaluate((element) => {
@@ -911,7 +914,7 @@ test("content bundle rescans newly visible text inside overflow scrollers", asyn
   });
   await page.waitForFunction(() => {
     return Array.from(document.querySelectorAll("[data-glossa-token-label]"))
-      .some((label) => label.textContent === "晦涩");
+      .some((label) => label.getAttribute("data-glossa-visual") === "晦涩");
   });
 
   expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).toContain("Obscure");
@@ -953,7 +956,7 @@ test("content bundle rescans newly visible text inside shadow-root overflow scro
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
   await page.waitForFunction(() => {
-    return document.querySelector("#host")?.shadowRoot?.querySelector("[data-glossa-token-label]")?.textContent === "奇特";
+    return document.querySelector("#host")?.shadowRoot?.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "奇特";
   });
   expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).not.toContain("Obscure");
 
@@ -968,7 +971,7 @@ test("content bundle rescans newly visible text inside shadow-root overflow scro
   await page.waitForFunction(() => {
     const labels = document.querySelector("#host")?.shadowRoot?.querySelectorAll("[data-glossa-token-label]") ?? [];
     return Array.from(labels)
-      .some((label) => label.textContent === "晦涩");
+      .some((label) => label.getAttribute("data-glossa-visual") === "晦涩");
   });
 
   expect(await page.evaluate(() => Reflect.get(window, "__glossaSeenSurfaces") as string[])).toContain("Obscure");
@@ -997,7 +1000,7 @@ test("content bundle replaces pending gloss spinners with ready labels", async (
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...");
   const pendingGeometry = await tokenGeometry(page);
   expect(pendingGeometry.label.bottom).toBeLessThanOrEqual(pendingGeometry.surface.top);
   expect(Math.abs(pendingGeometry.label.centerX - pendingGeometry.surface.centerX)).toBeLessThan(0.5);
@@ -1005,7 +1008,7 @@ test("content bundle replaces pending gloss spinners with ready labels", async (
   await page.evaluate(() => {
     (Reflect.get(window, "__resolvePendingGloss") as () => void)();
   });
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "等待");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "等待");
 });
 
 test("content bundle resolves pending glosses after external page mutations", async ({ page }) => {
@@ -1031,7 +1034,7 @@ test("content bundle resolves pending glosses after external page mutations", as
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...");
 
   await page.locator("#dynamic").evaluate((element) => {
     element.textContent = "A dynamic paragraph appears after boot.";
@@ -1044,7 +1047,7 @@ test("content bundle resolves pending glosses after external page mutations", as
     (Reflect.get(window, "__resolvePendingAfterMutation") as () => void)();
   });
 
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "等待");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "等待");
 });
 
 test("content bundle drops pending glosses after their source text is replaced", async ({ page }) => {
@@ -1070,7 +1073,7 @@ test("content bundle drops pending glosses after their source text is replaced",
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "...");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...");
 
   await page.locator("#target").evaluate((element) => {
     element.textContent = "Replacement archive appears here.";
@@ -1080,7 +1083,7 @@ test("content bundle drops pending glosses after their source text is replaced",
   });
 
   await page.waitForTimeout(300);
-  expect(await page.locator("[data-glossa-token-label]", { hasText: "等待" }).count()).toBe(0);
+  expect(await page.locator('[data-glossa-token-label][data-glossa-visual="等待"]').count()).toBe(0);
 });
 
 test("content bundle leaves hidden tokens as original page text", async ({ page }) => {
@@ -1333,6 +1336,7 @@ test("content bundle removes page and runtime listeners when content stops", asy
 });
 
 test("content bundle lays out inline glosses without label or source overlap", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
   await page.setContent("<main><p id=\"target\">Obscure archive archive terms appear here.</p></main>");
   await installChromeRuntime(page, {
     shortcutKey: "Alt",
@@ -1359,7 +1363,7 @@ test("content bundle lays out inline glosses without label or source overlap", a
           emit(glossToken(message.payload.scanId, token.id, "ready", {
             tokenId: token.id,
             targetText: token.surface,
-            display: index === 0 ? "极其晦涩的词" : "长期归档资料"
+            display: index === 0 ? "极其晦涩且非常冗长的模型输出需要保持在窄屏阅读区域以内" : "长期归档资料"
           }));
         });
       emit(glossDone(message.payload.scanId));
@@ -1415,6 +1419,7 @@ test("content bundle lays out inline glosses without label or source overlap", a
   for (const item of [first, second]) {
     expect(Math.abs(item.label.centerX - item.surface.centerX)).toBeLessThan(0.5);
     expect(item.label.bottom).toBeLessThanOrEqual(item.surface.top);
+    expect(item.label.right - item.label.left).toBeLessThanOrEqual(140);
   }
   expect(Math.abs(second.surface.top - second.plainArchive.top)).toBeLessThan(1);
   expect(overlaps(first.label, second.label)).toBe(false);
@@ -1455,7 +1460,7 @@ test("content bundle drops async glosses after the source paragraph changes", as
   });
 
   await page.waitForTimeout(300);
-  expect(await page.locator("[data-glossa-token-label]", { hasText: "晦涩" }).count()).toBe(0);
+  expect(await page.locator('[data-glossa-token-label][data-glossa-visual="晦涩"]').count()).toBe(0);
 });
 
 test("content bundle preserves existing glosses while mutation rescans wait for responses", async ({ page }) => {
@@ -1484,21 +1489,21 @@ test("content bundle preserves existing glosses while mutation rescans wait for 
     });
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
-  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.textContent === "晦涩");
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "晦涩");
 
   await page.locator("#dynamic").evaluate((element) => {
     element.textContent = "A dynamic paragraph appears after boot.";
   });
   await page.waitForFunction(() => Reflect.get(window, "__mutationGlossHeld") === true);
 
-  expect(await page.locator("[data-glossa-token-label]", { hasText: "晦涩" }).count()).toBe(1);
+  expect(await page.locator('[data-glossa-token-label][data-glossa-visual="晦涩"]').count()).toBe(1);
 
   await page.evaluate(() => {
     (Reflect.get(window, "__resolveMutationGloss") as () => void)();
   });
   await page.waitForFunction(() => {
     return Array.from(document.querySelectorAll("[data-glossa-token-label]"))
-      .some((label) => label.textContent === "动态");
+      .some((label) => label.getAttribute("data-glossa-visual") === "动态");
   });
 });
 
@@ -1528,7 +1533,7 @@ test("content bundle defers chunk outcomes until a large text-node scan finishes
       return false;
     }
     const wrapper = document.querySelector<HTMLElement>(`[data-glossa-surface="${surface}"]`);
-    return wrapper?.querySelector("[data-glossa-token-label]")?.textContent === surface.toUpperCase();
+    return wrapper?.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === surface.toUpperCase();
   }, target);
 
   const scannedTokenCount = await page.evaluate(() => {
@@ -1575,7 +1580,7 @@ test("content bundle replays queued ready outcomes after scan invalidation", asy
       return false;
     }
     const wrapper = document.querySelector<HTMLElement>(`[data-glossa-surface="${surface}"]`);
-    return wrapper?.querySelector("[data-glossa-token-label]")?.textContent === "QUEUED";
+    return wrapper?.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "QUEUED";
   }, target);
   await expect(page.locator("#mutating")).toHaveText("after");
 });
