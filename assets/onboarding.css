@@ -24,6 +24,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   min-width: 320px;
   background: var(--paper);
@@ -80,6 +84,15 @@ select {
   gap: 20px;
 }
 
+.footer-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--paper);
+}
+
 .onboarding-header {
   border-bottom: 1px solid var(--line);
 }
@@ -104,6 +117,22 @@ select {
 
 #status[data-state="error"] {
   color: var(--red);
+}
+
+.settings-form .inline-status {
+  min-height: 20px;
+  grid-column: 1 / -1;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.inline-status[data-state="success"] {
+  color: var(--green);
+}
+
+.inline-status[data-state="pending"] {
+  color: var(--ink-soft);
 }
 
 .onboarding-step {
@@ -247,7 +276,7 @@ h1 {
   font: 760 9px/1 var(--sans);
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  content: "Reading sample / Glossa";
+  content: "阅读示例";
 }
 
 .reading-preview p {
@@ -577,6 +606,23 @@ button:disabled {
   .onboarding-header,
   .onboarding-footer {
     min-height: 54px;
+  }
+
+  .onboarding-footer {
+    flex-wrap: wrap;
+    padding-block: 10px;
+  }
+
+  .footer-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    order: 2;
+  }
+
+  .footer-actions button {
+    width: 100%;
+    min-width: 0;
   }
 
   .brand-logo {

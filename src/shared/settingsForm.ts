@@ -197,13 +197,14 @@ export async function runSettingsConnectionTest(
   service: ErrorService,
   setStatus: (value: string) => void,
   successStatus = ""
-): Promise<void> {
+): Promise<boolean> {
   setStatus("");
   setTestState(button, "loading");
   try {
     await run();
     setTestState(button, "success");
     setStatus(successStatus);
+    return true;
   } catch (error) {
     setTestState(button, "error");
     setStatus(userMessageForError(diagnosticErrorFrom(error, {
@@ -211,6 +212,7 @@ export async function runSettingsConnectionTest(
       message: "Connection test failed",
       service
     }).payload, service));
+    return false;
   }
 }
 

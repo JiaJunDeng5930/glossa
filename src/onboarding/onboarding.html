@@ -112,8 +112,8 @@
             <input name="cardErrorBackgroundColor" type="color">
           </label>
           <label>
-            深浅
-            <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
+            <span>深浅 <output id="gloss-background-opacity-value" for="gloss-background-opacity">94%</output></span>
+            <input id="gloss-background-opacity" name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
           </label>
           <label>
             字体
@@ -171,7 +171,7 @@
             AI 接口地址
             <input name="aiEndpoint" autocomplete="off">
           </label>
-          <label>
+          <label data-ai-field="api-key">
             AI API 密钥
             <input name="apiKey" type="password" autocomplete="off">
           </label>
@@ -179,7 +179,7 @@
             模型
             <input name="modelVersion" autocomplete="off">
           </label>
-          <label>
+          <label data-ai-field="reasoning">
             推理强度
             <select name="reasoningEffort">
               <option value="none">无</option>
@@ -195,6 +195,7 @@
             <input name="aiRequestTimeoutSeconds" type="number" min="1" step="1">
           </label>
           <button id="test-ai" class="secondary-action" type="button" data-state="idle">测试连接</button>
+          <output id="ai-status" class="inline-status" role="status"></output>
         </div>
       </section>
 
@@ -202,7 +203,7 @@
         <div class="step-copy">
           <p class="document-label">Anki</p>
           <h1 id="anki-heading">连接 AnkiConnect</h1>
-          <p>安装 AnkiConnect 并保持 Anki 打开，再选择牌组和模板。</p>
+          <p><a href="https://ankiweb.net/shared/info/2055492159" target="_blank" rel="noreferrer">安装 AnkiConnect（代码 2055492159）</a>，保持 Anki 打开，再选择牌组和模板。</p>
         </div>
         <div class="settings-form">
           <label>
@@ -227,6 +228,7 @@
           </label>
           <button id="refresh-anki" class="secondary-action" type="button" data-state="idle">刷新 Anki</button>
           <button id="test-anki" class="secondary-action" type="button" data-state="idle">测试连接</button>
+          <output id="anki-status" class="inline-status" role="status"></output>
         </div>
       </section>
 
@@ -234,13 +236,17 @@
         <div class="step-copy">
           <p class="document-label">完成</p>
           <h1 id="finish-heading">可以开始阅读</h1>
-          <p>在任意英文网页点击 Glossa 图标。</p>
+          <p>AI 已连接。Anki 可随时在设置中配置。</p>
         </div>
       </section>
 
       <footer class="onboarding-footer">
         <span id="progress">1 / 8</span>
-        <button id="continue" class="primary-action" type="button" data-action="next">继续</button>
+        <div class="footer-actions">
+          <button id="back" class="secondary-action" type="button" hidden>返回</button>
+          <button id="skip-anki" class="secondary-action" type="button" hidden>跳过 Anki</button>
+          <button id="continue" class="primary-action" type="button" data-action="next">继续</button>
+        </div>
       </footer>
       </form>
     </main>

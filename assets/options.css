@@ -734,6 +734,19 @@ button svg {
   min-width: 94px;
 }
 
+.setup-link {
+  width: max-content;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.setup-link:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ochre) 68%, transparent);
+  outline-offset: 3px;
+}
+
 .known-word-tools .inline-status {
   grid-column: 1 / -1;
 }

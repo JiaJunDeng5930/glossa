@@ -206,6 +206,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("select[name=ankiModelName]")).toBeEnabled();
   await expect(page.locator("#save-settings .save-label")).toHaveText("保存");
   await expect(page.locator("#status")).toHaveText("");
+  await expect(page.getByRole("link", { name: "重新打开首次设置" })).toHaveAttribute("href", "../onboarding/onboarding.html");
 
   await expect(page.locator('.section-nav a[href="#reading-section"]')).toHaveAttribute("aria-current", "location");
   await page.setViewportSize({ width: 1280, height: 6000 });
