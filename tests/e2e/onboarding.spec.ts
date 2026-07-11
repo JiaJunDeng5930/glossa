@@ -235,6 +235,59 @@ test("onboarding serializes continue clicks during pending step saves", async ({
   await expect(page.locator("#progress")).toHaveText("2 / 8");
 });
 
+test("onboarding locks verified AI settings while advancing", async ({ page }) => {
+  await loadOnboarding(page);
+  await page.evaluate(() => {
+    const store: Record<string, unknown> = {};
+    Reflect.set(window, "fetch", async () => new Response(JSON.stringify({ items: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    }));
+    Reflect.set(window, "chrome", {
+      runtime: {
+        lastError: undefined
+      },
+      storage: {
+        local: {
+          get(key: string, callback: (result: Record<string, unknown>) => void) {
+            callback({ [key]: store[key] });
+          },
+          set(value: Record<string, unknown>, callback?: () => void) {
+            Object.assign(store, value);
+            if (Reflect.get(window, "__holdOnboardingSave")) {
+              Reflect.set(window, "__resolveOnboardingSave", callback);
+              return;
+            }
+            callback?.();
+          }
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
+
+  for (let step = 0; step < 5; step += 1) {
+    await page.locator("#continue").click();
+  }
+  await expect(page.getByRole("heading", { name: "连接 AI 服务" })).toBeVisible();
+  await page.locator("#test-ai").click();
+  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
+  await page.evaluate(() => Reflect.set(window, "__holdOnboardingSave", true));
+
+  await page.locator("#continue").click();
+
+  for (const name of ["provider", "aiEndpoint", "apiKey", "modelVersion", "reasoningEffort", "aiRequestTimeoutSeconds"]) {
+    await expect(page.locator(`[name="${name}"]`)).toBeDisabled();
+  }
+  await expect(page.locator("#test-ai")).toBeDisabled();
+
+  await page.evaluate(() => {
+    const resolveSave = Reflect.get(window, "__resolveOnboardingSave") as (() => void) | undefined;
+    resolveSave?.();
+  });
+  await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
+});
+
 test("onboarding keeps the current step visible when saving fails", async ({ page }) => {
   await loadOnboarding(page);
   await page.evaluate(() => {
