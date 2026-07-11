@@ -51,6 +51,8 @@ let pendingShortcut = "";
 let settingsRevision = 0;
 let testedAiSettings: string | undefined;
 let testedAnkiSettings: string | undefined;
+let aiConnectionTestRevision = 0;
+let ankiConnectionTestRevision = 0;
 
 populateKnownWordLists();
 setupSectionNavigation();
@@ -65,18 +67,38 @@ form.addEventListener("submit", (event) => {
 testAiButton.addEventListener("click", () => {
   const nextSettings = readFormSettings();
   const connectionKey = aiConnectionKey(nextSettings);
+  const revision = ++aiConnectionTestRevision;
   testedAiSettings = connectionKey;
-  void runSettingsConnectionTest(testAiButton, () => testAiSettings(nextSettings), "ai", setAiStatus, "AI 连接可用").then(() => {
-    invalidateConnectionTests(readFormSettings(), connectionKey);
+  void runSettingsConnectionTest(
+    testAiButton,
+    () => testAiSettings(nextSettings),
+    "ai",
+    setAiStatus,
+    "AI 连接可用",
+    () => revision === aiConnectionTestRevision
+  ).then(() => {
+    if (revision === aiConnectionTestRevision) {
+      invalidateConnectionTests(readFormSettings());
+    }
   });
 });
 
 testAnkiButton.addEventListener("click", () => {
   const nextSettings = readFormSettings();
   const connectionKey = ankiConnectionKey(nextSettings);
+  const revision = ++ankiConnectionTestRevision;
   testedAnkiSettings = connectionKey;
-  void runSettingsConnectionTest(testAnkiButton, () => testAnkiSettings(nextSettings), "anki", setAnkiStatus, "Anki 连接可用").then(() => {
-    invalidateConnectionTests(readFormSettings(), undefined, connectionKey);
+  void runSettingsConnectionTest(
+    testAnkiButton,
+    () => testAnkiSettings(nextSettings),
+    "anki",
+    setAnkiStatus,
+    "Anki 连接可用",
+    () => revision === ankiConnectionTestRevision
+  ).then(() => {
+    if (revision === ankiConnectionTestRevision) {
+      invalidateConnectionTests(readFormSettings());
+    }
   });
 });
 
@@ -183,18 +205,16 @@ form.addEventListener("input", () => {
   markSettingsDirty();
 });
 
-function invalidateConnectionTests(
-  nextSettings: GlossaSettings,
-  expectedAiKey = testedAiSettings,
-  expectedAnkiKey = testedAnkiSettings
-): void {
-  if (expectedAiKey && aiConnectionKey(nextSettings) !== expectedAiKey) {
+function invalidateConnectionTests(nextSettings: GlossaSettings): void {
+  if (testedAiSettings && aiConnectionKey(nextSettings) !== testedAiSettings) {
     testedAiSettings = undefined;
+    aiConnectionTestRevision += 1;
     setTestState(testAiButton, "idle");
     setAiStatus("");
   }
-  if (expectedAnkiKey && ankiConnectionKey(nextSettings) !== expectedAnkiKey) {
+  if (testedAnkiSettings && ankiConnectionKey(nextSettings) !== testedAnkiSettings) {
     testedAnkiSettings = undefined;
+    ankiConnectionTestRevision += 1;
     setTestState(testAnkiButton, "idle");
     setAnkiStatus("");
   }

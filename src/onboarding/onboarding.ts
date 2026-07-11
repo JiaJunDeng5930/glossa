@@ -119,15 +119,41 @@ refreshAnkiButton.addEventListener("click", () => {
 
 testAiButton.addEventListener("click", () => {
   const nextSettings = readCurrentSettings();
-  void runSettingsConnectionTest(testAiButton, () => testAiSettings(nextSettings), "ai", setAiStatus, "AI 连接成功").then((verified) => {
-    verifiedAiSettings = verified ? aiConnectionKey(nextSettings) : undefined;
+  const connectionKey = aiConnectionKey(nextSettings);
+  void runSettingsConnectionTest(
+    testAiButton,
+    () => testAiSettings(nextSettings),
+    "ai",
+    setAiStatus,
+    "AI 连接成功",
+    () => aiConnectionKey(readCurrentSettings()) === connectionKey
+  ).then((verified) => {
+    const current = aiConnectionKey(readCurrentSettings()) === connectionKey;
+    verifiedAiSettings = verified && current ? connectionKey : undefined;
+    if (!current) {
+      setTestState(testAiButton, "idle");
+      setAiStatus("");
+    }
   });
 });
 
 testAnkiButton.addEventListener("click", () => {
   const nextSettings = readCurrentSettings();
-  void runSettingsConnectionTest(testAnkiButton, () => testAnkiSettings(nextSettings), "anki", setAnkiStatus, "Anki 已连接").then((verified) => {
-    verifiedAnkiSettings = verified ? ankiConnectionKey(nextSettings) : undefined;
+  const connectionKey = ankiConnectionKey(nextSettings);
+  void runSettingsConnectionTest(
+    testAnkiButton,
+    () => testAnkiSettings(nextSettings),
+    "anki",
+    setAnkiStatus,
+    "Anki 已连接",
+    () => ankiConnectionKey(readCurrentSettings()) === connectionKey
+  ).then((verified) => {
+    const current = ankiConnectionKey(readCurrentSettings()) === connectionKey;
+    verifiedAnkiSettings = verified && current ? connectionKey : undefined;
+    if (!current) {
+      setTestState(testAnkiButton, "idle");
+      setAnkiStatus("");
+    }
   });
 });
 

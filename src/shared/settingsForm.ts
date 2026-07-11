@@ -217,16 +217,23 @@ export async function runSettingsConnectionTest(
   run: () => Promise<void>,
   service: ErrorService,
   setStatus: (value: string, state: "success" | "error" | "") => void,
-  successStatus = ""
+  successStatus = "",
+  isCurrent: () => boolean = () => true
 ): Promise<boolean> {
   setStatus("", "");
   setTestState(button, "loading");
   try {
     await run();
+    if (!isCurrent()) {
+      return false;
+    }
     setTestState(button, "success");
     setStatus(successStatus, "success");
     return true;
   } catch (error) {
+    if (!isCurrent()) {
+      return false;
+    }
     setTestState(button, "error");
     setStatus(userMessageForError(diagnosticErrorFrom(error, {
       reason: "service-error",
