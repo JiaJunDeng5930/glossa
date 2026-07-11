@@ -44,6 +44,21 @@ describe("known-word lists", () => {
     expect(coca).toContain("the");
   });
 
+  it("ships each advanced preset with its complete foundation vocabulary", async () => {
+    const junior = await readWords("assets/known-wordlists/junior-high.txt");
+    const senior = await readWords("assets/known-wordlists/senior-high.txt");
+    const cet4 = await readWords("assets/known-wordlists/cet4.txt");
+    const cet6 = await readWords("assets/known-wordlists/cet6.txt");
+    const toefl = await readWords("assets/known-wordlists/toefl.txt");
+    const gre = await readWords("assets/known-wordlists/gre.txt");
+
+    expect(isSubset(junior, senior)).toBe(true);
+    expect(isSubset(senior, cet4)).toBe(true);
+    expect(isSubset(cet4, cet6)).toBe(true);
+    expect(isSubset(senior, toefl)).toBe(true);
+    expect(isSubset(senior, gre)).toBe(true);
+  });
+
   it("normalizes custom word input", () => {
     expect(createKnownWordSet(["Ability", " abstract "])).toEqual(new Set(["ability", "abstract"]));
   });
@@ -51,4 +66,8 @@ describe("known-word lists", () => {
 
 async function readWords(path: string): Promise<Set<string>> {
   return new Set((await readFile(path, "utf8")).trim().split(/\s+/));
+}
+
+function isSubset(subset: ReadonlySet<string>, superset: ReadonlySet<string>): boolean {
+  return Array.from(subset).every((word) => superset.has(word));
 }
