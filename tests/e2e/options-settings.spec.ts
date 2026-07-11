@@ -467,6 +467,32 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#anki-status")).toHaveText("Anki 连接可用");
   await expect(page.locator("#status")).toHaveText("有未保存的更改");
 
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("glossa", 2);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("lexicon", "readwrite");
+        tx.objectStore("lexicon").put({
+          key: "en:reset-history",
+          lemma: "reset-history",
+          surface: "reset-history",
+          lang: "en",
+          state: "learning_active",
+          shownCount: 1,
+          clickCount: 1,
+          ankiNoteIds: [101]
+        }, "en:reset-history");
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  });
+
   const resetHistoryDialog = page.waitForEvent("dialog", { timeout: 5_000 });
   const resetHistoryClick = page.locator("#reset-card-history").click();
   const historyDialog = await resetHistoryDialog;
@@ -479,18 +505,23 @@ test("options page captures shortcuts, previews style changes and saves prompts"
       const request = indexedDB.open("glossa", 2);
       request.onsuccess = () => {
         const db = request.result;
-        const tx = db.transaction(["cardCache", "cardedWords"], "readonly");
+        const tx = db.transaction(["cardCache", "cardedWords", "lexicon"], "readwrite");
         const cardCache = tx.objectStore("cardCache").count();
         const cardedWords = tx.objectStore("cardedWords").count();
+        const lexiconStore = tx.objectStore("lexicon");
+        const lexicon = lexiconStore.getAll();
+        lexicon.onsuccess = () => lexiconStore.delete("en:reset-history");
         tx.oncomplete = () => {
           db.close();
-          resolve({ cardCache: cardCache.result, cardedWords: cardedWords.result });
+          const noteIds = (lexicon.result as Array<{ ankiNoteIds?: number[] }>)
+            .reduce((total, record) => total + (record.ankiNoteIds?.length ?? 0), 0);
+          resolve({ cardCache: cardCache.result, cardedWords: cardedWords.result, noteIds });
         };
         tx.onerror = () => reject(tx.error);
       };
       request.onerror = () => reject(request.error);
     });
-  })).toEqual({ cardCache: 0, cardedWords: 0 });
+  })).toEqual({ cardCache: 0, cardedWords: 0, noteIds: 0 });
 
   await page.locator("#save-settings").click();
   await expect(page.locator("#status")).toHaveText("已保存");

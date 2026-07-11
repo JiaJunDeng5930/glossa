@@ -805,7 +805,8 @@ async function resetCardHistory(): Promise<void> {
   try {
     await Promise.all([
       extensionStorage.cardCache.clear(),
-      extensionStorage.cardedWords.clear()
+      extensionStorage.cardedWords.clear(),
+      clearLexiconCardHistory()
     ]);
     setAnkiStatus("制卡记录已重置，Anki 中已有卡片保持不变", "success");
   } catch (error) {
@@ -817,6 +818,14 @@ async function resetCardHistory(): Promise<void> {
   } finally {
     resetCardHistoryButton.disabled = false;
   }
+}
+
+async function clearLexiconCardHistory(): Promise<void> {
+  const states = ["candidate", "known", "learning_active", "ignored"] as const;
+  const records = (await Promise.all(states.map((state) => extensionStorage.lexicon.listByState(state)))).flat();
+  await Promise.all(records
+    .filter((record) => record.ankiNoteIds.length > 0)
+    .map((record) => extensionStorage.lexicon.put({ ...record, ankiNoteIds: [] })));
 }
 
 function updateProviderFields(provider: AiSettings["provider"]): void {
