@@ -869,6 +869,7 @@ function applyAppearance(host: HTMLElement, appearance: AppearanceSettings): voi
 
 function feedbackFallback(feedback: Exclude<CardFeedback, "card-cancelled">): string {
   if (feedback === "card-pending") {
+    // The compact ellipsis is the visible in-page signal; title and aria-label carry the semantic detail.
     return "...";
   }
   return feedback === "card-success" ? "✓" : "×";
