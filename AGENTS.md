@@ -453,7 +453,8 @@ Requirement truth lives in source comments. Use `@behavior`, `@constraint`, and 
 |glossa.settings_save.options_write|glossa.settings_save.options_write.{font_size_bounds,storage_write}
 |glossa.settings_save.options_write.font_size_bounds|glossa.settings_save.options_write.font_size_bounds.{}
 |glossa.settings_save.options_write.storage_write|glossa.settings_save.options_write.storage_write.{}
-|glossa.settings_save.section_navigation|glossa.settings_save.section_navigation.{}
+|glossa.settings_save.section_navigation|glossa.settings_save.section_navigation.{document_end}
+|glossa.settings_save.section_navigation.document_end|glossa.settings_save.section_navigation.document_end.{}
 |glossa.settings_save.status_state|glossa.settings_save.status_state.{dataset,editing,output_values,save_button,save_lifecycle}
 |glossa.settings_save.status_state.dataset|glossa.settings_save.status_state.dataset.{}
 |glossa.settings_save.status_state.editing|glossa.settings_save.status_state.editing.{anki_catalog_refresh,anki_prompt_reset,control_input,during_save,gloss_prompt_reset,shortcut_capture}

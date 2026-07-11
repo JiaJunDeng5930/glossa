@@ -328,7 +328,8 @@ function setupSectionNavigation(): void {
   let animationFrame: number | undefined;
   const render = (): void => {
     animationFrame = undefined;
-    const atDocumentEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+    // @behavior glossa.settings_save.section_navigation.document_end The final section becomes current at the document end only after the page has scrolled away from the top.
+    const atDocumentEnd = window.scrollY > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
     let activeEntry = atDocumentEnd ? entries.at(-1)! : entries[0]!;
     if (!atDocumentEnd) {
       const readingMarker = Math.min(window.innerHeight * 0.32, 240);
