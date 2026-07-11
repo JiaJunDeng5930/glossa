@@ -414,7 +414,8 @@ function isTokenCandidate(value: unknown): value is TokenCandidate {
     && typeof value.surface === "string"
     && typeof value.lemma === "string"
     && isFiniteNumber(value.startOffset)
-    && isFiniteNumber(value.endOffset);
+    && isFiniteNumber(value.endOffset)
+    && (value.forceRefresh === undefined || typeof value.forceRefresh === "boolean");
 }
 
 function isSentenceCandidate(value: unknown): value is SentenceCandidate {

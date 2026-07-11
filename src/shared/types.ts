@@ -28,6 +28,8 @@ export interface TokenCandidate {
   lemma: string;
   startOffset: number;
   endOffset: number;
+  // A generation refresh may revisit a currently rendered known word; this flag stays inside the extension pipeline.
+  forceRefresh?: boolean;
 }
 
 export interface SentenceCandidate {
