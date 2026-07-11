@@ -1,5 +1,5 @@
 const SENTENCE_RE = /[^.!?\n]+[.!?]?/g;
-const CONTEXT_BOUNDARY_SELECTOR = "p,li,blockquote,dd,dt,figcaption,td,th,h1,h2,h3,h4,h5,h6,div";
+const CONTEXT_BOUNDARY_SELECTOR = "p,li,blockquote,dd,dt,figcaption,td,th,h1,h2,h3,h4,h5,h6,main,section,article,aside,nav,header,footer,address,div";
 const EXCLUDED_SELECTOR = [
   "script",
   "style",
