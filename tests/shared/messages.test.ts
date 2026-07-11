@@ -41,6 +41,25 @@ describe("extension message envelopes", () => {
     });
   });
 
+  it("validates card-history reset requests and responses", () => {
+    const request = createOptionsMessage("card.history.reset", {});
+    const response = createBackgroundResponse(request, "card.history.reset.ok", {});
+
+    expect(validateRuntimeMessage(request)).toMatchObject({
+      type: "card.history.reset",
+      source: "options",
+      target: "service-worker",
+      payload: {}
+    });
+    expect(validateBackgroundResponse(response, request)).toMatchObject({
+      type: "card.history.reset.ok",
+      requestId: request.requestId,
+      source: "service-worker",
+      target: "options",
+      payload: {}
+    });
+  });
+
   it("preserves the request id on background responses", () => {
     const request = createContentMessage("settings.get", {});
     const response = createBackgroundResponse(request, "settings.response", {

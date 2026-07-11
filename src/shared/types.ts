@@ -139,6 +139,8 @@ export interface SettingsGetResponsePayload {
 
 export type GlossCacheClearPayload = Record<string, never>;
 export type GlossCacheClearedPayload = Record<string, never>;
+export type CardHistoryResetPayload = Record<string, never>;
+export type CardHistoryResetOkPayload = Record<string, never>;
 
 export interface ErrorPayload {
   reason: ErrorReason;
@@ -161,6 +163,9 @@ export type SettingsGetMessage = MessageEnvelope<"settings.get", "content-script
 export type SettingsGetResponseMessage = MessageEnvelope<"settings.response", "service-worker", "content-script", SettingsGetResponsePayload>;
 export type GlossCacheClearMessage = MessageEnvelope<"gloss.cache.clear", "options", "service-worker", GlossCacheClearPayload>;
 export type GlossCacheClearedMessage = MessageEnvelope<"gloss.cache.cleared", "service-worker", "options", GlossCacheClearedPayload>;
+// @behavior glossa.extension_contracts.card_history_reset The options page resets local card history through the service worker and receives an empty success response.
+export type CardHistoryResetMessage = MessageEnvelope<"card.history.reset", "options", "service-worker", CardHistoryResetPayload>;
+export type CardHistoryResetOkMessage = MessageEnvelope<"card.history.reset.ok", "service-worker", "options", CardHistoryResetOkPayload>;
 export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
 export type OptionsErrorMessage = MessageEnvelope<"error", "service-worker", "options", ErrorPayload>;
 
@@ -168,9 +173,9 @@ export type GlossPortInboundMessage = GlossScanStartMessage | GlossScanChunkMess
 export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage | GlossChunkAckMessage;
 
 export type ContentToBackgroundMessage = UserWordClickMessage | SettingsGetMessage;
-export type OptionsToBackgroundMessage = GlossCacheClearMessage;
+export type OptionsToBackgroundMessage = GlossCacheClearMessage | CardHistoryResetMessage;
 export type RuntimeToBackgroundMessage = ContentToBackgroundMessage | OptionsToBackgroundMessage;
-export type BackgroundResponseMessage = WordClickedOkMessage | WordCardDuplicateMessage | SettingsGetResponseMessage | GlossCacheClearedMessage | ErrorMessage | OptionsErrorMessage;
+export type BackgroundResponseMessage = WordClickedOkMessage | WordCardDuplicateMessage | SettingsGetResponseMessage | GlossCacheClearedMessage | CardHistoryResetOkMessage | ErrorMessage | OptionsErrorMessage;
 
 export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";

@@ -2,6 +2,8 @@ import { KNOWN_WORD_LIST_IDS } from "./types";
 import type {
   AiProvider,
   BackgroundResponseMessage,
+  CardHistoryResetOkPayload,
+  CardHistoryResetPayload,
   ContentToBackgroundMessage,
   ErrorPayload,
   GlossaSettings,
@@ -43,6 +45,7 @@ type ContentPayloadByType = {
 
 type OptionsPayloadByType = {
   "gloss.cache.clear": GlossCacheClearPayload;
+  "card.history.reset": CardHistoryResetPayload;
 };
 
 type BackgroundPayloadByType = {
@@ -50,6 +53,7 @@ type BackgroundPayloadByType = {
   "word.clicked.ok": WordClickedOkPayload;
   "word.card.duplicate": WordCardDuplicatePayload;
   "gloss.cache.cleared": GlossCacheClearedPayload;
+  "card.history.reset.ok": CardHistoryResetOkPayload;
   error: ErrorPayload;
 };
 
@@ -153,6 +157,12 @@ export function validateOptionsMessage(value: unknown): OptionsToBackgroundMessa
     }
     return envelope as OptionsToBackgroundMessage;
   }
+  if (envelope.type === "card.history.reset") {
+    if (!isEmptyPayload(envelope.payload)) {
+      throw new Error("Malformed card.history.reset payload");
+    }
+    return envelope as OptionsToBackgroundMessage;
+  }
   throw new Error("Unknown message type");
 }
 
@@ -172,6 +182,7 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
     && envelope.type !== "word.clicked.ok"
     && envelope.type !== "word.card.duplicate"
     && envelope.type !== "gloss.cache.cleared"
+    && envelope.type !== "card.history.reset.ok"
     && envelope.type !== "error"
   ) {
     throw new Error("Unknown response type");
@@ -197,6 +208,12 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
   if (envelope.type === "gloss.cache.cleared") {
     if (!isEmptyPayload(envelope.payload)) {
       throw new Error("Malformed gloss.cache.cleared payload");
+    }
+    return envelope as BackgroundResponseMessage;
+  }
+  if (envelope.type === "card.history.reset.ok") {
+    if (!isEmptyPayload(envelope.payload)) {
+      throw new Error("Malformed card.history.reset.ok payload");
     }
     return envelope as BackgroundResponseMessage;
   }
