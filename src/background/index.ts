@@ -6,6 +6,7 @@ import { openOnboardingAfterInstall } from "./onboarding";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createBackgroundResponse, createGlossPortMessage, MESSAGE_VERSION, validateGlossPortInbound, validateRuntimeMessage } from "../shared/messages";
+import { glossOutputSettingsChanged, mergeStoredSettings } from "../shared/settings";
 import { createExtensionStorage } from "../storage/db";
 import type { ErrorMessage, MessageSource, OptionsErrorMessage } from "../shared/types";
 
@@ -20,6 +21,28 @@ const handleMessage = createBackgroundMessageHandler({
 });
 
 chrome.runtime.onInstalled.addListener(openOnboardingAfterInstall);
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  const settingsChange = changes.settings;
+  if (areaName !== "local" || !settingsChange) {
+    return;
+  }
+  const previous = mergeStoredSettings(settingsChange.oldValue);
+  const next = mergeStoredSettings(settingsChange.newValue);
+  if (!glossOutputSettingsChanged(previous, next)) {
+    return;
+  }
+  // A generation-setting change starts a new cache era while visual-only settings keep existing results reusable.
+  glossResolver.clearMemory();
+  void storage.glossCache.clear().catch((error) => {
+    trace({
+      component: "service-worker",
+      operation: "gloss.cache.invalidate",
+      result: "error",
+      error
+    });
+  });
+});
 
 chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse) => {
   void (async () => {
@@ -37,6 +60,7 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
     });
     if (message.type === "gloss.cache.clear") {
       await storage.glossCache.clear();
+      glossResolver.clearMemory();
       sendResponse(createBackgroundResponse(message, "gloss.cache.cleared", {}));
       return;
     }

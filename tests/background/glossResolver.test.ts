@@ -177,6 +177,37 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
   });
 
+  it("stops replaying page memory after the resolver cache is cleared", async () => {
+    const storage = createMemoryStorage();
+    const settings = testSettings();
+    await storage.settings.set(settings);
+    const ai = {
+      glossFrame: vi.fn(async () => ({
+        items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai });
+    const sentence = "A novel archive appears.";
+    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    await resolveScan(resolver, "https://example.test/a", [{
+      id: "s1",
+      text: sentence,
+      tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 100, { emit: () => undefined });
+    await storage.glossCache.clear();
+    resolver.clearMemory();
+    await resolveScan(resolver, "https://example.test/a", [{
+      id: "s2",
+      text: sentence,
+      tokens: [{ id: "t-second", sentenceId: "s2", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 200, { emit: (event) => secondEvents.push(event) });
+
+    expect(secondEvents).toEqual([{ tokenId: "t-second", status: "hidden" }]);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps page memory replay independent from persistent gloss cache TTL", async () => {
     const storage = createMemoryStorage();
     const settings = { ...testSettings(), glossCacheTtlMs: 50 };

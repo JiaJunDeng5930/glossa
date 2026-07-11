@@ -16,6 +16,7 @@ import { GLOSS_TARGET_LANG } from "../shared/types";
 
 export interface GlossResolver {
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
+  clearMemory(): void;
 }
 
 export interface GlossResolverSession {
@@ -274,7 +275,12 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     };
   };
 
-  return { createSession };
+  return {
+    createSession,
+    clearMemory() {
+      memoryCache.clear();
+    }
+  };
 }
 
 async function resolveToken(input: {
@@ -301,6 +307,7 @@ async function resolveToken(input: {
     }
     const cacheKey = await glossCacheKey(input.sentence, input.token);
     const memoryKey = transientMemoryKey(input.pageUrl, cacheKey);
+    // Fresh cached glosses replay before vocabulary state so toggling or rescanning keeps the current reading stable.
     const memoryCached = input.recall(memoryKey);
     if (memoryCached) {
       const item = rehydrateCachedGloss(memoryCached, input.token);
