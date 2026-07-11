@@ -49,6 +49,8 @@ let continueInFlight = false;
 let verifiedAiSettings: string | undefined;
 let verifiedAnkiSettings: string | undefined;
 let currentProvider = providerSelect.value as GlossaSettings["ai"]["provider"];
+type StepControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement;
+const busyStepControls = new Map<StepControl, boolean>();
 
 populateKnownWordSelect(knownWordListSelect);
 void loadSettings().catch(() => setStatus("设置加载失败，请重新打开页面"));
@@ -255,6 +257,18 @@ function setNavigationBusy(busy: boolean): void {
   continueButton.disabled = busy;
   backButton.disabled = busy;
   skipAnkiButton.disabled = busy;
+  if (busy) {
+    busyStepControls.clear();
+    for (const control of steps[currentStep]?.querySelectorAll<StepControl>("input, select, textarea, button") ?? []) {
+      busyStepControls.set(control, control.disabled);
+      control.disabled = true;
+    }
+    return;
+  }
+  for (const [control, wasDisabled] of busyStepControls) {
+    control.disabled = wasDisabled;
+  }
+  busyStepControls.clear();
 }
 
 function aiConnectionKey(value: GlossaSettings): string {
