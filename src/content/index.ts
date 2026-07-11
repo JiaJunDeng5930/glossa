@@ -2,7 +2,7 @@ import { loadKnownWords } from "../core/lexicon";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
-import { mergeStoredSettings } from "../shared/settings";
+import { glossOutputSettingsChanged, mergeStoredSettings } from "../shared/settings";
 import { matchesShortcut } from "../shared/shortcut";
 import GLOSSA_THEME from "../shared/theme.json";
 import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
@@ -56,6 +56,7 @@ async function boot(): Promise<void> {
   }
   let settings = settingsResponse.payload.settings;
   let knownWords = await loadKnownWords(settings.knownWordList);
+  let knownWordsLoadRevision = 0;
   const overlay = createGlossOverlay(document, settings?.appearance);
   let scanVersion = 0;
   let scanTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -591,18 +592,28 @@ async function boot(): Promise<void> {
       return;
     }
     void (async () => {
-      const previousList = settings.knownWordList;
+      const previousSettings = settings;
       const nextSettings = mergeStoredSettings(settingsChange.newValue);
+      const knownWordListChanged = nextSettings.knownWordList !== previousSettings.knownWordList;
+      const generationSettingsChanged = glossOutputSettingsChanged(previousSettings, nextSettings);
       settings = nextSettings;
       autoTranslateEnabled = nextSettings.autoTranslateEnabled;
       wordClickTimeout = wordClickTimeoutMs(nextSettings);
       overlay.setAppearance(nextSettings.appearance);
       selectionController?.setShortcut(nextSettings.shortcutKey);
       // The automatic setting becomes the next route default while the user's current-route choice stays stable.
-      if (nextSettings.knownWordList === previousList) {
+      if (!knownWordListChanged && !generationSettingsChanged) {
         return;
       }
-      knownWords = await loadKnownWords(nextSettings.knownWordList);
+      if (knownWordListChanged) {
+        const requestedList = nextSettings.knownWordList;
+        const loadRevision = ++knownWordsLoadRevision;
+        const loadedWords = await loadKnownWords(requestedList);
+        if (stopped || loadRevision !== knownWordsLoadRevision || settings.knownWordList !== requestedList) {
+          return;
+        }
+        knownWords = loadedWords;
+      }
       if (stopped) {
         return;
       }
@@ -610,7 +621,8 @@ async function boot(): Promise<void> {
       closeAllGlossSessions();
       overlay.clear();
       if (translationEnabled) {
-        await scanAndRender("settings-known-word-list");
+        const reason = knownWordListChanged ? "settings-known-word-list" : "settings-gloss-generation";
+        await scanAndRender(reason);
       }
     })().catch((error) => handleRuntimeError("settings.changed", error));
   };

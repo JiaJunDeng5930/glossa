@@ -151,6 +151,40 @@ test("content bundle applies saved appearance and shortcuts without changing the
   await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
 });
 
+test("content bundle replaces active glosses after generation settings change", async ({ page }) => {
+  await page.setContent("<main><p>Dynamic archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high",
+    modelVersion: "gpt-original"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const settings = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+      const token = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "dynamic");
+      if (token) {
+        const display = settings.modelVersion === "gpt-revised" ? "新版" : "旧版";
+        emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, targetText: token.surface, display }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "旧版");
+
+  await page.evaluate(() => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({ ...current, modelVersion: "gpt-revised" });
+  });
+
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "新版");
+});
+
 test("content bundle reloads the selected word list and rescans the open page", async ({ page }) => {
   await page.setContent("<main><p>A curious archive appears here.</p></main>");
   await installChromeRuntime(page, {
@@ -186,6 +220,61 @@ test("content bundle reloads the selected word list and rescans the open page", 
 
   await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
   await expect(page.locator("p")).toHaveText("A curious archive appears here.");
+});
+
+test("content bundle keeps the latest word list when an earlier load finishes later", async ({ page }) => {
+  await page.setContent("<main><p>A curious archive appears here.</p></main>");
+  await installChromeRuntime(page, {
+    autoTranslateEnabled: true,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    chrome.runtime.getURL = (path: string) => `https://wordlists.test/${path}`;
+    const pending = new Map<string, (response: Response) => void>();
+    Reflect.set(window, "__resolveWordList", (name: string, text: string) => {
+      pending.get(name)?.(new Response(text, { status: 200 }));
+      pending.delete(name);
+    });
+    Reflect.set(window, "fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("junior-high.txt")) {
+        return new Response("", { status: 200 });
+      }
+      const name = url.includes("senior-high.txt") ? "senior-high" : "cet4";
+      return await new Promise<Response>((resolve) => pending.set(name, resolve));
+    });
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const token = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "archive");
+      if (token) {
+        emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, targetText: token.surface, display: "档案" }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "档案");
+
+  await page.evaluate(() => {
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    const initial = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    changeSettings({ ...initial, knownWordList: "senior-high" });
+    const senior = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    changeSettings({ ...senior, knownWordList: "cet4" });
+    const resolveWordList = Reflect.get(window, "__resolveWordList") as (name: string, text: string) => void;
+    resolveWordList("cet4", "archive");
+  });
+
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await page.evaluate(() => {
+    const resolveWordList = Reflect.get(window, "__resolveWordList") as (name: string, text: string) => void;
+    resolveWordList("senior-high", "");
+  });
+  await page.waitForTimeout(150);
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
 });
 
 test("content bundle keeps plugin shortcut chords while exiting selection mode", async ({ page }) => {
