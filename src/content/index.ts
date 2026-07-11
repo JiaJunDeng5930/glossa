@@ -129,10 +129,7 @@ async function boot(): Promise<void> {
     registerLifecycleCleanup(() => target.removeEventListener(type, listener, options));
   };
 
-  const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
-    if (stopped) {
-      return;
-    }
+  const synchronizeRouteState = (manualActivation = false): void => {
     const routeUrl = urlWithoutHash(location.href);
     if (routeUrl !== pageUrl) {
       pageUrl = routeUrl;
@@ -141,8 +138,15 @@ async function boot(): Promise<void> {
       cancelDuplicateCardPrompt(document);
       overlay.clear();
       // Manual activation belongs to one route; navigation restores the configured automatic default.
-      translationEnabled = options.manualActivation === true || autoTranslateEnabled;
+      translationEnabled = manualActivation || autoTranslateEnabled;
     }
+  };
+
+  const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
+    if (stopped) {
+      return;
+    }
+    synchronizeRouteState(options.manualActivation === true);
     if (!translationEnabled) {
       return;
     }
@@ -515,7 +519,11 @@ async function boot(): Promise<void> {
   }
 
   const scheduleScan = (reason: string) => {
-    if (stopped || !translationEnabled) {
+    if (stopped) {
+      return;
+    }
+    synchronizeRouteState();
+    if (!translationEnabled) {
       return;
     }
     if (scanTimer) {

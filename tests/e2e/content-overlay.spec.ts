@@ -55,6 +55,47 @@ test("content bundle waits for manual activation before requesting glosses", asy
   expect(await sentMessageTypes(page)).toContain("gloss.scan.chunk");
 });
 
+test("content bundle applies the automatic default after inactive SPA navigation", async ({ page }) => {
+  await page.route("https://route.test/**", (route) => route.fulfill({
+    contentType: "text/html",
+    body: "<!doctype html><html><body><main><p>Quiet archive appears here.</p></main></body></html>"
+  }));
+  await page.goto("https://route.test/one");
+  await installChromeRuntime(page, {
+    autoTranslateEnabled: false,
+    knownWordList: "junior-high"
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const automatic = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((token) => token.surface.toLowerCase() === "automatic");
+      if (automatic) {
+        emit(glossToken(message.payload.scanId, automatic.id, "ready", {
+          tokenId: automatic.id,
+          targetText: automatic.surface,
+          display: "自动"
+        }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForTimeout(250);
+
+  await page.evaluate(() => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({ ...current, autoTranslateEnabled: true });
+    history.pushState({}, "", "/two");
+    document.querySelector("p")!.textContent = "Automatic archive appears on the next route.";
+  });
+
+  await expect(page.locator('[data-glossa-token-label][data-glossa-visual="自动"]')).toHaveCount(1, { timeout: 2_000 });
+});
+
 test("content bundle toggles page translation with the configured shortcut", async ({ page }) => {
   await page.setContent("<main><p>Shortcut archive appears here.</p></main>");
   await installChromeRuntime(page, {
