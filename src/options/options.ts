@@ -3,7 +3,7 @@ import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey }
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
 import { createOptionsMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
 import { defaultEndpointForProvider } from "../shared/settings";
-import { applyAppearancePreview, runSettingsConnectionTest, testAiSettings, testAnkiSettings } from "../shared/settingsForm";
+import { aiConnectionKey, ankiConnectionKey, applyAppearancePreview, runSettingsConnectionTest, testAiSettings, testAnkiSettings } from "../shared/settingsForm";
 import { formatShortcutFromEvent } from "../shared/shortcut";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, KNOWN_WORD_LIST_IDS, type AiSettings, type BackgroundResponseMessage, type ErrorService, type GlossaSettings, type KnownWordListId, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
@@ -49,6 +49,8 @@ const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 let capturingShortcutName: "shortcutKey" | "translateShortcutKey" | undefined;
 let pendingShortcut = "";
 let settingsRevision = 0;
+let testedAiSettings: string | undefined;
+let testedAnkiSettings: string | undefined;
 
 populateKnownWordLists();
 setupSectionNavigation();
@@ -61,11 +63,21 @@ form.addEventListener("submit", (event) => {
 });
 
 testAiButton.addEventListener("click", () => {
-  void runSettingsConnectionTest(testAiButton, () => testAiSettings(readFormSettings()), "ai", setAiStatus, "AI 连接可用");
+  const nextSettings = readFormSettings();
+  const connectionKey = aiConnectionKey(nextSettings);
+  testedAiSettings = connectionKey;
+  void runSettingsConnectionTest(testAiButton, () => testAiSettings(nextSettings), "ai", setAiStatus, "AI 连接可用").then(() => {
+    invalidateConnectionTests(readFormSettings(), connectionKey);
+  });
 });
 
 testAnkiButton.addEventListener("click", () => {
-  void runSettingsConnectionTest(testAnkiButton, () => testAnkiSettings(readFormSettings()), "anki", setAnkiStatus, "Anki 连接可用");
+  const nextSettings = readFormSettings();
+  const connectionKey = ankiConnectionKey(nextSettings);
+  testedAnkiSettings = connectionKey;
+  void runSettingsConnectionTest(testAnkiButton, () => testAnkiSettings(nextSettings), "anki", setAnkiStatus, "Anki 连接可用").then(() => {
+    invalidateConnectionTests(readFormSettings(), undefined, connectionKey);
+  });
 });
 
 refreshAnkiButton.addEventListener("click", () => {
@@ -164,10 +176,29 @@ document.addEventListener("keyup", (event) => {
 });
 
 form.addEventListener("input", () => {
-  updatePreview(readFormSettings());
+  const nextSettings = readFormSettings();
+  updatePreview(nextSettings);
+  invalidateConnectionTests(nextSettings);
   // Settings use an explicit save commit so users can adjust several related fields as one change.
   markSettingsDirty();
 });
+
+function invalidateConnectionTests(
+  nextSettings: GlossaSettings,
+  expectedAiKey = testedAiSettings,
+  expectedAnkiKey = testedAnkiSettings
+): void {
+  if (expectedAiKey && aiConnectionKey(nextSettings) !== expectedAiKey) {
+    testedAiSettings = undefined;
+    setTestState(testAiButton, "idle");
+    setAiStatus("");
+  }
+  if (expectedAnkiKey && ankiConnectionKey(nextSettings) !== expectedAnkiKey) {
+    testedAnkiSettings = undefined;
+    setTestState(testAnkiButton, "idle");
+    setAnkiStatus("");
+  }
+}
 
 function readFormSettings(): GlossaSettings {
   const provider = readInput("provider") as AiSettings["provider"];
@@ -648,6 +679,7 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
     setSelectOptions(ankiModelNameSelect, catalog.modelNames, modelName);
     setAnkiSelectsEnabled(true);
     setTestState(refreshAnkiButton, "idle");
+    invalidateConnectionTests(readFormSettings());
     if (ankiDeckSelect.value !== previousDeck || ankiModelNameSelect.value !== previousModelName) {
       markSettingsDirty("Anki 选项已更新，等待保存");
       setAnkiStatus("Anki 选项已更新", "success");
