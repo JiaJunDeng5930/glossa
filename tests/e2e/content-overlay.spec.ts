@@ -106,6 +106,19 @@ test("content bundle applies the automatic default after inactive SPA navigation
   });
   expect(nextRouteState).toEqual({ ok: true, enabled: false });
   await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+
+  const restoredRouteState = await page.evaluate(async () => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({ ...current, autoTranslateEnabled: true });
+    history.pushState({}, "", "/four");
+    const listeners = Reflect.get(window, "__glossaListeners") as Array<(message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void>;
+    return await new Promise<unknown>((resolve) => {
+      listeners[0]?.({ type: "glossa.getTranslationState" }, {}, resolve);
+    });
+  });
+  expect(restoredRouteState).toEqual({ ok: true, enabled: true });
+  await expect(page.locator('[data-glossa-token-label][data-glossa-visual="自动"]')).toHaveCount(1, { timeout: 2_000 });
 });
 
 test("content bundle toggles page translation with the configured shortcut", async ({ page }) => {
@@ -247,6 +260,85 @@ test("content bundle replaces active glosses after generation settings change", 
   });
 
   await page.waitForFunction(() => document.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "新版");
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaRefreshFlags"))).toEqual([undefined, true]);
+});
+
+test("content bundle preserves generation refresh eligibility outside the viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 500 });
+  await page.setContent("<main><p id=\"target\">Deferred archive appears here.</p><div style=\"height: 1600px\"></div></main>");
+  await installChromeRuntime(page, { autoTranslateEnabled: true, knownWordList: "junior-high", modelVersion: "gpt-original" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaRefreshFlags", []);
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string; forceRefresh?: boolean }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const settings = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+      const token = message.payload.sentences.flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "deferred");
+      if (token) {
+        (Reflect.get(window, "__glossaRefreshFlags") as Array<boolean | undefined>).push(token.forceRefresh);
+        emit(glossToken(message.payload.scanId, token.id, "ready", {
+          tokenId: token.id,
+          targetText: token.surface,
+          display: settings.modelVersion === "gpt-revised" ? "新版" : "旧版"
+        }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await expect(page.locator('[data-glossa-token-label][data-glossa-visual="旧版"]')).toHaveCount(1);
+
+  await page.evaluate(() => scrollTo(0, 1200));
+  await expect.poll(() => page.locator("#target").evaluate((element) => element.getBoundingClientRect().bottom < 0)).toBe(true);
+  await page.evaluate(() => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({ ...current, modelVersion: "gpt-revised" });
+  });
+  await expect(page.locator("[data-glossa-token]")).toHaveCount(0);
+  await page.evaluate(() => scrollTo(0, 0));
+
+  await expect(page.locator('[data-glossa-token-label][data-glossa-visual="新版"]')).toHaveCount(1, { timeout: 2_000 });
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaRefreshFlags"))).toEqual([undefined, true]);
+});
+
+test("content bundle collects generation refresh keys from open shadow roots", async ({ page }) => {
+  await page.setContent("<main><article id=\"host\"></article></main>");
+  await page.locator("#host").evaluate((host) => {
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = "<p>Quizzical archive appears here.</p>";
+  });
+  await installChromeRuntime(page, { autoTranslateEnabled: true, knownWordList: "junior-high", modelVersion: "gpt-original" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaRefreshFlags", []);
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string; forceRefresh?: boolean }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const settings = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+      const token = message.payload.sentences.flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "quizzical");
+      if (token) {
+        (Reflect.get(window, "__glossaRefreshFlags") as Array<boolean | undefined>).push(token.forceRefresh);
+        emit(glossToken(message.payload.scanId, token.id, "ready", {
+          tokenId: token.id,
+          targetText: token.surface,
+          display: settings.modelVersion === "gpt-revised" ? "新版" : "旧版"
+        }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => document.querySelector("#host")?.shadowRoot?.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "旧版");
+
+  await page.evaluate(() => {
+    const current = Reflect.get(window, "__glossaRuntimeSettings") as GlossaSettings;
+    const changeSettings = Reflect.get(window, "__glossaChangeSettings") as (settings: GlossaSettings) => void;
+    changeSettings({ ...current, modelVersion: "gpt-revised" });
+  });
+
+  await page.waitForFunction(() => document.querySelector("#host")?.shadowRoot?.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "新版");
   expect(await page.evaluate(() => Reflect.get(window, "__glossaRefreshFlags"))).toEqual([undefined, true]);
 });
 

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { wordClickTimeoutMs } from "../../src/content/cardTimeout";
+import { cardOperationTimeoutMs } from "../../src/shared/cardTimeout";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
 describe("card creation content timeout", () => {
   it("covers the configured AI retry budget and concurrent Anki write budget", () => {
-    expect(wordClickTimeoutMs({
+    expect(cardOperationTimeoutMs({
       ...DEFAULT_SETTINGS,
       ai: { ...DEFAULT_SETTINGS.ai, requestTimeoutMs: 45_000 },
       anki: { ...DEFAULT_SETTINGS.anki, requestTimeoutMs: 35_000 }
@@ -13,8 +13,8 @@ describe("card creation content timeout", () => {
   });
 
   it("keeps the existing fallback envelope for tiny or unavailable settings", () => {
-    expect(wordClickTimeoutMs(undefined)).toBe(60_000);
-    expect(wordClickTimeoutMs({
+    expect(cardOperationTimeoutMs(undefined)).toBe(60_000);
+    expect(cardOperationTimeoutMs({
       ...DEFAULT_SETTINGS,
       ai: { ...DEFAULT_SETTINGS.ai, requestTimeoutMs: 1_000 },
       anki: { ...DEFAULT_SETTINGS.anki, requestTimeoutMs: 1_000 }
@@ -22,6 +22,6 @@ describe("card creation content timeout", () => {
   });
 
   it("uses default request budgets when older settings omit timeout sections", () => {
-    expect(wordClickTimeoutMs({ shortcutKey: "Alt" })).toBe(95_000);
+    expect(cardOperationTimeoutMs({ shortcutKey: "Alt" })).toBe(95_000);
   });
 });
