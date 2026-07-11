@@ -178,7 +178,8 @@ export async function testAiSettings(settings: GlossaSettings): Promise<void> {
       : settings.ai.provider === "openai-completions"
         ? { model: settings.modelVersion, prompt: "Return {\"items\":[]} as JSON.", temperature: 0 }
         : { model: settings.modelVersion, input: "Return {\"items\":[]} as JSON.", ...reasoningBody(settings) };
-  await postConnectionTest(endpoint, body, "ai", settings.ai.apiKey, settings.ai.requestTimeoutMs);
+  const apiKey = settings.ai.provider === "glossa-backend" ? undefined : settings.ai.apiKey;
+  await postConnectionTest(endpoint, body, "ai", apiKey, settings.ai.requestTimeoutMs);
 }
 
 export async function testAnkiSettings(settings: GlossaSettings): Promise<void> {
