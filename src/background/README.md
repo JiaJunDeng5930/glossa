@@ -2,6 +2,8 @@
 
 `GlossResolver` owns the transient display pipeline for gloss requests. Content sends scan chunks over `gloss.session`; the resolver accepts each chunk, runs token lookup through a limited parallel gate, and emits token outcomes as soon as each lookup resolves. The background sends `gloss.chunk.ack` after that chunk has completed the lookup phase, so content-side backpressure limits queued resolver work.
 
+The settings listener and scan startup activate the same generation identity. Repeated activation is idempotent, changed identities retire older sessions, and replacement sessions wait for the shared persistent-cache clear gate before accepting chunks.
+
 1. Build the stable gloss cache key from target language, sentence text, token text, and token span.
 2. Check the page-scoped in-memory gloss cache first. A hit returns a display item for the current token id without reading lexicon state. This keeps labels stable when the page mutates and the content script immediately rescans during the same service-worker lifetime.
 3. On memory miss, read the IndexedDB gloss cache. A fresh hit hydrates the memory cache, returns a display item for the current token id, and records the show event in lexicon state before `known` or `ignored` lexicon state can hide the token. Cache freshness uses the stored `createdAt` plus `settings.glossCacheTtlMs`; legacy rows without `createdAt` receive the current read time and are written back.
