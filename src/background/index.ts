@@ -3,6 +3,7 @@ import { createAiBackend } from "./ai";
 import { createGlossResolver } from "./glossResolver";
 import { createBackgroundMessageHandler } from "./messages";
 import { openOnboardingAfterInstall } from "./onboarding";
+import { glossGenerationIdentity } from "../core/cache";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createBackgroundResponse, createGlossPortMessage, MESSAGE_VERSION, validateGlossPortInbound, validateRuntimeMessage } from "../shared/messages";
@@ -39,16 +40,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (!glossOutputSettingsChanged(previous, next)) {
     return;
   }
-  // A generation-setting change starts a new cache era and retires older lookups before replacement scans begin.
-  glossResolver.invalidateGeneration();
-  void storage.glossCache.clear().catch((error) => {
-    trace({
-      component: "service-worker",
-      operation: "gloss.cache.invalidate",
-      result: "error",
-      error
-    });
-  });
+  // A generation-setting change starts one shared cache era for both listener and scan-start ordering.
+  void glossResolver.activateGeneration(glossGenerationIdentity(next));
 });
 
 chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse) => {
@@ -119,17 +112,23 @@ chrome.runtime.onConnect.addListener((port) => {
         scanId = message.payload.scanId;
         pageUrl = message.payload.pageUrl;
         const startPayload = message.payload;
-        sessionPromise = storage.settings.get().then((settings) => glossResolver.createSession(startPayload.pageUrl, settings, Date.now(), {
-          emit(outcome) {
-            safePost(port, createGlossPortMessage("gloss.token", {
-              ...outcome,
-              scanId: startPayload.scanId
-            }));
-          },
-          isActive() {
-            return active;
-          }
-        }));
+        sessionPromise = storage.settings.get().then(async (settings) => {
+          // Scan startup and the storage listener converge on one identity, independent of listener ordering.
+          const generationGate = glossResolver.activateGeneration(glossGenerationIdentity(settings));
+          const createdSession = glossResolver.createSession(startPayload.pageUrl, settings, Date.now(), {
+            emit(outcome) {
+              safePost(port, createGlossPortMessage("gloss.token", {
+                ...outcome,
+                scanId: startPayload.scanId
+              }));
+            },
+            isActive() {
+              return active;
+            }
+          });
+          await generationGate;
+          return createdSession;
+        });
         session = await sessionPromise;
         trace({
           component: "service-worker",

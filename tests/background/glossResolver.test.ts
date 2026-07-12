@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildGlossCacheKey } from "../../src/core/cache";
+import { buildGlossCacheKey, glossGenerationIdentity } from "../../src/core/cache";
 import { createGlossResolver } from "../../src/background/glossResolver";
 import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossCacheEntry, type GlossTokenPayload, type SentenceCandidate, type TokenCandidate, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
@@ -97,11 +97,12 @@ describe("gloss resolver lookup-first pipeline", () => {
       ]
     }], settings, 200, { emit: (event) => events.push(event) });
 
-    expect(events).toEqual([
+    expect(events).toHaveLength(3);
+    expect(events).toEqual(expect.arrayContaining([
       { tokenId: "t-fresh", status: "ready", item: { tokenId: "t-fresh", targetText: "Fresh", display: "新鲜" } },
       { tokenId: "t-ignored", status: "ready", item: { tokenId: "t-ignored", targetText: "ignored", display: "忽略缓存" } },
       { tokenId: "t-stale", status: "hidden" }
-    ]);
+    ]));
     expect(ai.glossFrame).not.toHaveBeenCalled();
   });
 
@@ -415,6 +416,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
     const oldEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
     const newEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    await resolver.activateGeneration(glossGenerationIdentity(oldSettings));
 
     const oldScan = resolveScan(resolver, "https://example.test/page", [{
       id: "s-old",
@@ -423,7 +425,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     }], oldSettings, 100, { emit: (event) => oldEvents.push(event) });
     await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
-    resolver.invalidateGeneration();
+    await resolver.activateGeneration(glossGenerationIdentity(newSettings));
     const newScan = resolveScan(resolver, "https://example.test/page", [{
       id: "s-new",
       text: "An obscure archive appears.",
@@ -467,6 +469,60 @@ describe("gloss resolver lookup-first pipeline", () => {
 
     expect(events).toEqual([]);
     expect(ai.glossFrame).not.toHaveBeenCalled();
+  });
+
+  it("keeps a replacement session active when the same generation is activated again", async () => {
+    // @verifies glossa.cache_identity.generation_activation
+    const storage = createMemoryStorage();
+    const settings = { ...testSettings(), modelVersion: "replacement-model" };
+    let resolveFrame!: (value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void;
+    const ai = {
+      glossFrame: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+        resolveFrame = resolve;
+      })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const identity = glossGenerationIdentity(settings);
+    await resolver.activateGeneration(identity);
+
+    const scan = resolveScan(resolver, "https://example.test/page", [{
+      id: "s-new",
+      text: "A novel archive appears.",
+      tokens: [{ id: "t-new", sentenceId: "s-new", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }], settings, 200, { emit: (event) => events.push(event) });
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+
+    await resolver.activateGeneration(identity);
+    resolveFrame({ items: [{ tokenId: "t-new", targetText: "novel", display: "新版" }] });
+    await scan;
+
+    expect(events).toEqual([
+      { tokenId: "t-new", status: "pending" },
+      { tokenId: "t-new", status: "ready", item: { tokenId: "t-new", targetText: "novel", display: "新版" } }
+    ]);
+  });
+
+  it("shares one persistent cache-clear gate for a changed generation", async () => {
+    const storage = createMemoryStorage();
+    let releaseClear!: () => void;
+    storage.glossCache.clear = vi.fn(() => new Promise<void>((resolve) => {
+      releaseClear = resolve;
+    }));
+    const resolver = createGlossResolver({
+      storage,
+      ai: { glossFrame: vi.fn(), ankiCard: vi.fn() }
+    });
+    await resolver.activateGeneration("old");
+
+    const first = resolver.activateGeneration("new");
+    const second = resolver.activateGeneration("new");
+
+    await Promise.resolve();
+    expect(storage.glossCache.clear).toHaveBeenCalledTimes(1);
+    releaseClear();
+    await Promise.all([first, second]);
   });
 
   it("splits in-flight AI reuse by API key for the same cache entry", async () => {

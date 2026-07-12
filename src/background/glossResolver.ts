@@ -17,6 +17,7 @@ import { GLOSS_TARGET_LANG } from "../shared/types";
 export interface GlossResolver {
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
   clearMemory(): void;
+  activateGeneration(identity: string): Promise<void>;
   invalidateGeneration(): void;
 }
 
@@ -111,6 +112,8 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
   const inFlight = new Map<string, InFlightGloss>();
   let generation = 0;
+  let generationIdentity: string | undefined;
+  let generationReady = Promise.resolve();
   const maxMemoryEntries = deps.maxMemoryEntries ?? DEFAULT_MAX_MEMORY_ENTRIES;
   const lookupLimit = pLimit(deps.lookupConcurrency ?? DEFAULT_LOOKUP_CONCURRENCY);
   const writeLimit = pLimit(1);
@@ -290,7 +293,31 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     clearMemory() {
       memoryCache.clear();
     },
+    // @behavior glossa.cache_identity.generation_activation Repeating the active settings identity preserves replacement sessions while a changed identity retires older work.
+    activateGeneration(identity) {
+      if (identity === generationIdentity) {
+        return generationReady;
+      }
+      if (generationIdentity === undefined) {
+        generationIdentity = identity;
+        return generationReady;
+      }
+      generationIdentity = identity;
+      generation += 1;
+      memoryCache.clear();
+      aiOutlet.invalidate();
+      generationReady = generationReady.then(() => deps.storage.glossCache.clear()).catch((error) => {
+        trace({
+          component: "service-worker",
+          operation: "gloss.cache.invalidate",
+          result: "error",
+          error
+        });
+      });
+      return generationReady;
+    },
     invalidateGeneration() {
+      generationIdentity = undefined;
       generation += 1;
       memoryCache.clear();
       aiOutlet.invalidate();
