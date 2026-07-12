@@ -1,7 +1,6 @@
 import { KNOWN_WORD_LISTS } from "../core/lexicon";
 import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey } from "../core/state";
 import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
-import { cardOperationTimeoutMs } from "../shared/cardTimeout";
 import { createOptionsMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
 import { defaultEndpointForProvider } from "../shared/settings";
 import { aiConnectionKey, ankiConnectionKey, applyAppearancePreview, runSettingsConnectionTest, testAiSettings, testAnkiSettings } from "../shared/settingsForm";
@@ -583,17 +582,19 @@ async function clearGlossCache(): Promise<void> {
   }
 }
 
-function runtimeMessage(message: OptionsToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
+function runtimeMessage(message: OptionsToBackgroundMessage, timeoutMs: number | null = 5_000): Promise<BackgroundResponseMessage> {
   return new Promise((resolve, reject) => {
     if (!globalThis.chrome?.runtime?.sendMessage) {
       reject(new Error("chrome.runtime.sendMessage is unavailable"));
       return;
     }
-    const timeout = globalThis.setTimeout(() => {
+    const timeout = timeoutMs === null ? undefined : globalThis.setTimeout(() => {
       reject(messageTimeoutError(message));
     }, timeoutMs);
     chrome.runtime.sendMessage(message, (rawResponse: unknown) => {
-      globalThis.clearTimeout(timeout);
+      if (timeout !== undefined) {
+        globalThis.clearTimeout(timeout);
+      }
       const error = chrome.runtime.lastError;
       if (error) {
         reject(new Error(error.message));
@@ -856,8 +857,7 @@ async function resetCardHistory(): Promise<void> {
   setAnkiStatus("正在重置制卡记录…", "pending");
   try {
     // @behavior glossa.card_creation.history_reset.options_request The reset control delegates history mutation to the service worker so it can coordinate active card creation.
-    const settings = await extensionStorage.settings.get();
-    await runtimeMessage(createOptionsMessage("card.history.reset", {}), cardOperationTimeoutMs(settings));
+    await runtimeMessage(createOptionsMessage("card.history.reset", {}), null);
     setAnkiStatus("制卡记录已重置，Anki 中已有卡片保持不变", "success");
   } catch (error) {
     setAnkiStatus(userMessageForError(diagnosticErrorFrom(error, {
