@@ -17,7 +17,14 @@ const glossResolver = createGlossResolver({ storage, ai });
 const handleMessage = createBackgroundMessageHandler({
   storage,
   ai,
-  anki
+  anki,
+  async getTopFrameTranslationState(tabId) {
+    const response = await chrome.tabs.sendMessage(tabId, { type: "glossa.getTranslationState" }, { frameId: 0 });
+    if (!isTranslationControlResponse(response)) {
+      throw new Error("Top-frame translation state response is malformed");
+    }
+    return response.enabled;
+  }
 });
 
 chrome.runtime.onInstalled.addListener(openOnboardingAfterInstall);
@@ -64,7 +71,8 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
       sendResponse(createBackgroundResponse(message, "gloss.cache.cleared", {}));
       return;
     }
-    sendResponse(await handleMessage(message));
+    const tabId = sender.tab?.id;
+    sendResponse(await handleMessage(message, tabId === undefined ? {} : { tabId }));
   })().catch((error) => {
     trace({
       component: "service-worker",
@@ -82,6 +90,15 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
   });
   return true;
 });
+
+function isTranslationControlResponse(value: unknown): value is { ok: true; enabled: boolean } {
+  return typeof value === "object"
+    && value !== null
+    && "ok" in value
+    && value.ok === true
+    && "enabled" in value
+    && typeof value.enabled === "boolean";
+}
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "gloss.session") {

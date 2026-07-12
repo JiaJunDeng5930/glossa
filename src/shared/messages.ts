@@ -29,6 +29,8 @@ import type {
   SentenceCandidate,
   SettingsGetPayload,
   SettingsGetResponsePayload,
+  TranslationStateResponsePayload,
+  TranslationStateSyncPayload,
   TokenCandidate,
   UserWordClickPayload,
   WordCardDuplicatePayload,
@@ -40,6 +42,7 @@ export const MESSAGE_VERSION = 1;
 
 type ContentPayloadByType = {
   "settings.get": SettingsGetPayload;
+  "translation.state.sync": TranslationStateSyncPayload;
   "word.clicked": UserWordClickPayload;
 };
 
@@ -50,6 +53,7 @@ type OptionsPayloadByType = {
 
 type BackgroundPayloadByType = {
   "settings.response": SettingsGetResponsePayload;
+  "translation.state.response": TranslationStateResponsePayload;
   "word.clicked.ok": WordClickedOkPayload;
   "word.card.duplicate": WordCardDuplicatePayload;
   "gloss.cache.cleared": GlossCacheClearedPayload;
@@ -134,6 +138,12 @@ export function validateContentMessage(value: unknown): ContentToBackgroundMessa
     }
     return envelope as ContentToBackgroundMessage;
   }
+  if (envelope.type === "translation.state.sync") {
+    if (!isEmptyPayload(envelope.payload)) {
+      throw new Error("Malformed translation.state.sync payload");
+    }
+    return envelope as ContentToBackgroundMessage;
+  }
   if (envelope.type === "word.clicked") {
     if (!isUserWordClickPayload(envelope.payload)) {
       throw new Error("Malformed word.clicked payload");
@@ -179,6 +189,7 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
   }
   if (
     envelope.type !== "settings.response"
+    && envelope.type !== "translation.state.response"
     && envelope.type !== "word.clicked.ok"
     && envelope.type !== "word.card.duplicate"
     && envelope.type !== "gloss.cache.cleared"
@@ -208,6 +219,12 @@ export function validateBackgroundResponse(value: unknown, request: RuntimeToBac
   if (envelope.type === "gloss.cache.cleared") {
     if (!isEmptyPayload(envelope.payload)) {
       throw new Error("Malformed gloss.cache.cleared payload");
+    }
+    return envelope as BackgroundResponseMessage;
+  }
+  if (envelope.type === "translation.state.response") {
+    if (!isTranslationStateResponsePayload(envelope.payload)) {
+      throw new Error("Malformed translation.state.response payload");
     }
     return envelope as BackgroundResponseMessage;
   }
@@ -464,6 +481,10 @@ function isGlossItem(value: unknown): value is GlossItem {
 
 function isSettingsGetResponsePayload(value: unknown): value is SettingsGetResponsePayload {
   return isPlainObject(value) && isGlossaSettings(value.settings);
+}
+
+function isTranslationStateResponsePayload(value: unknown): value is TranslationStateResponsePayload {
+  return isPlainObject(value) && typeof value.enabled === "boolean";
 }
 
 function isWordClickedOkPayload(value: unknown): value is WordClickedOkPayload {

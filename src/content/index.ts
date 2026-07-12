@@ -783,6 +783,21 @@ async function boot(): Promise<void> {
     registerLifecycleCleanup(() => runtime.onMessage.removeListener(onRuntimeMessage));
   }
 
+  // @behavior glossa.extension_contracts.frame_state_sync.child_apply A child frame adopts frame zero's live state before its first viewport scan.
+  if (window.top !== window) {
+    try {
+      const response = await runtimeMessage(createContentMessage("translation.state.sync", {}));
+      if (response.type === "translation.state.response") {
+        translationEnabled = response.payload.enabled;
+      }
+    } catch (error) {
+      handleRuntimeError("translation.state.sync", error);
+    }
+    if (stopped) {
+      return;
+    }
+  }
+
   addLifecycleEventListener(document, "keydown", onShortcutKeyDown, true);
 
   if (translationEnabled) {

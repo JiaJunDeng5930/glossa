@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Frame, type Page } from "@playwright/test";
 import { resolve } from "node:path";
 import { DEFAULT_SETTINGS, type GlossaSettings } from "../../src/shared/types";
 
@@ -259,6 +259,47 @@ test("content bundle reconciles settings changed while the initial word list loa
   });
 
   await expect(page.locator('[data-glossa-token-label][data-glossa-visual="延后"]')).toHaveCount(1, { timeout: 2_000 });
+});
+
+test("content bundle synchronizes a late child frame with the top-frame translation state", async ({ page }) => {
+  // @verifies glossa.extension_contracts.frame_state_sync.child_apply
+  await page.setContent('<iframe srcdoc="<main><p>Deferred archive appears here.</p></main>"></iframe>');
+  const frame = page.frames().find((candidate) => candidate.parentFrame() === page.mainFrame());
+  if (!frame) {
+    throw new Error("Child frame was not created");
+  }
+  await installChromeRuntime(frame, { autoTranslateEnabled: false, knownWordList: "junior-high" });
+  await frame.evaluate(() => {
+    Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }) => {
+      if (message.type !== "translation.state.sync") {
+        return undefined;
+      }
+      return Promise.resolve({
+        type: "translation.state.response",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { enabled: true }
+      });
+    });
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      const token = message.payload.sentences.flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "deferred");
+      if (token) {
+        emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, targetText: token.surface, display: "延后" }));
+      }
+      emit(glossDone(message.payload.scanId));
+    });
+  });
+
+  await frame.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+
+  await expect(frame.locator('[data-glossa-token-label][data-glossa-visual="延后"]')).toHaveCount(1, { timeout: 2_000 });
+  expect(await frame.evaluate(() => (Reflect.get(window, "__glossaMessages") as Array<{ type?: string }>).some((message) => message.type === "translation.state.sync"))).toBe(true);
 });
 
 test("content bundle replaces active glosses after generation settings change", async ({ page }) => {
@@ -2278,7 +2319,7 @@ async function pressTranslationShortcut(page: Page): Promise<void> {
   await page.keyboard.up("Control");
 }
 
-async function installChromeRuntime(page: Page, settings: RuntimeSettings): Promise<void> {
+async function installChromeRuntime(page: Page | Frame, settings: RuntimeSettings): Promise<void> {
   const runtimeSettings = completeRuntimeSettings(settings);
   await page.evaluate((settings) => {
     const sent: unknown[] = [];

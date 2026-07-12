@@ -9,6 +9,28 @@ import type { ExtensionStorage } from "../../src/storage/db";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossCacheEntry, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
 
 describe("background message handler", () => {
+  it("relays a child frame's state sync through the top frame", async () => {
+    // @verifies glossa.extension_contracts.frame_state_sync.relay
+    const storage = createMemoryStorage();
+    const getTopFrameTranslationState = vi.fn(async () => true);
+    const handler = createBackgroundMessageHandler({
+      storage,
+      ai: { glossFrame: vi.fn(), ankiCard: vi.fn() },
+      anki: { createNote: vi.fn() },
+      getTopFrameTranslationState
+    });
+    const message = createContentMessage("translation.state.sync", {});
+
+    const response = await handler(message, { tabId: 11 });
+
+    expect(getTopFrameTranslationState).toHaveBeenCalledWith(11);
+    expect(response).toMatchObject({
+      type: "translation.state.response",
+      requestId: message.requestId,
+      payload: { enabled: true }
+    });
+  });
+
   it("marks clicked words as learning_active and creates an Anki note through the background", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set({
