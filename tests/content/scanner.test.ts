@@ -105,6 +105,7 @@ describe("content scanner", () => {
   });
 
   it("keeps every pending refresh occurrence beyond the ordinary lemma cap", async () => {
+    // @verifies glossa.page_translation.generation_refresh.snapshot
     document.body.innerHTML = `
       <main>
         <p>Obscure archive appears clearly.</p>
@@ -112,11 +113,17 @@ describe("content scanner", () => {
       </main>
     `;
     const refreshKey = JSON.stringify(["Obscure archive appears clearly.", "obscure", 0, 7]);
-    const options = { forceRefreshKeys: new Set([refreshKey]) } as ScanChunkOptions & { forceRefreshKeys: ReadonlySet<string> };
+    const refreshKeys = new Set([refreshKey]);
+    const refreshed: ScanChunk["tokens"] = [];
 
-    const result = await scanDocumentText(document, new Set(), options);
+    await scanDocumentTextInChunks(document, new Set(), {
+      forceRefreshKeys: refreshKeys,
+      maxTokensPerChunk: 1
+    }, (chunk) => {
+      refreshed.push(...chunk.tokens.filter((token) => token.lemma === "obscure"));
+      refreshKeys.clear();
+    });
 
-    const refreshed = result.tokens.filter((token) => token.lemma === "obscure");
     expect(refreshed).toHaveLength(2);
     expect(refreshed.every((token) => token.forceRefresh === true)).toBe(true);
   });

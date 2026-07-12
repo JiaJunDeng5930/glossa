@@ -104,6 +104,8 @@ export async function scanDocumentTextInChunks(
   const minContextChars = options.minContextChars ?? 12;
   const maxTokensPerChunk = options.maxTokensPerChunk ?? 64;
   const maxChunkDelayMs = options.maxChunkDelayMs ?? 16;
+  // @behavior glossa.page_translation.generation_refresh.snapshot One scan keeps an immutable refresh-key snapshot across every streamed chunk.
+  const forceRefreshKeys = options.forceRefreshKeys ? new Set(options.forceRefreshKeys) : undefined;
 
   const flushChunk = async (): Promise<boolean> => {
     if (chunkTokens.length === 0) {
@@ -167,7 +169,7 @@ export async function scanDocumentTextInChunks(
         stats.rejectedByText += 1;
         continue;
       }
-      const forceRefresh = options.forceRefreshKeys?.has(glossRefreshKey({
+      const forceRefresh = forceRefreshKeys?.has(glossRefreshKey({
         sentenceText: context.text,
         lemma,
         startOffset: context.startOffset,
