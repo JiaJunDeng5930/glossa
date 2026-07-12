@@ -4,6 +4,8 @@ import { DEFAULT_SETTINGS } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 
 const DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE = "无法读取快捷键设置";
+const STATE_PROBE_ATTEMPTS = 4;
+const STATE_PROBE_RETRY_MS = 100;
 
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-page")!;
 const translateButtonLabel = document.querySelector<HTMLElement>("#translate-page-label")!;
@@ -36,7 +38,7 @@ async function initializeTranslationState(): Promise<void> {
       renderUnavailable();
       return;
     }
-    const response = await chrome.tabs.sendMessage(tab.id, { type: "glossa.getTranslationState" }, { frameId: 0 });
+    const response = await probeTranslationState(tab.id);
     if (!isTranslationStateResponse(response)) {
       renderUnavailable(messageFromControlResponse(response));
       return;
@@ -47,6 +49,25 @@ async function initializeTranslationState(): Promise<void> {
   } catch {
     renderUnavailable();
   }
+}
+
+async function probeTranslationState(tabId: number): Promise<unknown> {
+  for (let attempt = 1; attempt <= STATE_PROBE_ATTEMPTS; attempt += 1) {
+    try {
+      return await chrome.tabs.sendMessage(tabId, { type: "glossa.getTranslationState" }, { frameId: 0 });
+    } catch (error) {
+      if (attempt === STATE_PROBE_ATTEMPTS || !isReceiverStartupError(error)) {
+        throw error;
+      }
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, STATE_PROBE_RETRY_MS));
+    }
+  }
+  return undefined;
+}
+
+function isReceiverStartupError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Receiving end does not exist") || message.includes("Could not establish connection");
 }
 
 async function toggleCurrentTab(): Promise<void> {
