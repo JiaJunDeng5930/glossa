@@ -104,6 +104,23 @@ describe("content scanner", () => {
     expect(result.stats.rejectedByFrequency).toBe(1);
   });
 
+  it("keeps every pending refresh occurrence beyond the ordinary lemma cap", async () => {
+    document.body.innerHTML = `
+      <main>
+        <p>Obscure archive appears clearly.</p>
+        <p>Obscure archive appears clearly.</p>
+      </main>
+    `;
+    const refreshKey = JSON.stringify(["Obscure archive appears clearly.", "obscure", 0, 7]);
+    const options = { forceRefreshKeys: new Set([refreshKey]) } as ScanChunkOptions & { forceRefreshKeys: ReadonlySet<string> };
+
+    const result = await scanDocumentText(document, new Set(), options);
+
+    const refreshed = result.tokens.filter((token) => token.lemma === "obscure");
+    expect(refreshed).toHaveLength(2);
+    expect(refreshed.every((token) => token.forceRefresh === true)).toBe(true);
+  });
+
   it("attaches source identity to each token", async () => {
     document.body.innerHTML = "<main><p>Submit archive entries carefully.</p></main>";
 

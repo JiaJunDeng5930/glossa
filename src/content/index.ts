@@ -6,11 +6,11 @@ import { glossOutputSettingsChanged, mergeStoredSettings } from "../shared/setti
 import { matchesShortcut } from "../shared/shortcut";
 import { cardOperationTimeoutMs } from "../shared/cardTimeout";
 import GLOSSA_THEME from "../shared/theme.json";
-import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
+import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossaSettings, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
-import { createGlossOverlay } from "./overlay";
-import { scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
-import { createSelectionController, type WordSelection } from "./selection";
+import { createGlossOverlay, type CardFeedback } from "./overlay";
+import { glossRefreshKey, scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
+import { createSelectionController } from "./selection";
 
 const SCAN_CHUNK_MAX_TOKENS = 64;
 const SCAN_CHUNK_MAX_MS = 16;
@@ -38,6 +38,16 @@ interface GlossSession {
   port: chrome.runtime.Port;
 }
 
+interface ActiveCardOperation {
+  key: string;
+  tokenId: string;
+  sourceParent: Node | null;
+  initialToken?: ScannedToken;
+  feedback: Exclude<CardFeedback, "card-cancelled">;
+  message?: string;
+  terminal: boolean;
+}
+
 async function boot(): Promise<void> {
   const settingsRequest = createContentMessage("settings.get", {});
   let settingsResponse: BackgroundResponseMessage;
@@ -55,6 +65,26 @@ async function boot(): Promise<void> {
     return;
   }
   let settings = settingsResponse.payload.settings;
+  const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
+  const storageChanges = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.storage?.onChanged;
+  let queuedSettingsChange: GlossaSettings | undefined;
+  let reconcileSettingsChange: ((nextSettings: GlossaSettings) => Promise<void>) | undefined;
+  const onStoredSettingsChanged: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
+    const settingsChange = changes.settings;
+    if (areaName !== "local" || !settingsChange) {
+      return;
+    }
+    const nextSettings = mergeStoredSettings(settingsChange.newValue);
+    if (!reconcileSettingsChange) {
+      queuedSettingsChange = nextSettings;
+      return;
+    }
+    void reconcileSettingsChange(nextSettings).catch((error) => handleRuntimeError("settings.changed", error));
+  };
+  if (storageChanges) {
+    // Register before the first word-list load so settings writes during content startup are queued.
+    storageChanges.addListener(onStoredSettingsChanged);
+  }
   let knownWords = await loadKnownWords(settings.knownWordList);
   let knownWordsLoadRevision = 0;
   const overlay = createGlossOverlay(document, settings?.appearance);
@@ -66,11 +96,13 @@ async function boot(): Promise<void> {
   let autoTranslateEnabled = settings?.autoTranslateEnabled ?? false;
   let wordClickTimeout = cardOperationTimeoutMs(settings);
   let translationEnabled = autoTranslateEnabled;
+  let bootSettingsOpen = true;
   let selectionController: ReturnType<typeof createSelectionController> | undefined;
   let observer: MutationObserver | undefined;
   let currentGlossSession: GlossSession | undefined;
   const glossSessions = new Set<GlossSession>();
   const pendingGenerationRefreshKeys = new Set<string>();
+  const activeCardOperations = new Set<ActiveCardOperation>();
   let scanInProgress = 0;
 
   const stopContentScript = (reason: string): void => {
@@ -78,6 +110,7 @@ async function boot(): Promise<void> {
       return;
     }
     stopped = true;
+    activeCardOperations.clear();
     cancelDuplicateCardPrompt(document);
     if (scanTimer) {
       globalThis.clearTimeout(scanTimer);
@@ -111,6 +144,9 @@ async function boot(): Promise<void> {
     }
     lifecycleCleanups.push(cleanup);
   };
+  if (storageChanges) {
+    registerLifecycleCleanup(() => storageChanges.removeListener(onStoredSettingsChanged));
+  }
 
   const runLifecycleCleanups = (): void => {
     for (const cleanup of lifecycleCleanups.splice(0).reverse()) {
@@ -139,11 +175,66 @@ async function boot(): Promise<void> {
     scanVersion += 1;
     closeAllGlossSessions();
     cancelDuplicateCardPrompt(document);
+    activeCardOperations.clear();
     overlay.clear();
     pendingGenerationRefreshKeys.clear();
     // Manual activation belongs to one route; navigation restores the configured automatic default.
     translationEnabled = manualActivation || autoTranslateEnabled;
     return true;
+  };
+
+  const bindCardOperationsToToken = (token: ScannedToken): void => {
+    const key = glossRefreshKey(token);
+    for (const operation of activeCardOperations) {
+      // Match the page occurrence while its text node is attached; rendering then carries the operation by token id.
+      if (operation.key === key && operation.sourceParent === token.textNode.parentNode) {
+        operation.tokenId = token.id;
+      }
+    }
+  };
+
+  const applyCardOperationFeedback = (operation: ActiveCardOperation, token?: ScannedToken): void => {
+    if (!activeCardOperations.has(operation)) {
+      return;
+    }
+    const renderToken = token ?? operation.initialToken;
+    const result = overlay.applyCardFeedback({
+      tokenId: operation.tokenId,
+      ...(renderToken ? { token: renderToken } : {}),
+      feedback: operation.feedback,
+      ...(operation.message ? { message: operation.message } : {})
+    });
+    if (operation.terminal && result.result !== "skipped") {
+      activeCardOperations.delete(operation);
+    }
+  };
+
+  const replayCardOperations = (token: ScannedToken): void => {
+    for (const operation of activeCardOperations) {
+      if (operation.tokenId !== token.id) {
+        continue;
+      }
+      applyCardOperationFeedback(operation, token);
+    }
+  };
+
+  const finishCardOperation = (operation: ActiveCardOperation, feedback: Exclude<CardFeedback, "card-pending">, message?: string): void => {
+    if (!activeCardOperations.has(operation)) {
+      return;
+    }
+    if (feedback === "card-cancelled") {
+      overlay.applyCardFeedback({ tokenId: operation.tokenId, feedback });
+      activeCardOperations.delete(operation);
+      return;
+    }
+    operation.feedback = feedback;
+    if (message) {
+      operation.message = message;
+    } else {
+      delete operation.message;
+    }
+    operation.terminal = true;
+    applyCardOperationFeedback(operation);
   };
 
   const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
@@ -169,6 +260,7 @@ async function boot(): Promise<void> {
           scanVersion: version,
           requireRenderableRange: true,
           requireViewportRange: true,
+          forceRefreshKeys: pendingGenerationRefreshKeys,
           maxTokensPerChunk: SCAN_CHUNK_MAX_TOKENS,
           maxChunkDelayMs: SCAN_CHUNK_MAX_MS
         }, async (chunk) => {
@@ -187,10 +279,7 @@ async function boot(): Promise<void> {
             }
           }
           for (const token of chunk.tokens) {
-            // Labels rendered before a generation change keep refresh eligibility until their page location is scanned again.
-            if (pendingGenerationRefreshKeys.has(glossRefreshKey(token))) {
-              token.forceRefresh = true;
-            }
+            bindCardOperationsToToken(token);
             tokenMap.set(token.id, token);
           }
           const sent = await sendGlossChunk(session, chunk, () => version === scanVersion);
@@ -396,6 +485,9 @@ async function boot(): Promise<void> {
       ? overlay.applyTokenOutcome(token, outcome, token?.scanVersion ?? session.version)
       : overlay.applyStalePendingOutcome(outcome);
     updatePendingTokenState(session, outcome, render);
+    if (current && token && outcome.status !== "hidden") {
+      replayCardOperations(token);
+    }
     if (current && token?.forceRefresh && (outcome.status === "ready" || outcome.status === "hidden")) {
       pendingGenerationRefreshKeys.delete(glossRefreshKey(token));
     }
@@ -559,6 +651,7 @@ async function boot(): Promise<void> {
       return;
     }
     translationEnabled = false;
+    activeCardOperations.clear();
     if (scanTimer) {
       globalThis.clearTimeout(scanTimer);
       scanTimer = undefined;
@@ -608,57 +701,53 @@ async function boot(): Promise<void> {
     }
   };
 
-  const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
-  const storageChanges = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.storage?.onChanged;
-  const onStoredSettingsChanged: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
-    const settingsChange = changes.settings;
-    if (areaName !== "local" || !settingsChange) {
+  reconcileSettingsChange = async (nextSettings) => {
+    const previousSettings = settings;
+    const knownWordListChanged = nextSettings.knownWordList !== previousSettings.knownWordList;
+    const generationSettingsChanged = glossOutputSettingsChanged(previousSettings, nextSettings);
+    if (generationSettingsChanged) {
+      for (const key of renderedGlossRefreshKeys(document)) {
+        pendingGenerationRefreshKeys.add(key);
+      }
+    }
+    settings = nextSettings;
+    autoTranslateEnabled = nextSettings.autoTranslateEnabled;
+    if (bootSettingsOpen) {
+      translationEnabled = autoTranslateEnabled;
+    }
+    wordClickTimeout = cardOperationTimeoutMs(nextSettings);
+    overlay.setAppearance(nextSettings.appearance);
+    selectionController?.setShortcut(nextSettings.shortcutKey);
+    // The automatic setting becomes the next route default while the user's current-route choice stays stable.
+    if (!knownWordListChanged && !generationSettingsChanged) {
       return;
     }
-    void (async () => {
-      const previousSettings = settings;
-      const nextSettings = mergeStoredSettings(settingsChange.newValue);
-      const knownWordListChanged = nextSettings.knownWordList !== previousSettings.knownWordList;
-      const generationSettingsChanged = glossOutputSettingsChanged(previousSettings, nextSettings);
-      if (generationSettingsChanged) {
-        for (const key of renderedGlossRefreshKeys(document)) {
-          pendingGenerationRefreshKeys.add(key);
-        }
-      }
-      settings = nextSettings;
-      autoTranslateEnabled = nextSettings.autoTranslateEnabled;
-      wordClickTimeout = cardOperationTimeoutMs(nextSettings);
-      overlay.setAppearance(nextSettings.appearance);
-      selectionController?.setShortcut(nextSettings.shortcutKey);
-      // The automatic setting becomes the next route default while the user's current-route choice stays stable.
-      if (!knownWordListChanged && !generationSettingsChanged) {
+    if (knownWordListChanged) {
+      const requestedList = nextSettings.knownWordList;
+      const loadRevision = ++knownWordsLoadRevision;
+      const loadedWords = await loadKnownWords(requestedList);
+      if (stopped || loadRevision !== knownWordsLoadRevision || settings.knownWordList !== requestedList) {
         return;
       }
-      if (knownWordListChanged) {
-        const requestedList = nextSettings.knownWordList;
-        const loadRevision = ++knownWordsLoadRevision;
-        const loadedWords = await loadKnownWords(requestedList);
-        if (stopped || loadRevision !== knownWordsLoadRevision || settings.knownWordList !== requestedList) {
-          return;
-        }
-        knownWords = loadedWords;
-      }
-      if (stopped) {
-        return;
-      }
-      scanVersion += 1;
-      closeAllGlossSessions();
-      overlay.clear();
-      if (translationEnabled) {
-        const reason = knownWordListChanged ? "settings-known-word-list" : "settings-gloss-generation";
-        await scanAndRender(reason);
-      }
-    })().catch((error) => handleRuntimeError("settings.changed", error));
+      knownWords = loadedWords;
+    }
+    if (stopped) {
+      return;
+    }
+    scanVersion += 1;
+    closeAllGlossSessions();
+    overlay.clear();
+    if (translationEnabled) {
+      const reason = knownWordListChanged ? "settings-known-word-list" : "settings-gloss-generation";
+      await scanAndRender(reason);
+    }
   };
-  if (storageChanges) {
-    storageChanges.addListener(onStoredSettingsChanged);
-    registerLifecycleCleanup(() => storageChanges.removeListener(onStoredSettingsChanged));
+  if (queuedSettingsChange) {
+    const latestSettings = queuedSettingsChange;
+    queuedSettingsChange = undefined;
+    await reconcileSettingsChange(latestSettings);
   }
+  bootSettingsOpen = false;
   const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
     if (isTranslationStateMessage(message)) {
       const routeChanged = synchronizeRouteState();
@@ -707,9 +796,21 @@ async function boot(): Promise<void> {
     document,
     shortcutKey: settings?.shortcutKey ?? "Alt",
     onWordSelected(selection) {
-      overlay.applyCardFeedback(selection.renderToken
-        ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-pending" }
-        : { tokenId: selection.token.id, feedback: "card-pending" });
+      const operation: ActiveCardOperation = {
+        key: glossRefreshKey({
+          sentenceText: selection.sentence,
+          lemma: selection.token.lemma,
+          startOffset: selection.token.startOffset,
+          endOffset: selection.token.endOffset
+        }),
+        tokenId: selection.token.id,
+        sourceParent: selection.sourceParent,
+        ...(selection.renderToken ? { initialToken: selection.renderToken } : {}),
+        feedback: "card-pending",
+        terminal: false
+      };
+      activeCardOperations.add(operation);
+      applyCardOperationFeedback(operation);
       return runtimeMessage(createContentMessage("word.clicked", {
         pageUrl: location.href,
         sentence: selection.sentence,
@@ -721,7 +822,7 @@ async function boot(): Promise<void> {
             timeoutMs: response.payload.promptMs
           }).then((confirmed) => {
             if (!confirmed) {
-              overlay.applyCardFeedback({ tokenId: selection.token.id, feedback: "card-cancelled" });
+              finishCardOperation(operation, "card-cancelled");
               return undefined;
             }
             return runtimeMessage(createContentMessage("word.clicked", {
@@ -730,19 +831,18 @@ async function boot(): Promise<void> {
               token: selection.token,
               allowDuplicateCard: true
             }), wordClickTimeout).then((confirmedResponse) => {
-              applyCardResponse(selection, confirmedResponse);
+              applyCardResponse(operation, confirmedResponse);
             });
           });
         }
-        applyCardResponse(selection, response);
+        applyCardResponse(operation, response);
       }).catch((error) => {
         if (isExtensionContextInvalidated(error)) {
+          activeCardOperations.delete(operation);
           handleRuntimeError("word.clicked", error);
           return;
         }
-        overlay.applyCardFeedback(selection.renderToken
-          ? { tokenId: selection.token.id, token: selection.renderToken, feedback: "card-error", message: runtimeFailureMessage(error) }
-          : { tokenId: selection.token.id, feedback: "card-error", message: runtimeFailureMessage(error) });
+        finishCardOperation(operation, "card-error", runtimeFailureMessage(error));
         handleRuntimeError("word.clicked", error);
       });
     },
@@ -754,21 +854,10 @@ async function boot(): Promise<void> {
     }
   });
 
-  function applyCardResponse(selection: WordSelection, response: BackgroundResponseMessage): void {
+  function applyCardResponse(operation: ActiveCardOperation, response: BackgroundResponseMessage): void {
     const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
     const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
-    overlay.applyCardFeedback(selection.renderToken
-      ? {
-        tokenId: selection.token.id,
-        token: selection.renderToken,
-        feedback: created ? "card-success" : "card-error",
-        ...(failureMessage ? { message: failureMessage } : {})
-      }
-      : {
-        tokenId: selection.token.id,
-        feedback: created ? "card-success" : "card-error",
-        ...(failureMessage ? { message: failureMessage } : {})
-      });
+    finishCardOperation(operation, created ? "card-success" : "card-error", failureMessage);
     if (!created && response.type === "error") {
       reportError("word.clicked", response.payload, response.requestId);
     }
@@ -857,10 +946,6 @@ function renderedGlossRefreshKey(node: HTMLElement): string | undefined {
     return undefined;
   }
   return glossRefreshKey({ sentenceText, lemma, startOffset, endOffset });
-}
-
-function glossRefreshKey(input: { sentenceText: string; lemma: string; startOffset: number; endOffset: number }): string {
-  return JSON.stringify([input.sentenceText, input.lemma, input.startOffset, input.endOffset]);
 }
 
 function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {

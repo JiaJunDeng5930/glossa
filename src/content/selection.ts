@@ -10,6 +10,7 @@ export interface WordSelection {
   token: TokenCandidate;
   renderToken?: ScannedToken;
   sentence: string;
+  sourceParent: Node | null;
 }
 
 export interface SelectionController {
@@ -223,7 +224,8 @@ function selectionFromClick(element: Element, event: MouseEvent): WordSelection 
     lemma,
     token,
     renderToken,
-    sentence: context.text
+    sentence: context.text,
+    sourceParent: textPoint.node.parentNode
   };
 }
 
@@ -254,7 +256,8 @@ function selectionFromRenderedToken(element: HTMLElement): WordSelection | undef
     surface,
     lemma,
     token,
-    sentence: current?.sentence ?? element.dataset.glossaSentence ?? surface
+    sentence: current?.sentence ?? element.dataset.glossaSentence ?? surface,
+    sourceParent: element.parentNode
   };
 }
 
