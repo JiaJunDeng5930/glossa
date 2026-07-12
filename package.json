@@ -8,6 +8,7 @@
     "dev": "node scripts/build.mjs --watch",
     "e2e:bootstrap": "playwright install chromium",
     "preview:ui": "node scripts/serve-ui-preview.mjs",
+    "state-model:check": "node scripts/check-async-state-model.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
