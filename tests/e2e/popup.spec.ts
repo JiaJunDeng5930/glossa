@@ -174,6 +174,34 @@ test("popup offers stop when translation is active", async ({ page }) => {
   await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__glossaPopupClosed"))).toBe(true);
 });
 
+test("popup retries its state probe while the content script starts", async ({ page }) => {
+  await loadPopup(page);
+  await page.evaluate(() => {
+    let attempts = 0;
+    Reflect.set(window, "__glossaProbeAttempts", () => attempts);
+    Reflect.set(window, "chrome", {
+      runtime: { openOptionsPage() {} },
+      tabs: {
+        async query() {
+          return [{ id: 11 }];
+        },
+        async sendMessage() {
+          attempts += 1;
+          if (attempts === 1) {
+            throw new Error("Could not establish connection. Receiving end does not exist.");
+          }
+          return { ok: true, enabled: false };
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/popup.js") });
+
+  await expect(page.locator("#page-state-label")).toHaveText("翻译已关闭");
+  await expect(page.locator("#translate-page")).toBeEnabled();
+  expect(await page.evaluate(() => (Reflect.get(window, "__glossaProbeAttempts") as () => number)())).toBe(2);
+});
+
 test("popup localizes pages where the content script is unavailable", async ({ page }) => {
   await loadPopup(page);
   await page.evaluate(() => {
