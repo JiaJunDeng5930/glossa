@@ -23,7 +23,12 @@ export interface BackgroundMessageHandlerDeps {
   storage: ExtensionStorage;
   ai: AiBackend;
   anki: AnkiClient;
+  getTopFrameTranslationState?: (tabId: number) => Promise<boolean>;
   now?: () => number;
+}
+
+export interface BackgroundMessageContext {
+  tabId?: number;
 }
 
 type BackgroundHandledMessage = ContentToBackgroundMessage | CardHistoryResetMessage;
@@ -33,10 +38,18 @@ export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDep
   const wordClickLanes = new Map<string, Promise<void>>();
   const activeWordClicks = new Set<Promise<void>>();
   let cardHistoryBarrier = Promise.resolve();
-  return async function handleMessage(message: BackgroundHandledMessage): Promise<BackgroundResponseMessage> {
+  return async function handleMessage(message: BackgroundHandledMessage, context: BackgroundMessageContext = {}): Promise<BackgroundResponseMessage> {
     try {
       if (message.type === "settings.get") {
         return createBackgroundResponse(message, "settings.response", { settings: await deps.storage.settings.get() });
+      }
+      // @behavior glossa.extension_contracts.frame_state_sync.relay The service worker relays a child frame's startup request to frame zero in the same tab.
+      if (message.type === "translation.state.sync") {
+        if (context.tabId === undefined || !deps.getTopFrameTranslationState) {
+          throw new Error("Top-frame translation state is unavailable");
+        }
+        const enabled = await deps.getTopFrameTranslationState(context.tabId);
+        return createBackgroundResponse(message, "translation.state.response", { enabled });
       }
       // @behavior glossa.card_creation.history_reset.serialization A reset waits for earlier card requests and blocks later card requests until local history is cleared.
       if (message.type === "card.history.reset") {

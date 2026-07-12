@@ -41,6 +41,25 @@ describe("extension message envelopes", () => {
     });
   });
 
+  it("validates iframe translation-state synchronization", () => {
+    // @verifies glossa.extension_contracts.frame_state_sync
+    const request = createContentMessage("translation.state.sync", {});
+    const response = createBackgroundResponse(request, "translation.state.response", { enabled: true });
+
+    expect(validateRuntimeMessage(request)).toMatchObject({
+      type: "translation.state.sync",
+      source: "content-script",
+      target: "service-worker",
+      payload: {}
+    });
+    expect(validateBackgroundResponse(response, request)).toMatchObject({
+      type: "translation.state.response",
+      source: "service-worker",
+      target: "content-script",
+      payload: { enabled: true }
+    });
+  });
+
   it("validates card-history reset requests and responses", () => {
     const request = createOptionsMessage("card.history.reset", {});
     const response = createBackgroundResponse(request, "card.history.reset.ok", {});
