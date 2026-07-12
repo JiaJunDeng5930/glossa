@@ -187,7 +187,7 @@ test("popup retries its state probe while the content script starts", async ({ p
         },
         async sendMessage() {
           attempts += 1;
-          if (attempts === 1) {
+          if (attempts <= 4) {
             throw new Error("Could not establish connection. Receiving end does not exist.");
           }
           return { ok: true, enabled: false };
@@ -199,7 +199,7 @@ test("popup retries its state probe while the content script starts", async ({ p
 
   await expect(page.locator("#page-state-label")).toHaveText("翻译已关闭");
   await expect(page.locator("#translate-page")).toBeEnabled();
-  expect(await page.evaluate(() => (Reflect.get(window, "__glossaProbeAttempts") as () => number)())).toBe(2);
+  expect(await page.evaluate(() => (Reflect.get(window, "__glossaProbeAttempts") as () => number)())).toBe(5);
 });
 
 test("popup localizes pages where the content script is unavailable", async ({ page }) => {
@@ -219,7 +219,7 @@ test("popup localizes pages where the content script is unavailable", async ({ p
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/popup.js") });
 
-  await expect(page.locator("#page-state-label")).toHaveText("此页面不可用");
+  await expect(page.locator("#page-state-label")).toHaveText("此页面不可用", { timeout: 8_000 });
   await expect(page.locator("#translate-page")).toBeDisabled();
   await expect(page.locator("#popup-status")).toHaveText("当前页面不支持扩展翻译");
   await expect(page.locator("#popup-status")).not.toContainText("Receiving end");

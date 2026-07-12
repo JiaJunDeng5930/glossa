@@ -4,7 +4,8 @@ import { DEFAULT_SETTINGS } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 
 const DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE = "无法读取快捷键设置";
-const STATE_PROBE_ATTEMPTS = 4;
+// The probe window covers the content script's five-second settings read and local word-list startup.
+const STATE_PROBE_ATTEMPTS = 61;
 const STATE_PROBE_RETRY_MS = 100;
 
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-page")!;
