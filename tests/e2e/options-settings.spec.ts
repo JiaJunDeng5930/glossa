@@ -590,7 +590,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await historyDialog.accept();
   await resetHistoryClick;
   await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有卡片保持不变");
-  expect(await page.evaluate(() => Reflect.get(window, "__glossaObservedTimeouts"))).toContain(95_000);
+  expect(await page.evaluate(() => Reflect.get(window, "__glossaObservedTimeouts"))).toEqual([]);
   expect(await page.evaluate(async () => {
     return await new Promise<Record<string, number>>((resolve, reject) => {
       const request = indexedDB.open("glossa", 2);
