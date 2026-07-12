@@ -37,6 +37,7 @@ export interface ScanStats {
 export interface ScanOptions {
   scanVersion?: number;
   maxOccurrencesPerLemma?: number;
+  forceRefreshKeys?: ReadonlySet<string>;
   minWordLength?: number;
   minContextChars?: number;
   requireRenderableRange?: boolean;
@@ -159,16 +160,22 @@ export async function scanDocumentTextInChunks(
         stats.rejectedByKnownWord += 1;
         continue;
       }
-      const count = lemmaCounts.get(lemma) ?? 0;
-      if (count >= maxOccurrencesPerLemma) {
-        stats.rejectedByFrequency += 1;
-        continue;
-      }
       const nodeStartOffset = wordMatch.index ?? 0;
       const nodeEndOffset = nodeStartOffset + surface.length;
       const context = resolveSentenceContext(textNode, nodeStartOffset, nodeEndOffset);
       if (!context || context.text.length < minContextChars) {
         stats.rejectedByText += 1;
+        continue;
+      }
+      const forceRefresh = options.forceRefreshKeys?.has(glossRefreshKey({
+        sentenceText: context.text,
+        lemma,
+        startOffset: context.startOffset,
+        endOffset: context.endOffset
+      })) === true;
+      const count = lemmaCounts.get(lemma) ?? 0;
+      if (count >= maxOccurrencesPerLemma && !forceRefresh) {
+        stats.rejectedByFrequency += 1;
         continue;
       }
       if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset, options.requireViewportRange === true)) {
@@ -190,7 +197,8 @@ export async function scanDocumentTextInChunks(
         sentenceText: context.text,
         sourceText: surface,
         sourceFingerprint,
-        scanVersion
+        scanVersion,
+        ...(forceRefresh ? { forceRefresh: true } : {})
       };
       appendToken(token);
       chunkTokens.push(token);
@@ -221,6 +229,10 @@ export async function scanDocumentTextInChunks(
 
   await flushChunk();
   return stats;
+}
+
+export function glossRefreshKey(input: { sentenceText: string; lemma: string; startOffset: number; endOffset: number }): string {
+  return JSON.stringify([input.sentenceText, input.lemma, input.startOffset, input.endOffset]);
 }
 
 function createTokenId(
