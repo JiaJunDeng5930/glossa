@@ -3,7 +3,6 @@ import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
 import { glossOutputSettingsChanged, mergeStoredSettings } from "../shared/settings";
-import { matchesShortcut } from "../shared/shortcut";
 import { cardOperationTimeoutMs } from "../shared/cardTimeout";
 import GLOSSA_THEME from "../shared/theme.json";
 import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossaSettings, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
@@ -11,6 +10,7 @@ import { userMessageForError } from "../shared/userMessages";
 import { createGlossOverlay, type CardFeedback } from "./overlay";
 import { glossRefreshKey, scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
+import { createTranslationShortcutHandler } from "./translationShortcut";
 
 const SCAN_CHUNK_MAX_TOKENS = 64;
 const SCAN_CHUNK_MAX_MS = 16;
@@ -689,17 +689,10 @@ async function boot(): Promise<void> {
     await setTranslationState(!translationEnabled, reason);
   };
 
-  const onShortcutKeyDown: EventListener = (event): void => {
-    if (!(event instanceof KeyboardEvent)) {
-      return;
-    }
-    // Selection hold exits in its own listener while this listener keeps matching extension chords actionable.
-    if (matchesShortcut(event, settings?.translateShortcutKey ?? "Alt+G")) {
-      event.preventDefault();
-      event.stopPropagation();
-      void toggleTranslation("shortcut");
-    }
-  };
+  const onShortcutKeyDown = createTranslationShortcutHandler({
+    shortcut: () => settings?.translateShortcutKey ?? "Alt+G",
+    toggle: () => toggleTranslation("shortcut")
+  });
 
   reconcileSettingsChange = async (nextSettings) => {
     const previousSettings = settings;
