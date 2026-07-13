@@ -8,9 +8,11 @@ import { formatShortcutFromEvent } from "../shared/shortcut";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, KNOWN_WORD_LIST_IDS, type AiSettings, type BackgroundResponseMessage, type ErrorService, type GlossaSettings, type KnownWordListId, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import { createExtensionStorage } from "../storage/db";
+import { createKnownWordsOperationLane } from "./knownWordsOperationLane";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 const extensionStorage = createExtensionStorage();
+const knownWordsOperationLane = createKnownWordsOperationLane();
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const saveButton = document.querySelector<HTMLButtonElement>("#save-settings")!;
 const saveLabel = saveButton.querySelector<HTMLElement>(".save-label")!;
@@ -127,7 +129,7 @@ clearGlossCacheButton.addEventListener("click", () => {
 
 openKnownWordsButton.addEventListener("click", () => {
   knownWordsDialog.showModal();
-  void refreshKnownWords();
+  void knownWordsOperationLane.run(() => refreshKnownWords());
 });
 
 closeKnownWordsButton.addEventListener("click", () => {
@@ -136,11 +138,11 @@ closeKnownWordsButton.addEventListener("click", () => {
 
 knownWordForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  void addKnownWord();
+  void knownWordsOperationLane.run(() => addKnownWord());
 });
 
 clearKnownWordsButton.addEventListener("click", () => {
-  void clearKnownWords();
+  void knownWordsOperationLane.run(() => clearKnownWords());
 });
 
 knownWordsNav.addEventListener("click", (event) => {
@@ -517,7 +519,7 @@ function renderKnownWordsSection(letter: string, records: VocabularyRecord[]): H
     remove.type = "button";
     remove.textContent = "移除";
     remove.addEventListener("click", () => {
-      void removeKnownWord(record);
+      void knownWordsOperationLane.run(() => removeKnownWord(record));
     });
     row.append(word, remove);
     return row;
