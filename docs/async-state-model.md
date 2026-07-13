@@ -47,7 +47,7 @@ T(controlState, normalizedEvent, data) -> { controlState, data, effects }
 3. **可判定：**所有 guard 只使用当前队列中可读取的有限字段、集合成员关系、相等比较和有限数值比较，不等待未来事实，也不依赖“用户大概想做什么”。
 4. **行为等价：**如果两个状态面对任意后续事件序列时，用户观察、持久化副作用、外部副作用和协议输出都相同，它们必须合并。`done`、`failed`、`disconnected` 等只在进入时输出不同 effect，进入后统一为 `closed`。
 
-完整的 17 台机器和全部转移单元由 [`scripts/check-async-state-model.mjs`](../scripts/check-async-state-model.mjs) 定义。检查器先对 13 组 guard 的有限输入域执行真值表，确认每组原始输入恰好命中一个归一化事件；再展开所有默认自环，验证每个 `(state, event)` 恰好有一个目标、所有目标已声明、所有状态可达，并用分区细化查找仍可合并的行为等价状态。它验证设计本身，不代表当前实现已经符合设计。
+本文是状态设计的唯一事实来源。设计正确性依靠语义审查；实现完成后，再由针对真实代码的时序与副作用测试验证实现是否符合设计。
 
 ### 事件归一化
 
@@ -94,7 +94,7 @@ T(controlState, normalizedEvent, data) -> { controlState, data, effects }
 
 ### 关键转移
 
-完整矩阵由检查器逐格定义，下面列出会改变控制状态的路径；未列出的同类事件按完整矩阵执行显式自环或进入协议错误，不能自行增加分支。
+下面列出会改变控制状态的路径。实现时必须为其余事件明确规定自环、忽略或协议错误，不能自行增加未经设计的分支。
 
 **Content runtime：**`booting + BOOT_READY_ON/OFF -> enabled/disabled`，失败或 stop 进入 `closed`。`enabled/disabled + SET_*|TOGGLE` 原子计算新状态并广播；route 变化先 hard-retire 旧 scan，再按最新 auto default 进入 on/off。设置需要新词表时启动依赖加载任务，词表 current completion 提交完整 snapshot 后才允许扫描。
 
