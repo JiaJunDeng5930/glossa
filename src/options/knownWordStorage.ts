@@ -16,5 +16,5 @@ export async function removeKnownRecord(
       createdAt: record.lastClickedAt ?? record.lastShownAt ?? now()
     });
   }
-  await storage.lexicon.delete(key);
+  await storage.lexicon.update(key, (current) => current?.state === "known" ? undefined : current);
 }

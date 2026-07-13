@@ -326,3 +326,94 @@ test("onboarding keeps the current step visible when saving fails", async ({ pag
   await page.locator("#continue").click();
   await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
 });
+
+test("onboarding form stays inert until the delayed settings snapshot is applied", async ({ page }) => {
+  await loadOnboarding(page);
+  await page.evaluate(() => {
+    let releaseSettings: (() => void) | undefined;
+    Reflect.set(window, "chrome", {
+      runtime: { lastError: undefined },
+      storage: {
+        local: {
+          get(_key: string, callback: (result: Record<string, unknown>) => void) {
+            releaseSettings = () => callback({ settings: { knownWordList: "senior-high" } });
+          },
+          set(_value: Record<string, unknown>, callback?: () => void) {
+            callback?.();
+          }
+        }
+      }
+    });
+    Reflect.set(window, "__releaseOnboardingSettings", () => releaseSettings?.());
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
+  await expect.poll(async () => page.evaluate(() => typeof Reflect.get(window, "__releaseOnboardingSettings") === "function")).toBe(true);
+
+  expect(await page.locator("#settings-form").evaluate((form) => (form as HTMLFormElement).inert)).toBe(true);
+  await page.evaluate(() => (Reflect.get(window, "__releaseOnboardingSettings") as () => void)());
+  await expect(page.locator("select[name=knownWordList]")).toHaveValue("senior-high");
+  expect(await page.locator("#settings-form").evaluate((form) => (form as HTMLFormElement).inert)).toBe(false);
+});
+
+test("onboarding ignores an older Anki catalog after the endpoint changes", async ({ page }) => {
+  await loadOnboarding(page);
+  await page.evaluate(() => {
+    const pendingEndpointA: Array<() => void> = [];
+    Reflect.set(window, "__pendingOnboardingEndpointA", pendingEndpointA);
+    Reflect.set(window, "__releaseOnboardingEndpointA", () => pendingEndpointA.shift()?.());
+    Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { action: string };
+      const endpoint = url.includes("anki-a.test") ? "A" : "B";
+      const respond = () => {
+        const values: Record<string, unknown> = endpoint === "A"
+          ? { version: 6, deckNames: ["Deck A"], modelNames: ["Model A"], modelFieldNames: ["Front", "Back"] }
+          : { version: 6, deckNames: ["Deck B"], modelNames: ["Model B"], modelFieldNames: ["Front", "Back"] };
+        if (endpoint === "A" && request.action === "modelFieldNames") {
+          requestAnimationFrame(() => Reflect.set(window, "__onboardingEndpointASettled", true));
+        }
+        return new Response(JSON.stringify({ result: values[request.action], error: null }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      };
+      if (endpoint === "A" && request.action === "version" && pendingEndpointA.length === 0) {
+        return await new Promise<Response>((resolve) => pendingEndpointA.push(() => resolve(respond())));
+      }
+      return respond();
+    });
+    Reflect.set(window, "chrome", {
+      runtime: { lastError: undefined },
+      storage: {
+        local: {
+          get(key: string, callback: (result: Record<string, unknown>) => void) {
+            callback({
+              [key]: {
+                anki: { endpoint: "https://anki-a.test", deck: "Deck A", modelName: "Model A" }
+              }
+            });
+          },
+          set(_value: Record<string, unknown>, callback?: () => void) {
+            callback?.();
+          }
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
+  await expect(page.locator("input[name=ankiEndpoint]")).toHaveValue("https://anki-a.test");
+
+  await page.locator("#refresh-anki").dispatchEvent("click");
+  await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__pendingOnboardingEndpointA") as unknown[]).length)).toBe(1);
+  await page.locator("input[name=ankiEndpoint]").evaluate((input) => {
+    (input as HTMLInputElement).value = "https://anki-b.test";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.locator("#refresh-anki").dispatchEvent("click");
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B", { timeout: 500 });
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Model B");
+
+  await page.evaluate(() => (Reflect.get(window, "__releaseOnboardingEndpointA") as () => void)());
+  await page.waitForFunction(() => Reflect.get(window, "__onboardingEndpointASettled") === true);
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B", { timeout: 500 });
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Model B");
+});

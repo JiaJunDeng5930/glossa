@@ -106,7 +106,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).not.toHaveBeenCalled();
   });
 
-  it("treats legacy persisted gloss cache entries without createdAt as fresh at read time", async () => {
+  it("treats legacy persisted gloss cache entries without createdAt as expired", async () => {
     const storage = createMemoryStorage();
     const settings = { ...testSettings(), glossCacheTtlMs: 100 };
     await storage.settings.set(settings);
@@ -130,9 +130,9 @@ describe("gloss resolver lookup-first pipeline", () => {
     }], settings, 200, { emit: (event) => events.push(event) });
 
     expect(events).toEqual([
-      { tokenId: "t-legacy", status: "ready", item: { tokenId: "t-legacy", targetText: "Legacy", display: "旧缓存" } }
+      { tokenId: "t-legacy", status: "hidden" }
     ]);
-    expect(await storage.glossCache.get(key)).toMatchObject({ createdAt: 200 });
+    expect(await storage.glossCache.get(key)).not.toHaveProperty("createdAt");
     expect(ai.glossFrame).not.toHaveBeenCalled();
   });
 
@@ -504,25 +504,21 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
-  it("shares one persistent cache-clear gate for a changed generation", async () => {
+  it("keeps persistent cache across generation changes and clears it only explicitly", async () => {
     const storage = createMemoryStorage();
-    let releaseClear!: () => void;
-    storage.glossCache.clear = vi.fn(() => new Promise<void>((resolve) => {
-      releaseClear = resolve;
-    }));
+    storage.glossCache.clear = vi.fn(async () => undefined);
     const resolver = createGlossResolver({
       storage,
       ai: { glossFrame: vi.fn(), ankiCard: vi.fn() }
     });
     await resolver.activateGeneration("old");
 
-    const first = resolver.activateGeneration("new");
-    const second = resolver.activateGeneration("new");
+    await resolver.activateGeneration("new");
+    await resolver.activateGeneration("new");
+    expect(storage.glossCache.clear).not.toHaveBeenCalled();
 
-    await Promise.resolve();
+    await resolver.clearCache();
     expect(storage.glossCache.clear).toHaveBeenCalledTimes(1);
-    releaseClear();
-    await Promise.all([first, second]);
   });
 
   it("splits in-flight AI reuse by API key for the same cache entry", async () => {
@@ -991,6 +987,11 @@ function createMemoryStorage(): ExtensionStorage {
           .filter((record): record is VocabularyRecord => (record as VocabularyRecord).state === state)
           .sort((left, right) => left.lemma.localeCompare(right.lemma));
       },
+      async update(key, transition) {
+        const next = transition(lexicon.get(key) as VocabularyRecord | undefined);
+        if (next) lexicon.set(key, next); else lexicon.delete(key);
+        return next;
+      },
       async put(value) {
         lexicon.set(value.key, value);
       },
@@ -1007,17 +1008,10 @@ function createMemoryStorage(): ExtensionStorage {
       },
       async getFresh(key, now, ttlMs) {
         const value = glossCache.get(key) as GlossCacheEntry | undefined;
-        if (!value) {
-          return undefined;
-        }
-        const entry = normalizeGlossCacheEntry(value, now);
-        if (entry !== value) {
-          glossCache.set(key, entry);
-        }
-        return isFreshGlossCacheEntry(entry, now, ttlMs) ? entry : undefined;
+        return value && isFreshGlossCacheEntry(value, now, ttlMs) ? value : undefined;
       },
       async getFreshMany(keys, now, ttlMs) {
-        return freshMany(glossCache, readMany<GlossCacheEntry>(glossCache, keys), now, ttlMs);
+        return freshMany(readMany<GlossCacheEntry>(glossCache, keys), now, ttlMs);
       },
       async put(key, value) {
         glossCache.set(key, value);
@@ -1084,24 +1078,16 @@ function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T
   return result;
 }
 
-function freshMany(store: Map<string, unknown>, values: Map<string, GlossCacheEntry>, now: number, ttlMs: number): Map<string, GlossCacheEntry> {
+function freshMany(values: Map<string, GlossCacheEntry>, now: number, ttlMs: number): Map<string, GlossCacheEntry> {
   const result = new Map<string, GlossCacheEntry>();
   for (const [key, value] of values) {
-    const entry = normalizeGlossCacheEntry(value, now);
-    if (entry !== value) {
-      store.set(key, entry);
-    }
-    if (isFreshGlossCacheEntry(entry, now, ttlMs)) {
-      result.set(key, entry);
+    if (isFreshGlossCacheEntry(value, now, ttlMs)) {
+      result.set(key, value);
     }
   }
   return result;
 }
 
 function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: number): boolean {
-  return now < value.createdAt + ttlMs;
-}
-
-function normalizeGlossCacheEntry(value: GlossCacheEntry, now: number): GlossCacheEntry {
-  return Number.isFinite(value.createdAt) ? value : { ...value, createdAt: now };
+  return Number.isFinite(value.createdAt) && now < value.createdAt + ttlMs;
 }

@@ -3,9 +3,18 @@ export interface KnownWordsOperationLane {
 }
 
 export function createKnownWordsOperationLane(): KnownWordsOperationLane {
+  let tail: Promise<void> | undefined;
   return {
     run(operation) {
-      return operation();
+      const current = tail ? tail.then(operation) : operation();
+      const settled = current.then(() => undefined, () => undefined);
+      tail = settled;
+      void settled.then(() => {
+        if (tail === settled) {
+          tail = undefined;
+        }
+      });
+      return current;
     }
   };
 }

@@ -910,6 +910,14 @@ test("content bundle marks card failures with the shared badge renderer", async 
         target: message.source,
         createdAt: Date.now(),
         payload: { reason: "network", message: "AnkiConnect failed", service: "anki" }
+      } : attempts === 2 ? {
+        type: "error",
+        version: 1,
+        requestId: message.requestId,
+        source: "service-worker",
+        target: message.source,
+        createdAt: Date.now(),
+        payload: { reason: "outcome-unknown", message: "Anki response was lost", service: "anki" }
       } : {
         type: "word.clicked.ok",
         version: 1,
@@ -951,6 +959,17 @@ test("content bundle marks card failures with the shared badge renderer", async 
     hasDrawnCross: true,
     beforeVisible: true,
     afterVisible: true
+  });
+
+  await page.keyboard.down("Alt");
+  await page.locator("[data-glossa-token]").click();
+  await page.keyboard.up("Alt");
+
+  await page.waitForFunction(() => {
+    const node = document.querySelector<HTMLElement>("[data-glossa-token]");
+    return node?.dataset.glossaFeedback === "card-unknown"
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "?"
+      && node.title === "Anki 请求结果未知，请先在 Anki 中确认是否已创建卡片。";
   });
 
   await page.keyboard.down("Alt");
@@ -1007,10 +1026,12 @@ test("content bundle shows card loading feedback before creation finishes", asyn
     knownWordList: "junior-high"
   });
   await page.evaluate(() => {
+    Reflect.set(window, "__cardClickCount", 0);
     Reflect.set(window, "__glossaOnSendMessage", (message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) => {
       if (message.type !== "word.clicked") {
         return undefined;
       }
+      Reflect.set(window, "__cardClickCount", Number(Reflect.get(window, "__cardClickCount")) + 1);
       return new Promise((resolve) => {
         Reflect.set(window, "__resolveCardClick", () => {
           const response = {
@@ -1041,6 +1062,11 @@ test("content bundle shows card loading feedback before creation finishes", asyn
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...";
   });
   await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：正在制卡");
+
+  await page.keyboard.down("Alt");
+  await page.locator("[data-glossa-token]").click();
+  await page.keyboard.up("Alt");
+  expect(await page.evaluate(() => Reflect.get(window, "__cardClickCount"))).toBe(1);
 
   await page.evaluate(() => {
     const resolveCardClick = Reflect.get(window, "__resolveCardClick") as () => void;

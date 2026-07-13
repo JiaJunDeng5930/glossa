@@ -50,23 +50,20 @@ describe("background message handler", () => {
     const ai = {
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
-        cards: [
-          { front: "A <b>submit</b> button finishes the form.", back: "提交" },
-          { front: "Click <b>submit</b> after reviewing.", back: "提交按钮" }
-        ]
+        cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }]
       }))
     };
-    const anki = { createNote: vi.fn(async (_input: unknown) => anki.createNote.mock.calls.length === 1 ? 42 : 43) };
+    const anki = { createNote: vi.fn(async () => 42) };
 
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
     const response = await handler(message);
 
     expect(response).toMatchObject({ type: "word.clicked.ok", requestId: message.requestId, payload: { noteId: 42 } });
-    expect(anki.createNote).toHaveBeenCalledTimes(2);
+    expect(anki.createNote).toHaveBeenCalledTimes(1);
     expect(await storage.lexicon.get("en:submit")).toMatchObject({
       state: "learning_active",
       clickCount: 1,
-      ankiNoteIds: [42, 43]
+      ankiNoteIds: [42]
     });
     expect(await storage.cardedWords.get("en:submit")).toMatchObject({
       key: "en:submit",
@@ -76,7 +73,7 @@ describe("background message handler", () => {
     });
   });
 
-  it("starts generated card note writes in the same Anki request window", async () => {
+  it("starts the generated card note write without waiting for unrelated work", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
     const message = createContentMessage("word.clicked", {
@@ -87,31 +84,26 @@ describe("background message handler", () => {
     const ai = {
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
-        cards: [
-          { front: "A <b>submit</b> button finishes the form.", back: "提交" },
-          { front: "Click <b>submit</b> after reviewing.", back: "提交按钮" }
-        ]
+        cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }]
       }))
     };
     const firstNote = deferred<number>();
-    const secondNote = deferred<number>();
     const anki = {
-      createNote: vi.fn(() => anki.createNote.mock.calls.length === 1 ? firstNote.promise : secondNote.promise)
+      createNote: vi.fn(() => firstNote.promise)
     };
 
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
     const response = handler(message);
 
     await vi.waitFor(() => {
-      expect(anki.createNote).toHaveBeenCalledTimes(2);
+      expect(anki.createNote).toHaveBeenCalledTimes(1);
     });
     firstNote.resolve(42);
-    secondNote.resolve(43);
 
     await expect(response).resolves.toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
   });
 
-  it("persists successful note ids before reporting a partial Anki failure", async () => {
+  it("rejects multiple generated cards before any Anki write", async () => {
     const storage = createMemoryStorage();
     await storage.settings.set(DEFAULT_SETTINGS);
     const message = createContentMessage("word.clicked", {
@@ -128,26 +120,15 @@ describe("background message handler", () => {
         ]
       }))
     };
-    const anki = {
-      createNote: vi.fn(async () => {
-        if (anki.createNote.mock.calls.length === 1) {
-          return 42;
-        }
-        throw new Error("AnkiConnect request failed");
-      })
-    };
+    const anki = { createNote: vi.fn(async () => 42) };
 
     const handler = createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 });
     const response = await handler(message);
 
-    expect(response).toMatchObject({ type: "error" });
-    expect(await storage.lexicon.get("en:submit")).toMatchObject({ ankiNoteIds: [42] });
-    expect(await storage.cardedWords.get("en:submit")).toMatchObject({
-      key: "en:submit",
-      lang: "en",
-      lemma: "submit",
-      createdAt: 1_000
-    });
+    expect(response).toMatchObject({ type: "error", payload: { reason: "invalid-response", service: "ai" } });
+    expect(anki.createNote).not.toHaveBeenCalled();
+    expect(await storage.lexicon.get("en:submit")).toBeUndefined();
+    expect(await storage.cardedWords.get("en:submit")).toBeUndefined();
   });
 
   it("reports Anki failure without card history when every note write fails", async () => {
@@ -161,10 +142,7 @@ describe("background message handler", () => {
     const ai = {
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async () => ({
-        cards: [
-          { front: "A <b>submit</b> button finishes the form.", back: "提交" },
-          { front: "Click <b>submit</b> after reviewing.", back: "提交按钮" }
-        ]
+        cards: [{ front: "A <b>submit</b> button finishes the form.", back: "提交" }]
       }))
     };
     const anki = {
@@ -505,6 +483,11 @@ export function createMemoryStorage(): ExtensionStorage {
         return Array.from(lexicon.values())
           .filter((record): record is VocabularyRecord => (record as VocabularyRecord).state === state)
           .sort((left, right) => left.lemma.localeCompare(right.lemma));
+      },
+      async update(key, transition) {
+        const next = transition(lexicon.get(key) as VocabularyRecord | undefined);
+        if (next) lexicon.set(key, next); else lexicon.delete(key);
+        return next;
       },
       async put(record) {
         lexicon.set(record.key, record);

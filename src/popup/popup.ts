@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 
 const DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE = "无法读取快捷键设置";
-// The probe window covers the content script's five-second settings read and local word-list startup.
+// A missing receiver is distinct from a registered content script that explicitly reports booting.
 const STATE_PROBE_ATTEMPTS = 61;
 const STATE_PROBE_RETRY_MS = 100;
 
@@ -53,17 +53,23 @@ async function initializeTranslationState(): Promise<void> {
 }
 
 async function probeTranslationState(tabId: number): Promise<unknown> {
-  for (let attempt = 1; attempt <= STATE_PROBE_ATTEMPTS; attempt += 1) {
+  let receiverAttempts = 0;
+  while (true) {
     try {
-      return await chrome.tabs.sendMessage(tabId, { type: "glossa.getTranslationState" }, { frameId: 0 });
+      const response = await chrome.tabs.sendMessage(tabId, { type: "glossa.getTranslationState" }, { frameId: 0 });
+      if (isTranslationBootingResponse(response)) {
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, STATE_PROBE_RETRY_MS));
+        continue;
+      }
+      return response;
     } catch (error) {
-      if (attempt === STATE_PROBE_ATTEMPTS || !isReceiverStartupError(error)) {
+      receiverAttempts += 1;
+      if (receiverAttempts === STATE_PROBE_ATTEMPTS || !isReceiverStartupError(error)) {
         throw error;
       }
       await new Promise<void>((resolve) => globalThis.setTimeout(resolve, STATE_PROBE_RETRY_MS));
     }
   }
-  return undefined;
 }
 
 function isReceiverStartupError(error: unknown): boolean {
@@ -79,18 +85,20 @@ async function toggleCurrentTab(): Promise<void> {
   translateButton.disabled = true;
   translateButtonLabel.textContent = translationEnabled ? "正在停止…" : "正在开启…";
   try {
-    const desiredState = !translationEnabled;
-    // The top frame defines the tab state; an explicit value keeps every injected frame synchronized.
+    // Frame zero owns the live route state and computes the toggle atomically.
     const response = await chrome.tabs.sendMessage(currentTabId, {
-      type: "glossa.setTranslationState",
-      enabled: desiredState
-    });
+      type: "glossa.toggleTranslationState"
+    }, { frameId: 0 });
     if (!isTranslationStateResponse(response)) {
       setStatus(messageFromControlResponse(response));
       renderAvailableState();
       return;
     }
     translationEnabled = response.enabled;
+    await chrome.tabs.sendMessage(currentTabId, {
+      type: "glossa.setTranslationState",
+      enabled: translationEnabled
+    });
     window.close();
   } catch (error) {
     setStatus(userMessageForError(diagnosticPayloadFrom(error, {
@@ -188,6 +196,13 @@ function isTranslationStateResponse(value: unknown): value is { ok: true; enable
     && value.ok === true
     && "enabled" in value
     && typeof value.enabled === "boolean";
+}
+
+function isTranslationBootingResponse(value: unknown): value is { phase: "booting" } {
+  return typeof value === "object"
+    && value !== null
+    && "phase" in value
+    && value.phase === "booting";
 }
 
 function messageFromControlResponse(value: unknown): string {

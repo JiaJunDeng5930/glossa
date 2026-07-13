@@ -21,6 +21,7 @@ import { createExtensionStorage } from "../storage/db";
 
 const storage = createExtensionStorage();
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
+form.inert = true;
 const steps = Array.from(document.querySelectorAll<HTMLElement>("[data-step]"));
 const progress = document.querySelector<HTMLElement>("#progress")!;
 const continueButton = document.querySelector<HTMLButtonElement>("#continue")!;
@@ -51,6 +52,7 @@ let continueInFlight = false;
 let verifiedAiSettings: string | undefined;
 let verifiedAnkiSettings: string | undefined;
 let currentProvider = providerSelect.value as GlossaSettings["ai"]["provider"];
+let ankiCatalogRevision = 0;
 type StepControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement;
 const busyStepControls = new Map<StepControl, boolean>();
 
@@ -166,6 +168,7 @@ async function loadSettings(): Promise<void> {
   setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
   setAnkiSelectsEnabled(false);
   updatePreview(settings);
+  form.inert = false;
   showStep(0);
   setTestState(refreshAnkiButton, "idle");
 }
@@ -223,6 +226,7 @@ function updatePreview(nextSettings: GlossaSettings): void {
 }
 
 async function refreshAnkiOptions(nextSettings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
+  const revision = ++ankiCatalogRevision;
   setTestState(refreshAnkiButton, "loading");
   setAnkiSelectsEnabled(false);
   if (options.reportStatus) {
@@ -230,6 +234,9 @@ async function refreshAnkiOptions(nextSettings: GlossaSettings, options: { repor
   }
   try {
     const catalog = await loadAnkiCatalog(nextSettings.anki.endpoint, nextSettings.anki.requestTimeoutMs);
+    if (revision !== ankiCatalogRevision || readFormInput(form, "ankiEndpoint").trim() !== nextSettings.anki.endpoint) {
+      return;
+    }
     const deck = pickExistingValue(nextSettings.anki.deck, catalog.decks);
     const modelName = pickExistingValue(nextSettings.anki.modelName, catalog.modelNames);
     setSelectOptions(ankiDeckSelect, catalog.decks, deck);
@@ -240,6 +247,9 @@ async function refreshAnkiOptions(nextSettings: GlossaSettings, options: { repor
       setAnkiStatus("Anki 选项已更新");
     }
   } catch {
+    if (revision !== ankiCatalogRevision || readFormInput(form, "ankiEndpoint").trim() !== nextSettings.anki.endpoint) {
+      return;
+    }
     setSelectOptions(ankiDeckSelect, [nextSettings.anki.deck], nextSettings.anki.deck);
     setSelectOptions(ankiModelNameSelect, [nextSettings.anki.modelName], nextSettings.anki.modelName);
     setAnkiSelectsEnabled(true);

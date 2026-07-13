@@ -247,7 +247,11 @@ export function validateGlossPortInbound(value: unknown): GlossPortInboundMessag
   const message = validateGlossPortEnvelope(value);
   if (message.type === "gloss.scan.start") {
     const payload = requirePlainPayload(message.payload);
-    if (typeof payload.scanId !== "string" || typeof payload.pageUrl !== "string") {
+    if (
+      typeof payload.scanId !== "string"
+      || typeof payload.pageUrl !== "string"
+      || typeof payload.scanConfigHash !== "string"
+    ) {
       throw new Error("Malformed gloss.scan.start payload");
     }
     return message as GlossPortInboundMessage;

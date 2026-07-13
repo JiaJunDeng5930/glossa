@@ -44,6 +44,24 @@ export function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean
   return normalizeKey(event.key) === parsed.key;
 }
 
+export function normalizeShortcut(shortcut: string): string | undefined {
+  const parsed = parseShortcut(shortcut);
+  if (!parsed) {
+    return undefined;
+  }
+  const parts = [
+    ...(parsed.ctrl ? ["Ctrl"] : []),
+    ...(parsed.alt ? ["Alt"] : []),
+    ...(parsed.shift ? ["Shift"] : []),
+    ...(parsed.meta ? ["Meta"] : [])
+  ];
+  const terminal = parsed.key ?? parsed.modifierOnly;
+  if (terminal && !parts.includes(terminal)) {
+    parts.push(terminal);
+  }
+  return parts.join("+");
+}
+
 export function isShortcutRelease(event: KeyboardEvent, shortcut: string): boolean {
   const parsed = parseShortcut(shortcut);
   if (!parsed) {

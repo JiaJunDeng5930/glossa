@@ -70,8 +70,7 @@ describe("generation and cache state transitions", () => {
     const scan = resolveScan(resolver, sentence("stale-token", "stale"), activeSettings, 100, events);
     await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
-    await fixture.storage.glossCache.clear();
-    resolver.clearMemory();
+    await resolver.clearCache();
     response.resolve({ items: [{ tokenId: "stale-token", targetText: "stale", display: "旧结果" }] });
     await scan;
 
@@ -93,14 +92,54 @@ describe("generation and cache state transitions", () => {
     await vi.waitFor(() => expect(fixture.storage.glossCache.getFreshMany).toHaveBeenCalledTimes(1));
     const key = await cacheKey(input[0]!, activeSettings);
 
-    await fixture.storage.glossCache.clear();
-    resolver.clearMemory();
+    await resolver.clearCache();
     read.resolve(new Map([[key, { tokenId: "old-token", targetText: "cached", display: "旧缓存", createdAt: 50 }]]));
     await scan;
 
     expect(events).toEqual([]);
     expect(ai.glossFrame).not.toHaveBeenCalled();
     expect(fixture.glossCache.size).toBe(0);
+  });
+
+  it("holds a session created during manual clear behind the clear barrier", async () => {
+    const fixture = createMemoryStorage();
+    const activeSettings = settings("active-model");
+    const input = sentence("fresh-token", "fresh");
+    const key = await cacheKey(input[0]!, activeSettings);
+    fixture.glossCache.set(key, {
+      tokenId: "old-token",
+      targetText: "fresh",
+      display: "旧缓存",
+      createdAt: 50
+    });
+    const clearGate = deferred<void>();
+    fixture.storage.glossCache.clear = vi.fn(async () => {
+      await clearGate.promise;
+      fixture.glossCache.clear();
+    });
+    const originalRead = fixture.storage.glossCache.getFreshMany;
+    fixture.storage.glossCache.getFreshMany = vi.fn((keys, now, ttlMs) => originalRead(keys, now, ttlMs));
+    const ai = {
+      glossFrame: vi.fn(async () => ({ items: [{ tokenId: "fresh-token", targetText: "fresh", display: "新结果" }] })),
+      ankiCard: vi.fn()
+    };
+    const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    await resolver.activateGeneration(glossGenerationIdentity(activeSettings));
+
+    const clear = resolver.clearCache();
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const scan = resolveScan(resolver, input, activeSettings, 100, events);
+    await Promise.resolve();
+    expect(fixture.storage.glossCache.getFreshMany).not.toHaveBeenCalled();
+
+    clearGate.resolve(undefined);
+    await Promise.all([clear, scan]);
+
+    expect(fixture.storage.glossCache.getFreshMany).toHaveBeenCalledTimes(1);
+    expect(events).toEqual([
+      { tokenId: "fresh-token", status: "pending" },
+      { tokenId: "fresh-token", status: "ready", item: { tokenId: "fresh-token", targetText: "fresh", display: "新结果" } }
+    ]);
   });
 });
 
@@ -169,6 +208,11 @@ function createMemoryStorage(): {
       async get(key) { return lexicon.get(key); },
       async getMany(keys) { return readMany(lexicon, keys); },
       async listByState(state: VocabularyState) { return Array.from(lexicon.values()).filter((record) => record.state === state); },
+      async update(key, transition) {
+        const next = transition(lexicon.get(key));
+        if (next) lexicon.set(key, next); else lexicon.delete(key);
+        return next;
+      },
       async put(record) { lexicon.set(record.key, record); },
       async delete(key) { lexicon.delete(key); }
     },

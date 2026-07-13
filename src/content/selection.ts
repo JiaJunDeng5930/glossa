@@ -16,6 +16,7 @@ export interface WordSelection {
 export interface SelectionController {
   attach(): void;
   detach(): void;
+  releaseHold(): void;
   setShortcut(shortcutKey: string): void;
 }
 
@@ -132,6 +133,9 @@ export function createSelectionController(options: SelectionControllerOptions): 
   };
 
   return {
+    releaseHold() {
+      setActive(false);
+    },
     setShortcut(nextShortcutKey) {
       setActive(false);
       shortcutKey = nextShortcutKey;

@@ -1,4 +1,5 @@
 import { loadKnownWords } from "../core/lexicon";
+import { glossScanConfigHash } from "../core/cache";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
 import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
@@ -26,6 +27,7 @@ interface ChunkAck {
 
 interface GlossSession {
   scanId: string;
+  pageUrl: string;
   version: number;
   reason: string;
   tokenMap: Map<string, ScannedToken>;
@@ -34,6 +36,7 @@ interface GlossSession {
   queuedOutcomes: GlossTokenPayload[];
   doneAfterQueuedOutcomes: boolean;
   terminalError?: ErrorPayload;
+  collecting: boolean;
   aborted: boolean;
   port: chrome.runtime.Port;
 }
@@ -48,20 +51,33 @@ interface ActiveCardOperation {
   terminal: boolean;
 }
 
+type RuntimeMessageListener = Parameters<typeof chrome.runtime.onMessage.addListener>[0];
+type TranslationControlHandler = RuntimeMessageListener;
+
+const translationControlOwner = createTranslationControlOwner();
+let bootFailureCleanup: (() => void) | undefined;
+
 async function boot(): Promise<void> {
+  bootFailureCleanup = () => translationControlOwner.close();
   const settingsRequest = createContentMessage("settings.get", {});
   let settingsResponse: BackgroundResponseMessage;
   try {
     settingsResponse = await runtimeMessage(settingsRequest);
   } catch (error) {
     if (isExtensionContextInvalidated(error)) {
+      translationControlOwner.close();
+      bootFailureCleanup = undefined;
       throw error;
     }
     reportError("settings.get", error, settingsRequest.requestId);
+    translationControlOwner.close();
+    bootFailureCleanup = undefined;
     return;
   }
   if (settingsResponse.type !== "settings.response") {
     reportError("settings.get", settingsResponse.type === "error" ? settingsResponse.payload : new Error(`Unexpected settings response ${settingsResponse.type}`), settingsResponse.requestId);
+    translationControlOwner.close();
+    bootFailureCleanup = undefined;
     return;
   }
   let settings = settingsResponse.payload.settings;
@@ -103,7 +119,6 @@ async function boot(): Promise<void> {
   const glossSessions = new Set<GlossSession>();
   const pendingGenerationRefreshKeys = new Set<string>();
   const activeCardOperations = new Set<ActiveCardOperation>();
-  let scanInProgress = 0;
 
   const stopContentScript = (reason: string): void => {
     if (stopped) {
@@ -128,6 +143,7 @@ async function boot(): Promise<void> {
       details: { reason }
     });
   };
+  bootFailureCleanup = () => stopContentScript("boot-failed");
 
   const handleRuntimeError = (operation: string, error: unknown, requestId?: string): void => {
     if (isExtensionContextInvalidated(error)) {
@@ -147,6 +163,7 @@ async function boot(): Promise<void> {
   if (storageChanges) {
     registerLifecycleCleanup(() => storageChanges.removeListener(onStoredSettingsChanged));
   }
+  registerLifecycleCleanup(() => translationControlOwner.close());
 
   const runLifecycleCleanups = (): void => {
     for (const cleanup of lifecycleCleanups.splice(0).reverse()) {
@@ -246,6 +263,10 @@ async function boot(): Promise<void> {
       return;
     }
     const version = ++scanVersion;
+    const scanPageUrl = location.href;
+    const scanSettings = settings;
+    const scanKnownWords = knownWords;
+    const scanConfigHash = glossScanConfigHash(scanSettings);
     const tokenMap = new Map<string, ScannedToken>();
     let session: GlossSession | undefined;
     let chunks = 0;
@@ -253,10 +274,9 @@ async function boot(): Promise<void> {
     const startedAt = nowMs();
 
     overlay.pruneDisconnected();
-    scanInProgress += 1;
     const stats = await (async () => {
       try {
-        return await scanDocumentTextInChunks(document, knownWords, {
+        return await scanDocumentTextInChunks(document, scanKnownWords, {
           scanVersion: version,
           requireRenderableRange: true,
           requireViewportRange: true,
@@ -271,7 +291,8 @@ async function boot(): Promise<void> {
             session = startGlossSession({
               reason,
               version,
-              pageUrl: location.href,
+              pageUrl: scanPageUrl,
+              scanConfigHash,
               tokenMap
             });
             if (!session) {
@@ -290,12 +311,21 @@ async function boot(): Promise<void> {
           return sent;
         });
       } finally {
-        scanInProgress -= 1;
-        if (scanInProgress === 0) {
-          flushQueuedGlossOutcomes();
+        if (session) {
+          session.collecting = false;
+          flushQueuedGlossOutcomes(session);
         }
       }
-    })();
+    })().catch((error) => {
+      if (session && !session.aborted) {
+        failGlossSession(session, diagnosticPayloadFrom(error, {
+          reason: "runtime",
+          message: "Content scan failed",
+          service: "runtime"
+        }));
+      }
+      throw error;
+    });
     trace({
       component: "content-script",
       operation: "content.scan",
@@ -351,6 +381,7 @@ async function boot(): Promise<void> {
     reason: string;
     version: number;
     pageUrl: string;
+    scanConfigHash: string;
     tokenMap: Map<string, ScannedToken>;
   }): GlossSession | undefined => {
     if (stopped) {
@@ -371,6 +402,7 @@ async function boot(): Promise<void> {
     }
     const session: GlossSession = {
       scanId,
+      pageUrl: sessionInput.pageUrl,
       version: sessionInput.version,
       reason: sessionInput.reason,
       tokenMap: sessionInput.tokenMap,
@@ -378,21 +410,21 @@ async function boot(): Promise<void> {
       pendingChunkAcks: new Map(),
       queuedOutcomes: [],
       doneAfterQueuedOutcomes: false,
+      collecting: true,
       aborted: false,
       port
     };
     glossSessions.add(session);
     currentGlossSession = session;
     port.onDisconnect.addListener(() => {
-      glossSessions.delete(session);
-      resolvePendingChunkAcks(session);
-      if (currentGlossSession === session) {
-        currentGlossSession = undefined;
+      if (session.aborted) {
+        return;
       }
       const error = readRuntimeLastError();
-      if (error) {
-        handleRuntimeError("gloss.session.disconnect", new Error(error.message));
-      }
+      failGlossSession(session, diagnosticPayloadFrom(
+        error ? new Error(error.message) : new Error("Gloss session disconnected"),
+        { reason: "runtime", message: "Gloss session disconnected", service: "runtime" }
+      ));
     });
     port.onMessage.addListener((rawMessage: unknown) => {
       handleGlossPortMessage(rawMessage, session, sessionInput.reason);
@@ -400,10 +432,12 @@ async function boot(): Promise<void> {
     try {
       port.postMessage(createGlossPortMessage("gloss.scan.start", {
         scanId,
-        pageUrl: sessionInput.pageUrl
+        pageUrl: sessionInput.pageUrl,
+        scanConfigHash: sessionInput.scanConfigHash
       }));
     } catch (error) {
       handleRuntimeError("gloss.scan.start", error);
+      closeGlossSession(session);
       return undefined;
     }
     return session;
@@ -441,7 +475,7 @@ async function boot(): Promise<void> {
       return;
     }
     if (message.type === "gloss.token") {
-      if (scanInProgress > 0) {
+      if (session.collecting) {
         session.queuedOutcomes.push(message.payload);
         trace({
           component: "content-script",
@@ -462,14 +496,14 @@ async function boot(): Promise<void> {
       return;
     }
     if (message.type === "gloss.done") {
-      if (scanInProgress > 0 && session.queuedOutcomes.length > 0) {
+      if (session.collecting && session.queuedOutcomes.length > 0) {
         session.doneAfterQueuedOutcomes = true;
         return;
       }
       completeGlossSession(session, reason);
       return;
     }
-    if (scanInProgress > 0) {
+    if (session.collecting) {
       session.terminalError = message.payload;
       session.aborted = true;
       resolvePendingChunkAcks(session);
@@ -481,7 +515,7 @@ async function boot(): Promise<void> {
   const applyGlossOutcome = (session: GlossSession, outcome: GlossTokenPayload, reason: string, queued: boolean): void => {
     const current = currentGlossSession === session && session.version === scanVersion;
     const token = session.tokenMap.get(outcome.tokenId);
-    const render = current || (queued && token)
+    const render = current
       ? overlay.applyTokenOutcome(token, outcome, token?.scanVersion ?? session.version)
       : overlay.applyStalePendingOutcome(outcome);
     updatePendingTokenState(session, outcome, render);
@@ -509,21 +543,19 @@ async function boot(): Promise<void> {
     });
   };
 
-  const flushQueuedGlossOutcomes = (): void => {
-    for (const session of Array.from(glossSessions)) {
-      while (session.queuedOutcomes.length > 0) {
-        applyGlossOutcome(session, session.queuedOutcomes.shift()!, session.reason, true);
-      }
-      if (session.terminalError) {
-        const error = session.terminalError;
-        delete session.terminalError;
-        failGlossSession(session, error);
-        continue;
-      }
-      if (session.doneAfterQueuedOutcomes) {
-        session.doneAfterQueuedOutcomes = false;
-        completeGlossSession(session, session.reason);
-      }
+  const flushQueuedGlossOutcomes = (session: GlossSession): void => {
+    while (session.queuedOutcomes.length > 0) {
+      applyGlossOutcome(session, session.queuedOutcomes.shift()!, session.reason, true);
+    }
+    if (session.terminalError) {
+      const error = session.terminalError;
+      delete session.terminalError;
+      failGlossSession(session, error);
+      return;
+    }
+    if (session.doneAfterQueuedOutcomes) {
+      session.doneAfterQueuedOutcomes = false;
+      completeGlossSession(session, session.reason);
     }
   };
 
@@ -557,13 +589,21 @@ async function boot(): Promise<void> {
         scanId: session.scanId,
         chunkId,
         chunkIndex: chunk.chunkIndex,
-        pageUrl: location.href,
+        pageUrl: session.pageUrl,
         sentences: chunk.sentences.map(toSerializableSentence)
       }));
     } catch (error) {
       session.pendingChunkAcks.delete(chunkId);
       ack.resolve();
-      handleRuntimeError("gloss.scan.chunk", error);
+      if (isExtensionContextInvalidated(error)) {
+        stopContentScript("extension-context-invalidated");
+      } else {
+        failGlossSession(session, diagnosticPayloadFrom(error, {
+          reason: "runtime",
+          message: "Gloss scan chunk failed",
+          service: "runtime"
+        }));
+      }
       return false;
     }
     trace({
@@ -591,7 +631,15 @@ async function boot(): Promise<void> {
         scanId: session.scanId
       }));
     } catch (error) {
-      handleRuntimeError("gloss.scan.end", error);
+      if (isExtensionContextInvalidated(error)) {
+        stopContentScript("extension-context-invalidated");
+      } else {
+        failGlossSession(session, diagnosticPayloadFrom(error, {
+          reason: "runtime",
+          message: "Gloss scan finalization failed",
+          service: "runtime"
+        }));
+      }
     }
   };
 
@@ -634,7 +682,7 @@ async function boot(): Promise<void> {
     }
     scanTimer = globalThis.setTimeout(() => {
       scanTimer = undefined;
-      void scanAndRender(reason);
+      void scanAndRender(reason).catch((error) => handleRuntimeError("content.scan", error));
     }, 150);
   };
 
@@ -691,6 +739,7 @@ async function boot(): Promise<void> {
 
   const onShortcutKeyDown = createTranslationShortcutHandler({
     shortcut: () => settings?.translateShortcutKey ?? "Alt+G",
+    beforeToggle: () => selectionController?.releaseHold(),
     toggle: () => toggleTranslation("shortcut")
   });
 
@@ -715,6 +764,9 @@ async function boot(): Promise<void> {
     if (!knownWordListChanged && !generationSettingsChanged) {
       return;
     }
+    scanVersion += 1;
+    closeAllGlossSessions();
+    overlay.clear();
     if (knownWordListChanged) {
       const requestedList = nextSettings.knownWordList;
       const loadRevision = ++knownWordsLoadRevision;
@@ -727,9 +779,6 @@ async function boot(): Promise<void> {
     if (stopped) {
       return;
     }
-    scanVersion += 1;
-    closeAllGlossSessions();
-    overlay.clear();
     if (translationEnabled) {
       const reason = knownWordListChanged ? "settings-known-word-list" : "settings-gloss-generation";
       await scanAndRender(reason);
@@ -741,7 +790,7 @@ async function boot(): Promise<void> {
     await reconcileSettingsChange(latestSettings);
   }
   bootSettingsOpen = false;
-  const onRuntimeMessage: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (message: unknown, _sender, sendResponse) => {
+  const handleRuntimeControlMessage: TranslationControlHandler = (message: unknown, _sender, sendResponse) => {
     if (isTranslationStateMessage(message)) {
       const routeChanged = synchronizeRouteState();
       if (routeChanged && translationEnabled) {
@@ -771,10 +820,7 @@ async function boot(): Promise<void> {
     });
     return true;
   };
-  if (runtime?.onMessage) {
-    runtime.onMessage.addListener(onRuntimeMessage);
-    registerLifecycleCleanup(() => runtime.onMessage.removeListener(onRuntimeMessage));
-  }
+  translationControlOwner.bind(handleRuntimeControlMessage);
 
   // @behavior glossa.extension_contracts.frame_state_sync.child_apply A child frame adopts frame zero's live state before its first viewport scan.
   if (window.top !== window) {
@@ -804,13 +850,23 @@ async function boot(): Promise<void> {
     document,
     shortcutKey: settings?.shortcutKey ?? "Alt",
     onWordSelected(selection) {
+      const operationKey = glossRefreshKey({
+        sentenceText: selection.sentence,
+        lemma: selection.token.lemma,
+        startOffset: selection.token.startOffset,
+        endOffset: selection.token.endOffset
+      });
+      const pendingOperation = Array.from(activeCardOperations).find((operation) => (
+        !operation.terminal
+        && operation.key === operationKey
+        && operation.sourceParent === selection.sourceParent
+      ));
+      if (pendingOperation) {
+        applyCardOperationFeedback(pendingOperation, selection.renderToken);
+        return;
+      }
       const operation: ActiveCardOperation = {
-        key: glossRefreshKey({
-          sentenceText: selection.sentence,
-          lemma: selection.token.lemma,
-          startOffset: selection.token.startOffset,
-          endOffset: selection.token.endOffset
-        }),
+        key: operationKey,
         tokenId: selection.token.id,
         sourceParent: selection.sourceParent,
         ...(selection.renderToken ? { initialToken: selection.renderToken } : {}),
@@ -865,7 +921,12 @@ async function boot(): Promise<void> {
   function applyCardResponse(operation: ActiveCardOperation, response: BackgroundResponseMessage): void {
     const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
     const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
-    finishCardOperation(operation, created ? "card-success" : "card-error", failureMessage);
+    const feedback = created
+      ? "card-success"
+      : response.type === "error" && response.payload.reason === "outcome-unknown"
+        ? "card-unknown"
+        : "card-error";
+    finishCardOperation(operation, feedback, failureMessage);
     if (!created && response.type === "error") {
       reportError("word.clicked", response.payload, response.requestId);
     }
@@ -908,6 +969,7 @@ async function boot(): Promise<void> {
       }
     }
   }
+  bootFailureCleanup = undefined;
 
   function updatePendingTokenState(session: GlossSession, outcome: GlossTokenPayload, render: { result: string }): void {
     if (outcome.status === "pending" && render.result !== "skipped") {
@@ -1191,6 +1253,9 @@ function readRuntimeLastError(): chrome.runtime.LastError | undefined {
 }
 
 function handleBootError(error: unknown): void {
+  bootFailureCleanup?.();
+  bootFailureCleanup = undefined;
+  translationControlOwner.close();
   if (isExtensionContextInvalidated(error)) {
     return;
   }
@@ -1273,11 +1338,11 @@ function isTranslationStateMessage(value: unknown): value is { type: "glossa.get
     && value.type === "glossa.getTranslationState";
 }
 
-function isTranslationToggleMessage(value: unknown): value is { type: "glossa.toggleTranslation" } {
+function isTranslationToggleMessage(value: unknown): value is { type: "glossa.toggleTranslationState" } {
   return typeof value === "object"
     && value !== null
     && "type" in value
-    && value.type === "glossa.toggleTranslation";
+    && value.type === "glossa.toggleTranslationState";
 }
 
 function isTranslationSetMessage(value: unknown): value is { type: "glossa.setTranslationState"; enabled: boolean } {
@@ -1290,3 +1355,60 @@ function isTranslationSetMessage(value: unknown): value is { type: "glossa.setTr
 }
 
 type TranslationControlResponse = { ok: true; enabled: boolean } | { ok: false; message: string; error?: ErrorPayload };
+
+function createTranslationControlOwner(): {
+  bind(handler: TranslationControlHandler): void;
+  close(): void;
+} {
+  const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
+  let handler: TranslationControlHandler | undefined;
+  let closed = false;
+  const onMessage: RuntimeMessageListener = (message, sender, sendResponse) => {
+    if (!isTranslationControlMessage(message)) {
+      return false;
+    }
+    if (handler) {
+      return handler(message, sender, sendResponse);
+    }
+    if (closed) {
+      return false;
+    }
+    if (isTranslationStateMessage(message)) {
+      sendResponse({ ok: true, phase: "booting" } satisfies TranslationBootingResponse);
+    } else {
+      sendResponse({
+        ok: false,
+        phase: "booting",
+        message: "Translation state is still starting"
+      } satisfies TranslationBootingResponse);
+    }
+    return false;
+  };
+  runtime?.onMessage?.addListener(onMessage);
+  return {
+    bind(nextHandler) {
+      if (!closed) {
+        handler = nextHandler;
+      }
+    },
+    close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      handler = undefined;
+      runtime?.onMessage?.removeListener(onMessage);
+    }
+  };
+}
+
+type TranslationBootingResponse =
+  | { ok: true; phase: "booting" }
+  | { ok: false; phase: "booting"; message: string };
+
+function isTranslationControlMessage(value: unknown): boolean {
+  return isTranslationStateMessage(value)
+    || isTranslateActivationMessage(value)
+    || isTranslationToggleMessage(value)
+    || isTranslationSetMessage(value);
+}

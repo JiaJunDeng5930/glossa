@@ -43,6 +43,9 @@ function ankiMessage(error: ErrorPayload | undefined): string {
   if (error.reason === "timeout") {
     return "Anki 服务请求超时";
   }
+  if (error.reason === "outcome-unknown") {
+    return "Anki 请求结果未知，请先在 Anki 中确认是否已创建卡片。";
+  }
   if (error.reason === "unauthorized") {
     return "AnkiConnect 拒绝了请求，请检查访问权限。";
   }

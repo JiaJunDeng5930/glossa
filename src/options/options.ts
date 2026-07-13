@@ -4,7 +4,7 @@ import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus,
 import { createOptionsMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
 import { defaultEndpointForProvider } from "../shared/settings";
 import { aiConnectionKey, ankiConnectionKey, applyAppearancePreview, runSettingsConnectionTest, testAiSettings, testAnkiSettings } from "../shared/settingsForm";
-import { formatShortcutFromEvent } from "../shared/shortcut";
+import { formatShortcutFromEvent, normalizeShortcut } from "../shared/shortcut";
 import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, KNOWN_WORD_LIST_IDS, type AiSettings, type BackgroundResponseMessage, type ErrorService, type GlossaSettings, type KnownWordListId, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import { createExtensionStorage } from "../storage/db";
@@ -12,6 +12,7 @@ import { createKnownWordsOperationLane } from "./knownWordsOperationLane";
 import { removeKnownRecord } from "./knownWordStorage";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
+form.inert = true;
 const extensionStorage = createExtensionStorage();
 const knownWordsOperationLane = createKnownWordsOperationLane();
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
@@ -19,6 +20,8 @@ const saveButton = document.querySelector<HTMLButtonElement>("#save-settings")!;
 const saveLabel = saveButton.querySelector<HTMLElement>(".save-label")!;
 const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-capture")!;
 const translateShortcutCapture = document.querySelector<HTMLButtonElement>("#translate-shortcut-capture")!;
+const shortcutCaptureError = document.querySelector<HTMLElement>("#shortcut-capture-error")!;
+const translateShortcutCaptureError = document.querySelector<HTMLElement>("#translate-shortcut-capture-error")!;
 const glossPreview = document.querySelector<HTMLElement>("#gloss-preview")!;
 const glossPreviewLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss"));
 const glossPreviewSuccessLabels = Array.from(document.querySelectorAll<HTMLElement>(".preview-gloss-success"));
@@ -56,6 +59,7 @@ let testedAiSettings: string | undefined;
 let testedAnkiSettings: string | undefined;
 let aiConnectionTestRevision = 0;
 let ankiConnectionTestRevision = 0;
+let ankiCatalogRevision = 0;
 
 populateKnownWordLists();
 setupSectionNavigation();
@@ -442,17 +446,18 @@ async function addKnownWord(): Promise<void> {
   try {
     const now = Date.now();
     const key = vocabularyKey("en", lemma);
-    const existing = await extensionStorage.lexicon.get(key);
-    const shown = markRecordShown(existing ?? createCandidateRecord(lemma, lemma, "en", now), now);
-    if ((existing?.ankiNoteIds.length ?? 0) > 0) {
+    const updated = await extensionStorage.lexicon.update(key, (existing) => {
+      const shown = markRecordShown(existing ?? createCandidateRecord(lemma, lemma, "en", now), now);
+      return { ...shown, state: "known", ankiNoteIds: existing?.ankiNoteIds ?? shown.ankiNoteIds };
+    });
+    if ((updated?.ankiNoteIds.length ?? 0) > 0) {
       await extensionStorage.cardedWords.put(key, {
         key,
-        lang: existing?.lang ?? "en",
+        lang: updated?.lang ?? "en",
         lemma,
-        createdAt: existing?.lastClickedAt ?? existing?.lastShownAt ?? now
+        createdAt: updated?.lastClickedAt ?? updated?.lastShownAt ?? now
       });
     }
-    await extensionStorage.lexicon.put({ ...shown, state: "known", ankiNoteIds: existing?.ankiNoteIds ?? shown.ankiNoteIds });
     knownWordInput.value = "";
     await refreshKnownWords("已添加");
   } catch {
@@ -671,6 +676,7 @@ function setTestState(button: HTMLButtonElement, state: TestState): void {
 }
 
 async function refreshAnkiOptions(settings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
+  const revision = ++ankiCatalogRevision;
   const previousDeck = ankiDeckSelect.value;
   const previousModelName = ankiModelNameSelect.value;
   setTestState(refreshAnkiButton, "loading");
@@ -680,6 +686,9 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
   }
   try {
     const catalog = await loadAnkiCatalog(settings.anki.endpoint, settings.anki.requestTimeoutMs);
+    if (revision !== ankiCatalogRevision || readInput("ankiEndpoint").trim() !== settings.anki.endpoint) {
+      return;
+    }
     const deck = pickExistingValue(settings.anki.deck, catalog.decks);
     const modelName = pickExistingValue(settings.anki.modelName, catalog.modelNames);
     setSelectOptions(ankiDeckSelect, catalog.decks, deck);
@@ -694,6 +703,9 @@ async function refreshAnkiOptions(settings: GlossaSettings, options: { reportSta
       setAnkiStatus("Anki 选项已更新", "success");
     }
   } catch (error) {
+    if (revision !== ankiCatalogRevision || readInput("ankiEndpoint").trim() !== settings.anki.endpoint) {
+      return;
+    }
     setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
     setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
     setAnkiSelectsEnabled(true);
@@ -812,8 +824,18 @@ function finishShortcutCapture(): void {
   if (!capturingShortcutName) {
     return;
   }
+  const otherName = capturingShortcutName === "shortcutKey" ? "translateShortcutKey" : "shortcutKey";
+  if (normalizeShortcut(pendingShortcut) === normalizeShortcut(readInput(otherName))) {
+    shortcutButtonFor(capturingShortcutName).textContent = "按下快捷键";
+    shortcutErrorFor(capturingShortcutName).textContent = capturingShortcutName === "shortcutKey"
+      ? "与翻译快捷键冲突，请按其他组合键。"
+      : "与选词快捷键冲突，请按其他组合键。";
+    pendingShortcut = "";
+    return;
+  }
   setInput(capturingShortcutName, pendingShortcut);
   shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
+  shortcutErrorFor(capturingShortcutName).textContent = "";
   capturingShortcutName = undefined;
   pendingShortcut = "";
   markSettingsDirty("快捷键已记录，等待保存");
@@ -864,6 +886,7 @@ function updateProviderFields(provider: AiSettings["provider"]): void {
 function startShortcutCapture(name: "shortcutKey" | "translateShortcutKey", button: HTMLButtonElement): void {
   capturingShortcutName = name;
   pendingShortcut = "";
+  shortcutErrorFor(name).textContent = "";
   button.textContent = "按下快捷键";
   button.focus();
 }
@@ -937,7 +960,12 @@ async function loadSettings(): Promise<void> {
   setInput("glossPrompt", settings.prompts.gloss);
   setInput("ankiPrompt", settings.prompts.ankiCard);
   updatePreview(settings);
-  void refreshKnownWords();
+  void knownWordsOperationLane.run(() => refreshKnownWords());
+  form.inert = false;
+}
+
+function shortcutErrorFor(name: "shortcutKey" | "translateShortcutKey"): HTMLElement {
+  return name === "shortcutKey" ? shortcutCaptureError : translateShortcutCaptureError;
 }
 
 async function saveSettings(settings: GlossaSettings): Promise<void> {
