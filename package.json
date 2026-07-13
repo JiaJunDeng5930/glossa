@@ -10,6 +10,7 @@
     "preview:ui": "node scripts/serve-ui-preview.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:state-model": "vitest run tests/state-model",
     "test:watch": "vitest",
     "test:e2e": "node scripts/check-playwright-chromium.mjs && playwright test",
     "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e",
