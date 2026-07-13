@@ -2186,6 +2186,42 @@ test("content bundle does not let a retired attempt create a wrapper while a new
   await expect(page.locator('[data-glossa-surface="worda"]')).toHaveCount(0, { timeout: 500 });
 });
 
+test("content bundle finalizes pending wrappers when the gloss port disconnects before ACK", async ({ page }) => {
+  await page.setContent("<main><p>Obscure archive appears here.</p></main>");
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    Reflect.set(window, "__glossaSuppressChunkAck", true);
+    Reflect.set(window, "__glossaOnScan", (
+      message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } },
+      emit: (response: unknown) => void
+    ) => {
+      if (Reflect.get(window, "__pendingDisconnectToken")) {
+        return;
+      }
+      const token = message.payload.sentences
+        .flatMap((sentence) => sentence.tokens)
+        .find((candidate) => candidate.surface.toLowerCase() === "obscure");
+      if (!token) {
+        return;
+      }
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string) => unknown;
+      Reflect.set(window, "__pendingDisconnectToken", token.id);
+      emit(glossToken(message.payload.scanId, token.id, "pending"));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  const wrapper = page.locator('[data-glossa-surface="Obscure"]');
+  await expect(wrapper).toHaveAttribute("data-glossa-status", "pending");
+  await page.waitForFunction(() => {
+    const messages = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+    return messages.some((message) => message.type === "gloss.scan.end");
+  });
+
+  await page.evaluate(() => (Reflect.get(window, "__disconnectLatestGlossPort") as () => void)());
+
+  await expect(wrapper).toHaveAttribute("data-glossa-status", "error", { timeout: 500 });
+});
+
 function largeWordList(count: number): string[] {
   return Array.from({ length: count }, (_, index) => `word${letters(index)}`);
 }
@@ -2453,6 +2489,7 @@ async function installChromeRuntime(page: Page | Frame, settings: RuntimeSetting
         connect() {
           const messageListeners: Array<(message: unknown) => void> = [];
           const disconnectListeners: Array<() => void> = [];
+          let disconnected = false;
           const port = {
             name: "gloss.session",
             onMessage: {
@@ -2466,6 +2503,9 @@ async function installChromeRuntime(page: Page | Frame, settings: RuntimeSetting
               }
             },
             postMessage(message: { type: string; payload?: { scanId?: string } }) {
+              if (disconnected) {
+                throw new Error("Port is disconnected");
+              }
               sent.push(message);
               const emit = (response: unknown) => {
                 if (
@@ -2524,6 +2564,10 @@ async function installChromeRuntime(page: Page | Frame, settings: RuntimeSetting
               }
             },
             disconnect() {
+              if (disconnected) {
+                return;
+              }
+              disconnected = true;
               const disconnects = Reflect.get(window, "__glossaDisconnects") as number;
               Reflect.set(window, "__glossaDisconnects", disconnects + 1);
               for (const listener of disconnectListeners) {
@@ -2531,6 +2575,7 @@ async function installChromeRuntime(page: Page | Frame, settings: RuntimeSetting
               }
             }
           };
+          Reflect.set(window, "__disconnectLatestGlossPort", () => port.disconnect());
           return port;
         },
         sendMessage(message: { type: string; requestId: string; source: "content-script" }, callback?: (response: unknown) => void) {
