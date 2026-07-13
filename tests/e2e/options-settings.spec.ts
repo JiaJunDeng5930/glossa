@@ -791,3 +791,158 @@ test("options page creates the carded-word store on a fresh IndexedDB", async ({
   await expect.poll(() => glossaDatabaseExists(page)).toBe(true);
   await expect.poll(() => glossaDatabaseHasStore(page, "cardedWords")).toBe(true);
 });
+
+test("options form stays inert until the delayed settings snapshot is applied", async ({ page }) => {
+  await mountOptionsPage(page, "https://options-delayed-settings.test/");
+  await page.evaluate(() => {
+    let releaseSettings: (() => void) | undefined;
+    Reflect.set(window, "chrome", {
+      runtime: { lastError: undefined },
+      storage: {
+        local: {
+          get(_key: string, callback: (result: Record<string, unknown>) => void) {
+            releaseSettings = () => callback({
+              settings: {
+                shortcutKey: "Ctrl+Alt+L",
+                translateShortcutKey: "Ctrl+Shift+G"
+              }
+            });
+          },
+          set(_value: Record<string, unknown>, callback?: () => void) {
+            callback?.();
+          }
+        }
+      }
+    });
+    Reflect.set(window, "__releaseDelayedSettings", () => releaseSettings?.());
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
+  await expect.poll(async () => page.evaluate(() => typeof Reflect.get(window, "__releaseDelayedSettings") === "function")).toBe(true);
+
+  expect.soft(await page.locator("#settings-form").evaluate((form) => (form as HTMLFormElement).inert)).toBe(true);
+  await page.evaluate(() => (Reflect.get(window, "__releaseDelayedSettings") as () => void)());
+  await expect(page.locator("input[name=shortcutKey]")).toHaveValue("Ctrl+Alt+L");
+  expect(await page.locator("#settings-form").evaluate((form) => (form as HTMLFormElement).inert)).toBe(false);
+});
+
+test("shortcut capture rejects the other configured shortcut and stays in capture", async ({ page }) => {
+  await mountOptionsPage(page, "https://options-shortcut-conflict.test/");
+  await page.evaluate(() => {
+    Reflect.set(window, "chrome", {
+      runtime: { lastError: undefined },
+      storage: {
+        local: {
+          get(key: string, callback: (result: Record<string, unknown>) => void) {
+            callback({
+              [key]: {
+                shortcutKey: "Alt",
+                translateShortcutKey: "Ctrl+Shift+G"
+              }
+            });
+          },
+          set(_value: Record<string, unknown>, callback?: () => void) {
+            callback?.();
+          }
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
+  await expect(page.locator("input[name=shortcutKey]")).toHaveValue("Alt");
+
+  await page.locator("#shortcut-capture").click();
+  await pressChord(page, ["Control", "Shift"], "KeyG");
+  await expect.soft(page.locator("input[name=shortcutKey]")).toHaveValue("Alt", { timeout: 500 });
+  await expect.soft(page.locator("#shortcut-capture")).toHaveText("按下快捷键", { timeout: 500 });
+  await expect.soft(page.getByText("与翻译快捷键冲突", { exact: false })).toBeVisible({ timeout: 500 });
+
+  await pressChord(page, ["Control", "Shift"], "KeyK");
+  await expect(page.locator("input[name=shortcutKey]")).toHaveValue("Ctrl+Shift+K", { timeout: 500 });
+  await expect(page.locator("#shortcut-capture")).toHaveText("Ctrl+Shift+K");
+  await expect(page.getByText("与翻译快捷键冲突", { exact: false })).toHaveCount(0);
+});
+
+test("an older Anki catalog response cannot overwrite controls loaded from a newer endpoint", async ({ page }) => {
+  await mountOptionsPage(page, "https://options-anki-catalog-order.test/");
+  await page.evaluate(() => {
+    const pendingEndpointA: Array<() => void> = [];
+    Reflect.set(window, "__pendingEndpointA", pendingEndpointA);
+    Reflect.set(window, "__releaseEndpointA", () => pendingEndpointA.shift()?.());
+    Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { action: string; params?: { modelName?: string } };
+      const endpoint = url.includes("anki-a.test") ? "A" : "B";
+      const respond = () => {
+        const values: Record<string, unknown> = endpoint === "A"
+          ? { version: 6, deckNames: ["Deck A"], modelNames: ["Model A"], modelFieldNames: ["Front", "Back"] }
+          : { version: 6, deckNames: ["Deck B"], modelNames: ["Model B"], modelFieldNames: ["Front", "Back"] };
+        if (endpoint === "A" && request.action === "modelFieldNames") {
+          requestAnimationFrame(() => Reflect.set(window, "__endpointASettled", true));
+        }
+        return new Response(JSON.stringify({ result: values[request.action], error: null }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      };
+      if (endpoint === "A" && request.action === "version" && pendingEndpointA.length === 0) {
+        return await new Promise<Response>((resolve) => pendingEndpointA.push(() => resolve(respond())));
+      }
+      return respond();
+    });
+    Reflect.set(window, "chrome", {
+      runtime: { lastError: undefined },
+      storage: {
+        local: {
+          get(key: string, callback: (result: Record<string, unknown>) => void) {
+            callback({
+              [key]: {
+                anki: {
+                  endpoint: "https://anki-a.test",
+                  deck: "Deck A",
+                  modelName: "Model A"
+                }
+              }
+            });
+          },
+          set(_value: Record<string, unknown>, callback?: () => void) {
+            callback?.();
+          }
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/options.js") });
+  await expect(page.locator("input[name=ankiEndpoint]")).toHaveValue("https://anki-a.test");
+
+  await page.locator("#refresh-anki").click();
+  await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__pendingEndpointA") as unknown[]).length)).toBe(1);
+  await page.locator("input[name=ankiEndpoint]").fill("https://anki-b.test");
+  await page.locator("#refresh-anki").dispatchEvent("click");
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B", { timeout: 500 });
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Model B");
+
+  await page.evaluate(() => (Reflect.get(window, "__releaseEndpointA") as () => void)());
+  await page.waitForFunction(() => Reflect.get(window, "__endpointASettled") === true);
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B", { timeout: 500 });
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Model B");
+  await expect(page.locator("#anki-status")).toHaveText("Anki 选项已更新");
+});
+
+async function mountOptionsPage(page: Page, url: string): Promise<void> {
+  const html = await readFile(resolve("dist/options/options.html"), "utf8");
+  await page.route(url, (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html></html>" }));
+  await page.goto(url);
+  await page.setContent(html
+    .replace("<link rel=\"stylesheet\" href=\"../assets/options.css\">", "")
+    .replace("<script type=\"module\" src=\"../options.js\"></script>", ""));
+  await page.addStyleTag({ path: resolve("dist/assets/options.css") });
+}
+
+async function pressChord(page: Page, modifiers: string[], code: string): Promise<void> {
+  for (const modifier of modifiers) {
+    await page.keyboard.down(modifier);
+  }
+  await page.keyboard.press(code);
+  for (const modifier of [...modifiers].reverse()) {
+    await page.keyboard.up(modifier);
+  }
+}

@@ -2131,6 +2131,61 @@ test("content bundle aborts chunk scans after a deferred gloss error", async ({ 
   expect(sentTypes).not.toContain("gloss.scan.end");
 });
 
+test("content bundle does not let a retired attempt create a wrapper while a newer scan collects", async ({ page }) => {
+  const words = largeWordList(180);
+  await page.setContent(`<main><p>${words.join(" ")}.</p><p id="mutating">before</p></main>`);
+  await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    let firstScanId: string | undefined;
+    let firstToken: { id: string; surface: string } | undefined;
+    let emitFirst: ((response: unknown) => void) | undefined;
+    Reflect.set(window, "__glossaOnScan", (
+      message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } },
+      emit: (response: unknown) => void
+    ) => {
+      const tokens = message.payload.sentences.flatMap((sentence) => sentence.tokens);
+      if (!firstScanId) {
+        firstScanId = message.payload.scanId;
+        firstToken = tokens.find((token) => token.surface === "worda");
+        emitFirst = emit;
+        Reflect.set(window, "__retiredAttemptCaptured", firstToken !== undefined);
+        return;
+      }
+      if (message.payload.scanId === firstScanId || Reflect.get(window, "__retiredReadyReleased")) {
+        return;
+      }
+      if (!firstToken || !emitFirst) {
+        throw new Error("The first scan did not capture worda");
+      }
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item?: unknown) => unknown;
+      const glossDone = Reflect.get(window, "glossDone") as (scanId: string) => unknown;
+      emitFirst(glossToken(firstScanId, firstToken.id, "ready", {
+        tokenId: firstToken.id,
+        targetText: firstToken.surface,
+        display: "RETIRED"
+      }));
+      emitFirst(glossDone(firstScanId));
+      Reflect.set(window, "__retiredReadyReleased", true);
+      Reflect.set(window, "__newerScanId", message.payload.scanId);
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await page.waitForFunction(() => Reflect.get(window, "__retiredAttemptCaptured") === true);
+
+  await page.locator("#mutating").evaluate((element) => {
+    element.textContent = "after";
+  });
+  await page.waitForFunction(() => Reflect.get(window, "__retiredReadyReleased") === true);
+  await page.waitForFunction(() => {
+    const scanId = Reflect.get(window, "__newerScanId");
+    const messages = Reflect.get(window, "__glossaMessages") as Array<{ type: string; payload?: { scanId?: string } }>;
+    return typeof scanId === "string"
+      && messages.some((message) => message.type === "gloss.scan.end" && message.payload?.scanId === scanId);
+  });
+
+  await expect(page.locator('[data-glossa-surface="worda"]')).toHaveCount(0, { timeout: 500 });
+});
+
 function largeWordList(count: number): string[] {
   return Array.from({ length: count }, (_, index) => `word${letters(index)}`);
 }
