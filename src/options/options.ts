@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, KNOWN_WORD_LIST_IDS, type AiSettin
 import { userMessageForError } from "../shared/userMessages";
 import { createExtensionStorage } from "../storage/db";
 import { createKnownWordsOperationLane } from "./knownWordsOperationLane";
+import { removeKnownRecord } from "./knownWordStorage";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 const extensionStorage = createExtensionStorage();
@@ -530,9 +531,7 @@ function renderKnownWordsSection(letter: string, records: VocabularyRecord[]): H
 async function removeKnownWord(record: VocabularyRecord): Promise<void> {
   setKnownWordsStatus("正在移除…", "pending");
   try {
-    const key = vocabularyKey(record.lang, record.lemma);
-    await preserveCardHistory(record);
-    await extensionStorage.lexicon.delete(key);
+    await removeKnownRecord(extensionStorage, record);
     await refreshKnownWords("已移除");
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
@@ -547,26 +546,11 @@ async function clearKnownWords(): Promise<void> {
   setKnownWordsStatus("正在清空…", "pending");
   try {
     const records = await extensionStorage.lexicon.listByState("known");
-    await Promise.all(records.map(async (record) => {
-      await preserveCardHistory(record);
-      await extensionStorage.lexicon.delete(vocabularyKey(record.lang, record.lemma));
-    }));
+    await Promise.all(records.map((record) => removeKnownRecord(extensionStorage, record)));
     await refreshKnownWords("已清空");
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
     clearKnownWordsButton.disabled = false;
-  }
-}
-
-async function preserveCardHistory(record: VocabularyRecord): Promise<void> {
-  const key = vocabularyKey(record.lang, record.lemma);
-  if (record.ankiNoteIds.length > 0) {
-    await extensionStorage.cardedWords.put(key, {
-      key,
-      lang: record.lang,
-      lemma: record.lemma,
-      createdAt: record.lastClickedAt ?? record.lastShownAt ?? Date.now()
-    });
   }
 }
 

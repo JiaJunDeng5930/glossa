@@ -5,6 +5,7 @@ import { createBackgroundMessageHandler } from "../../src/background/messages";
 import { buildGlossCacheKey } from "../../src/core/cache";
 import { createDiagnosticError } from "../../src/shared/errors";
 import { createContentMessage, createOptionsMessage } from "../../src/shared/messages";
+import { removeKnownRecord } from "../../src/options/knownWordStorage";
 import type { ExtensionStorage } from "../../src/storage/db";
 import {
   DEFAULT_SETTINGS,
@@ -78,6 +79,48 @@ describe("vocabulary and card state transitions", () => {
       shownCount: 1,
       clickCount: 1,
       ankiNoteIds: [42]
+    });
+  });
+
+  it("does not let a stale remove-known command delete a card transition", async () => {
+    const fixture = createMemoryStorage();
+    const record: VocabularyRecord = {
+      key: "en:submit",
+      lang: "en",
+      lemma: "submit",
+      surface: "submit",
+      state: "known",
+      shownCount: 1,
+      clickCount: 0,
+      ankiNoteIds: [99],
+      lastShownAt: 500
+    };
+    fixture.lexicon.set(record.key, record);
+    const preserveStarted = deferred<void>();
+    const releasePreserve = deferred<void>();
+    const originalCardedPut = fixture.storage.cardedWords.put;
+    let putCount = 0;
+    fixture.storage.cardedWords.put = vi.fn(async (key, value) => {
+      putCount += 1;
+      if (putCount === 1) {
+        preserveStarted.resolve();
+        await releasePreserve.promise;
+      }
+      await originalCardedPut(key, value);
+    });
+
+    const remove = removeKnownRecord(fixture.storage, record, () => 600);
+    await preserveStarted.promise;
+    const { handler } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
+    const card = await handler(wordMessage("submit", "card-after-remove", true));
+    releasePreserve.resolve();
+    await remove;
+
+    expect(card).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
+    expect(fixture.lexicon.get(record.key)).toMatchObject({
+      state: "learning_active",
+      clickCount: 1,
+      ankiNoteIds: [99, 42]
     });
   });
 
@@ -215,7 +258,7 @@ function cardHandler(storage: ExtensionStorage, cards: Array<{ front: string; ba
   return { handler: createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 }), ai, anki };
 }
 
-function wordMessage(lemma: string, tokenId = `${lemma}-token`) {
+function wordMessage(lemma: string, tokenId = `${lemma}-token`, allowDuplicateCard = false) {
   return createContentMessage("word.clicked", {
     pageUrl: "https://example.test/page",
     sentence: `A ${lemma} word.`,
@@ -226,7 +269,8 @@ function wordMessage(lemma: string, tokenId = `${lemma}-token`) {
       lemma,
       startOffset: 2,
       endOffset: 2 + lemma.length
-    }
+    },
+    ...(allowDuplicateCard ? { allowDuplicateCard: true } : {})
   });
 }
 
