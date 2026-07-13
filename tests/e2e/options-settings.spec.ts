@@ -354,6 +354,7 @@ test("options page captures shortcuts, previews style changes and saves prompts"
   await expect(page.locator("#known-words-list")).toContainText("legacy");
   await page.locator("#known-word-input").fill("legacy");
   await page.locator("#add-known-word").click();
+  await expect(page.locator("#known-words-status")).toHaveText("已添加");
   expect(await page.evaluate(async () => {
     return await new Promise<unknown>((resolve, reject) => {
       const request = indexedDB.open("glossa", 2);

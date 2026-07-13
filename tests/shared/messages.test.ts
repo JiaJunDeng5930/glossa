@@ -168,7 +168,8 @@ describe("extension message envelopes", () => {
   it("validates chunked gloss scan port messages", () => {
     const start = createGlossPortMessage("gloss.scan.start", {
       scanId: "scan-1",
-      pageUrl: "https://example.test/path"
+      pageUrl: "https://example.test/path",
+      scanConfigHash: "config-1"
     });
     const chunk = createGlossPortMessage("gloss.scan.chunk", {
       scanId: "scan-1",
@@ -188,6 +189,10 @@ describe("extension message envelopes", () => {
     expect(validateGlossPortInbound(chunk)).toMatchObject({ type: "gloss.scan.chunk", payload: { chunkIndex: 0 } });
     expect(validateGlossPortInbound(end)).toMatchObject({ type: "gloss.scan.end" });
     expect(validateGlossPortOutbound(ack, "scan-1")).toMatchObject({ type: "gloss.chunk.ack", payload: { acceptedTokens: 2 } });
+    expect(() => validateGlossPortInbound({
+      ...start,
+      payload: { scanId: "scan-1", pageUrl: "https://example.test/path" }
+    })).toThrow("Malformed gloss.scan.start payload");
   });
 
   it("rejects malformed nested gloss scan chunk sentence fields", () => {

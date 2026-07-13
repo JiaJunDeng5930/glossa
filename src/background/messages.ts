@@ -1,6 +1,7 @@
 import { buildCardCacheKey } from "../core/cache";
 import { hashText } from "../shared/hash";
-import { diagnosticPayloadFrom } from "../shared/errors";
+import { createDiagnosticError, diagnosticPayloadFrom } from "../shared/errors";
+import { trace } from "../shared/diagnostics";
 import { createBackgroundResponse } from "../shared/messages";
 import {
   createCandidateRecord,
@@ -129,11 +130,6 @@ async function handleWordClicked(
       }
     };
   }
-  const clicked = markRecordClicked(
-    existing ?? createCandidateRecord(payload.token.lemma, payload.token.surface, "en", now),
-    now,
-    settings.learningWindowDays
-  );
   const cardKey = await buildCardCacheKey({
     lang: "en",
     lemma: payload.token.lemma,
@@ -143,48 +139,62 @@ async function handleWordClicked(
   });
   const cachedCardOutput = await deps.storage.cardCache.get(cardKey);
   const cardOutput = cachedCardOutput ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
-  const sanitizedCardOutput = { cards: cardOutput.cards };
-  const noteIds = await createNotes(sanitizedCardOutput.cards, payload.token, settings, deps.anki);
-  if (noteIds.noteIds.length === 0 && noteIds.error) {
-    throw noteIds.error;
+  if (cardOutput.cards.length !== 1) {
+    throw createDiagnosticError("invalid-response", "AI must return exactly one Anki card", { service: "ai" });
   }
-  const createdNoteIds = noteIds.noteIds;
-  const ankiNoteIds = createdNoteIds.length === 0 ? clicked.ankiNoteIds : [...new Set([...clicked.ankiNoteIds, ...createdNoteIds])];
+  const sanitizedCardOutput = { cards: cardOutput.cards };
   await deps.storage.cardCache.put(cardKey, sanitizedCardOutput);
-  if (createdNoteIds.length > 0) {
-    await deps.storage.cardedWords.put(wordKey, {
+  const card = sanitizedCardOutput.cards[0]!;
+  let noteId: number | undefined;
+  try {
+    noteId = await deps.anki.createNote({ settings, card, token: payload.token });
+  } catch (error) {
+    const diagnostic = diagnosticPayloadFrom(error, {
+      reason: "service-error",
+      message: "Anki note creation failed",
+      service: "anki"
+    });
+    if (diagnostic.reason === "timeout" || diagnostic.reason === "network" || diagnostic.reason === "invalid-response") {
+      throw createDiagnosticError("outcome-unknown", diagnostic.message, {
+        service: "anki",
+        ...(diagnostic.status === undefined ? {} : { status: diagnostic.status }),
+        cause: error
+      });
+    }
+    throw error;
+  }
+  if (noteId === undefined) {
+    throw createDiagnosticError("service-error", "AnkiConnect did not create a note", { service: "anki" });
+  }
+
+  await persistAfterExternalCommit("carded-word", () => deps.storage.cardedWords.put(wordKey, {
       key: wordKey,
       lang: "en",
       lemma: payload.token.lemma.toLocaleLowerCase("en-US"),
       createdAt: now
-    });
-  }
-  await deps.storage.lexicon.put({ ...clicked, ankiNoteIds });
-  if (noteIds.error) {
-    throw noteIds.error;
-  }
-  if (createdNoteIds.length === 0) {
-    return { kind: "created", payload: {} };
-  }
-  const [noteId] = createdNoteIds as [number, ...number[]];
+    }));
+  await persistAfterExternalCommit("lexicon-card-created", () => deps.storage.lexicon.update(wordKey, (current) => {
+    const clicked = markRecordClicked(
+      current ?? createCandidateRecord(payload.token.lemma, payload.token.surface, "en", now),
+      now,
+      settings.learningWindowDays
+    );
+    return { ...clicked, ankiNoteIds: [...new Set([...clicked.ankiNoteIds, noteId])] };
+  }).then(() => undefined));
   return { kind: "created", payload: { noteId } };
 }
 
-interface CreateNotesResult {
-  noteIds: number[];
-  error?: unknown;
-}
-
-async function createNotes(
-  cards: Awaited<ReturnType<AiBackend["ankiCard"]>>["cards"],
-  token: Extract<ContentToBackgroundMessage, { type: "word.clicked" }>["payload"]["token"],
-  settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>,
-  anki: AnkiClient
-): Promise<CreateNotesResult> {
-  const results = await Promise.allSettled(cards.map((card) => anki.createNote({ settings, card, token })));
-  const noteIds = results.flatMap((result) => result.status === "fulfilled" && result.value !== undefined ? [result.value] : []);
-  const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
-  return { noteIds, ...(rejected ? { error: rejected.reason } : {}) };
+async function persistAfterExternalCommit(operation: string, task: () => Promise<void>): Promise<void> {
+  try {
+    await task();
+  } catch (error) {
+    trace({
+      component: "service-worker",
+      operation,
+      result: "error",
+      error
+    });
+  }
 }
 
 async function promptCacheVersion(settings: Awaited<ReturnType<ExtensionStorage["settings"]["get"]>>, prompt: string): Promise<string> {

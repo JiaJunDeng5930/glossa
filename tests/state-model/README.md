@@ -8,7 +8,7 @@ Run the focused suite with:
 npm run test:state-model
 ```
 
-The state-model files are also ordinary Vitest tests, so `npm test` and `npm run verify` include them. While the runtime migration is incomplete, failures are intentional evidence of implementation gaps and must not be converted to skipped, todo, or expected-failure tests.
+The state-model files are also ordinary Vitest tests, so `npm test` and `npm run verify` include them. A failure is evidence that production behavior no longer satisfies the model and must not be converted to a skipped, todo, or expected-failure test.
 
 The harness follows three rules:
 

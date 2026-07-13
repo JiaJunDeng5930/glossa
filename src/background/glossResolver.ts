@@ -17,6 +17,7 @@ import { GLOSS_TARGET_LANG } from "../shared/types";
 export interface GlossResolver {
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
   clearMemory(): void;
+  clearCache(): Promise<void>;
   activateGeneration(identity: string): Promise<void>;
   invalidateGeneration(): void;
 }
@@ -50,6 +51,7 @@ interface Miss {
   inFlight: InFlightGloss;
   settings: GlossaSettings;
   now: number;
+  cacheEpoch: number;
   sink: GlossResolverSink;
   emit(payload: Omit<GlossTokenPayload, "scanId">): void;
   trackWrite(task: () => Promise<void>): void;
@@ -112,8 +114,9 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
   const inFlight = new Map<string, InFlightGloss>();
   let generation = 0;
+  let cacheEpoch = 0;
   let generationIdentity: string | undefined;
-  let generationReady = Promise.resolve();
+  let cacheLane = Promise.resolve();
   const maxMemoryEntries = deps.maxMemoryEntries ?? DEFAULT_MAX_MEMORY_ENTRIES;
   const lookupLimit = pLimit(deps.lookupConcurrency ?? DEFAULT_LOOKUP_CONCURRENCY);
   const writeLimit = pLimit(1);
@@ -127,9 +130,28 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     storage: deps.storage,
     inFlight,
     remember,
+    putCache,
     aiFrameMaxItems: deps.aiFrameMaxItems ?? DEFAULT_AI_FRAME_MAX_ITEMS,
     aiFrameMaxMs: deps.aiFrameMaxMs ?? DEFAULT_AI_FRAME_MAX_MS
   });
+
+  function putCache(capturedEpoch: number, key: string, value: GlossCacheEntry): Promise<boolean> {
+    const task = cacheLane.then(async () => {
+      if (capturedEpoch !== cacheEpoch) {
+        return false;
+      }
+      await deps.storage.glossCache.put(key, value);
+      return true;
+    });
+    cacheLane = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  function retireCacheWork(): void {
+    cacheEpoch += 1;
+    memoryCache.clear();
+    aiOutlet.invalidate();
+  }
 
   function remember(key: string, item: GlossItem): void {
     memoryCache.delete(key);
@@ -154,9 +176,13 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
 
   const createSession = (pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession => {
     const sessionGeneration = generation;
+    const sessionCacheEpoch = cacheEpoch;
+    const sessionCacheBarrier = cacheLane;
     const sessionSink: GlossResolverSink = {
       emit: (payload) => sink.emit(payload),
-      isActive: () => sessionGeneration === generation && sink.isActive?.() !== false
+      isActive: () => sessionGeneration === generation
+        && sessionCacheEpoch === cacheEpoch
+        && sink.isActive?.() !== false
     };
     const startedAt = nowMs();
     const tasks = new Set<Promise<void>>();
@@ -210,6 +236,10 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
         stats.chunks += 1;
         stats.tokens += sentences.reduce((total, sentence) => total + sentence.tokens.length, 0);
         const task = (async () => {
+          await sessionCacheBarrier;
+          if (sessionSink.isActive?.() === false) {
+            return;
+          }
           const tokenTasks = sentences.flatMap((sentence) => {
             return sentence.tokens.map((token) => lookupLimit(async () => {
               await resolveToken({
@@ -218,6 +248,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 sentence,
                 settings,
                 now,
+                cacheEpoch: sessionCacheEpoch,
                 pageUrl,
                 inFlight,
                 recall,
@@ -291,30 +322,28 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   return {
     createSession,
     clearMemory() {
-      memoryCache.clear();
+      retireCacheWork();
+    },
+    clearCache() {
+      retireCacheWork();
+      const task = cacheLane.then(() => deps.storage.glossCache.clear());
+      cacheLane = task.then(() => undefined, () => undefined);
+      return task;
     },
     // @behavior glossa.cache_identity.generation_activation Repeating the active settings identity preserves replacement sessions while a changed identity retires older work.
     activateGeneration(identity) {
       if (identity === generationIdentity) {
-        return generationReady;
+        return Promise.resolve();
       }
       if (generationIdentity === undefined) {
         generationIdentity = identity;
-        return generationReady;
+        return Promise.resolve();
       }
       generationIdentity = identity;
       generation += 1;
       memoryCache.clear();
       aiOutlet.invalidate();
-      generationReady = generationReady.then(() => deps.storage.glossCache.clear()).catch((error) => {
-        trace({
-          component: "service-worker",
-          operation: "gloss.cache.invalidate",
-          result: "error",
-          error
-        });
-      });
-      return generationReady;
+      return Promise.resolve();
     },
     invalidateGeneration() {
       generationIdentity = undefined;
@@ -331,6 +360,7 @@ async function resolveToken(input: {
   sentence: SentenceCandidate;
   settings: GlossaSettings;
   now: number;
+  cacheEpoch: number;
   pageUrl: string;
   inFlight: Map<string, InFlightGloss>;
   recall(key: string): GlossItem | undefined;
@@ -369,7 +399,7 @@ async function resolveToken(input: {
       return;
     }
 
-    const record = await currentRecord(input.lexiconReads, input.deps.storage, input.token, input.now, input.trackWrite);
+    const record = await currentRecord(input.lexiconReads, input.deps.storage, input.token, input.now);
     // A currently rendered known word may refresh its label; an explicit ignore remains authoritative.
     if (input.sink.isActive?.() === false) {
       return;
@@ -404,6 +434,7 @@ async function resolveToken(input: {
       inFlight: pending,
       settings: input.settings,
       now: input.now,
+      cacheEpoch: input.cacheEpoch,
       sink: input.sink,
       emit: input.emit,
       trackWrite: input.trackWrite
@@ -425,6 +456,7 @@ function createAiOutlet(input: {
   storage: ExtensionStorage;
   inFlight: Map<string, InFlightGloss>;
   remember(key: string, item: GlossItem): void;
+  putCache(epoch: number, key: string, value: GlossCacheEntry): Promise<boolean>;
   aiFrameMaxItems: number;
   aiFrameMaxMs: number;
 }) {
@@ -503,6 +535,7 @@ async function executeFrame(
     storage: ExtensionStorage;
     inFlight: Map<string, InFlightGloss>;
     remember(key: string, item: GlossItem): void;
+    putCache(epoch: number, key: string, value: GlossCacheEntry): Promise<boolean>;
   },
   frame: AiFrame,
   trigger: string
@@ -536,7 +569,16 @@ async function executeFrame(
       }
       const readyItem = rehydrateCachedGloss(item, miss.token);
       try {
-        await deps.storage.glossCache.put(miss.dbCacheKey, { ...readyItem, createdAt: miss.now });
+        const committed = await deps.putCache(
+          miss.cacheEpoch,
+          miss.dbCacheKey,
+          { ...readyItem, createdAt: miss.now }
+        );
+        if (!committed || frame.cancelled) {
+          resolveInFlightMiss(deps.inFlight, miss, { ok: false, cancelled: true });
+          unresolved.delete(miss);
+          continue;
+        }
         deps.remember(miss.memoryKey, readyItem);
         if (miss.sink.isActive?.() !== false) {
           miss.trackWrite(() => persistShownRecord(deps.storage, miss.token, miss.now));
@@ -760,8 +802,7 @@ async function currentRecord(
   lexiconReads: ReadCoalescer<VocabularyRecord>,
   storage: ExtensionStorage,
   token: TokenCandidate,
-  now: number,
-  trackWrite: (task: () => Promise<void>) => void
+  now: number
 ): Promise<VocabularyRecord | undefined> {
   const key = vocabularyKey("en", token.lemma);
   const record = await lexiconReads.get(key);
@@ -770,16 +811,19 @@ async function currentRecord(
   }
   const current = transitionExpiredLearning(record, now);
   if (current !== record) {
-    trackWrite(() => storage.lexicon.put(current));
+    return storage.lexicon.update(key, (latest) => latest ? transitionExpiredLearning(latest, now) : undefined);
   }
   return current;
 }
 
 async function persistShownRecord(storage: ExtensionStorage, token: TokenCandidate, now: number): Promise<void> {
   const key = vocabularyKey("en", token.lemma);
-  const record = await storage.lexicon.get(key);
-  const current = record ? transitionExpiredLearning(record, now) : createCandidateRecord(token.lemma, token.surface, "en", now);
-  await storage.lexicon.put(markRecordShown(current, now));
+  await storage.lexicon.update(key, (record) => {
+    const current = record
+      ? transitionExpiredLearning(record, now)
+      : createCandidateRecord(token.lemma, token.surface, "en", now);
+    return current.state === "ignored" ? current : markRecordShown(current, now);
+  });
 }
 
 function rehydrateCachedGloss(item: GlossItem, token: TokenCandidate): GlossItem {

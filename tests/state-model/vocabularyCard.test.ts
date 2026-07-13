@@ -48,16 +48,53 @@ describe("vocabulary and card state transitions", () => {
     });
   });
 
+  it("keeps ignored records unchanged when shown but lets an explicit card command enter learning", async () => {
+    const fixture = createMemoryStorage();
+    const input = glossSentence("ignored-token", "submit");
+    await seedGloss(fixture, input, "提交");
+    fixture.lexicon.set("en:submit", {
+      key: "en:submit",
+      lang: "en",
+      lemma: "submit",
+      surface: "submit",
+      state: "ignored",
+      shownCount: 0,
+      clickCount: 0,
+      ankiNoteIds: []
+    });
+    const resolver = createGlossResolver({
+      storage: fixture.storage,
+      ai: { glossFrame: vi.fn(), ankiCard: vi.fn() },
+      dbReadCoalesceMs: 0
+    });
+    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+
+    await resolveScan(resolver, input, events);
+    expect(fixture.lexicon.get("en:submit")).toMatchObject({ state: "ignored", shownCount: 0 });
+
+    const { handler } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
+    await expect(handler(wordMessage("submit", "ignored-token"))).resolves.toMatchObject({
+      type: "word.clicked.ok",
+      payload: { noteId: 42 }
+    });
+    expect(fixture.lexicon.get("en:submit")).toMatchObject({ state: "learning_active", clickCount: 1 });
+  });
+
   it("does not let a stale shown read overwrite a card transition", async () => {
     const fixture = createMemoryStorage();
     const input = glossSentence("race-token", "submit");
     await seedGloss(fixture, input, "提交");
-    const shownRead = deferred<VocabularyRecord | undefined>();
-    const originalGet = fixture.storage.lexicon.get;
-    let getCount = 0;
-    fixture.storage.lexicon.get = vi.fn((key) => {
-      getCount += 1;
-      return getCount === 1 ? shownRead.promise : originalGet(key);
+    const shownStarted = deferred<void>();
+    const releaseShown = deferred<void>();
+    const originalUpdate = fixture.storage.lexicon.update;
+    let updateCount = 0;
+    fixture.storage.lexicon.update = vi.fn(async (key, transition) => {
+      updateCount += 1;
+      if (updateCount === 1) {
+        shownStarted.resolve();
+        await releaseShown.promise;
+      }
+      return originalUpdate(key, transition);
     });
     const resolver = createGlossResolver({
       storage: fixture.storage,
@@ -66,11 +103,11 @@ describe("vocabulary and card state transitions", () => {
     });
     const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
     const scan = resolveScan(resolver, input, events);
-    await vi.waitFor(() => expect(fixture.storage.lexicon.get).toHaveBeenCalledTimes(1));
+    await shownStarted.promise;
     const { handler } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
 
     const card = await handler(wordMessage("submit", "race-token"));
-    shownRead.resolve(undefined);
+    releaseShown.resolve();
     await scan;
 
     expect(card).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
@@ -341,6 +378,11 @@ function createMemoryStorage(): {
       async get(key) { return lexicon.get(key); },
       async getMany(keys) { return readMany(lexicon, keys); },
       async listByState(state: VocabularyState) { return Array.from(lexicon.values()).filter((record) => record.state === state); },
+      async update(key, transition) {
+        const next = transition(lexicon.get(key));
+        if (next) lexicon.set(key, next); else lexicon.delete(key);
+        return next;
+      },
       async put(record) { lexicon.set(record.key, record); },
       async delete(key) { lexicon.delete(key); }
     },

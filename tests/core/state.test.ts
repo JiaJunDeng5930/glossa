@@ -41,4 +41,13 @@ describe("vocabulary state machine", () => {
     expect(second.clickCount).toBe(2);
     expect(second.expiresAt).toBe(now + 5 * 24 * 60 * 60 * 1_000);
   });
+
+  it("settles learning records with a missing or invalid expiry as known", () => {
+    const now = Date.parse("2026-05-03T00:00:00.000Z");
+    const learning = markRecordClicked(createCandidateRecord("test", "Test", "en", now), now, 3);
+    const { expiresAt: _expiresAt, ...missingExpiry } = learning;
+
+    expect(transitionExpiredLearning(missingExpiry, now).state).toBe("known");
+    expect(transitionExpiredLearning({ ...learning, expiresAt: Number.NaN }, now).state).toBe("known");
+  });
 });

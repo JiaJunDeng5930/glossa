@@ -51,7 +51,8 @@ export function markRecordClicked(record: VocabularyRecord, now: number, learnin
 }
 
 export function transitionExpiredLearning(record: VocabularyRecord, now: number): VocabularyRecord {
-  if (record.state === "learning_active" && record.expiresAt !== undefined && record.expiresAt <= now) {
+  const hasLiveWindow = Number.isFinite(record.expiresAt) && record.expiresAt! > now;
+  if (record.state === "learning_active" && !hasLiveWindow) {
     const { expiresAt: _expiresAt, ...rest } = record;
     return { ...rest, state: "known" };
   }

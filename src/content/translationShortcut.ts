@@ -2,6 +2,7 @@ import { matchesShortcut } from "../shared/shortcut";
 
 export interface TranslationShortcutHandlerOptions {
   shortcut(): string;
+  beforeToggle?(): void;
   toggle(): void | Promise<void>;
 }
 
@@ -12,6 +13,10 @@ export function createTranslationShortcutHandler(options: TranslationShortcutHan
     }
     event.preventDefault();
     event.stopPropagation();
-    void options.toggle();
+    event.stopImmediatePropagation();
+    options.beforeToggle?.();
+    if (!event.repeat) {
+      void options.toggle();
+    }
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatShortcutFromEvent, matchesShortcut } from "../../src/shared/shortcut";
+import { formatShortcutFromEvent, matchesShortcut, normalizeShortcut } from "../../src/shared/shortcut";
 
 describe("shortcut formatting and matching", () => {
   it("captures a pure modifier shortcut", () => {
@@ -16,5 +16,10 @@ describe("shortcut formatting and matching", () => {
     expect(formatShortcutFromEvent(event)).toBe("Ctrl+Shift+K");
     expect(matchesShortcut(event, "Ctrl+Shift+K")).toBe(true);
     expect(matchesShortcut(event, "Ctrl+K")).toBe(false);
+  });
+
+  it("normalizes equivalent modifier orders for conflict detection", () => {
+    expect(normalizeShortcut("Shift+Ctrl+G")).toBe("Ctrl+Shift+G");
+    expect(normalizeShortcut("Ctrl+Shift+G")).toBe("Ctrl+Shift+G");
   });
 });

@@ -51,7 +51,7 @@ export interface GlossCacheEntry extends GlossItem {
 
 export type MessageSource = "content-script" | "service-worker" | "options";
 export type MessageVersion = 1;
-export type ErrorReason = "network" | "timeout" | "unauthorized" | "not-found" | "service-error" | "invalid-response" | "runtime";
+export type ErrorReason = "network" | "timeout" | "unauthorized" | "not-found" | "service-error" | "invalid-response" | "runtime" | "outcome-unknown";
 export type ErrorService = "ai" | "anki" | "runtime";
 
 export interface MessageEnvelope<TType extends string, TSource extends MessageSource, TTarget extends MessageSource, TPayload> {
@@ -67,6 +67,7 @@ export interface MessageEnvelope<TType extends string, TSource extends MessageSo
 export interface GlossScanStartPayload {
   scanId: string;
   pageUrl: string;
+  scanConfigHash: string;
 }
 
 export interface GlossScanChunkPayload {

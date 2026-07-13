@@ -21,7 +21,7 @@ export interface RenderSummary {
   reason?: "missing-token" | "stale-token" | "stale-scan" | "detached-node" | "changed-text" | "invisible-range" | "overlap";
 }
 
-export type CardFeedback = "card-pending" | "card-success" | "card-error" | "card-cancelled";
+export type CardFeedback = "card-pending" | "card-success" | "card-error" | "card-unknown" | "card-cancelled";
 
 export interface CardFeedbackInput {
   tokenId: string;
@@ -220,6 +220,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         background: color-mix(in srgb, var(--glossa-card-error-bg-color) var(--glossa-bg-alpha), transparent);
         color: #b43b32;
       }
+      [data-glossa-token][data-glossa-feedback="card-unknown"] [data-glossa-token-label] {
+        border-color: color-mix(in srgb, #946200 55%, var(--glossa-card-error-bg-color));
+        background: color-mix(in srgb, var(--glossa-card-error-bg-color) var(--glossa-bg-alpha), transparent);
+        color: #946200;
+      }
       [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-feedback="card-error"] [data-glossa-token-label],
       [data-glossa-token][data-glossa-display-kind="feedback"][data-glossa-status="error"] [data-glossa-token-label] {
         width: 1.65em;
@@ -336,6 +341,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       const existing = findRenderedToken(outcome.tokenId);
       if (outcome.status === "hidden") {
         if (existing) {
+          if (readFeedback(existing)) {
+            existing.dataset.glossaStatus = "hidden";
+            rememberMutationTarget(existing);
+            return { result: "preserved" };
+          }
           unwrapRenderedNode(existing);
         }
         return { result: "hidden" };
@@ -371,6 +381,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         return { result: "skipped", reason: "missing-token" };
       }
       if (outcome.status === "hidden") {
+        if (readFeedback(existing)) {
+          existing.dataset.glossaStatus = "hidden";
+          rememberMutationTarget(existing);
+          return { result: "preserved" };
+        }
         unwrapRenderedNode(existing);
         return { result: "hidden" };
       }
@@ -655,6 +670,8 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
           ? `${surface}：制卡完成`
           : feedback === "card-error"
             ? `${surface}：制卡失败`
+            : feedback === "card-unknown"
+              ? `${surface}：制卡结果未知`
             : status === "pending"
               ? `${surface}：正在生成释义`
               : `${surface}：${display}`);
@@ -669,7 +686,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
 
   function readFeedback(node: HTMLElement): CardFeedback | undefined {
     const feedback = node.dataset.glossaFeedback;
-    return feedback === "card-pending" || feedback === "card-success" || feedback === "card-error" ? feedback : undefined;
+    return feedback === "card-pending" || feedback === "card-success" || feedback === "card-error" || feedback === "card-unknown" ? feedback : undefined;
   }
 
   function badgeForFeedback(node: HTMLElement, feedback: Exclude<CardFeedback, "card-cancelled">): { display: string; displayKind: BadgeDisplayKind } {
@@ -688,6 +705,10 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
   }
 
   function clearCardFeedback(node: HTMLElement): void {
+    if (readTokenStatus(node) === "hidden") {
+      unwrapRenderedNode(node);
+      return;
+    }
     const glossDisplay = node.dataset.glossaGlossDisplay;
     if (glossDisplay) {
       const label = node.querySelector<HTMLElement>("[data-glossa-token-label]");
@@ -872,5 +893,5 @@ function feedbackFallback(feedback: Exclude<CardFeedback, "card-cancelled">): st
     // The compact ellipsis is the visible in-page signal; title and aria-label carry the semantic detail.
     return "...";
   }
-  return feedback === "card-success" ? "✓" : "×";
+  return feedback === "card-success" ? "✓" : feedback === "card-unknown" ? "?" : "×";
 }

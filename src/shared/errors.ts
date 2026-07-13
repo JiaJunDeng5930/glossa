@@ -100,7 +100,8 @@ export function isErrorReason(value: unknown): value is ErrorReason {
     || value === "not-found"
     || value === "service-error"
     || value === "invalid-response"
-    || value === "runtime";
+    || value === "runtime"
+    || value === "outcome-unknown";
 }
 
 function isErrorService(value: unknown): value is ErrorService {

@@ -188,13 +188,44 @@ describe("runtime state-machine contracts: content and UI", () => {
     await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>("#translate-page")?.disabled).toBe(false));
 
     document.querySelector<HTMLButtonElement>("#translate-page")!.click();
-    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    await vi.waitFor(() => expect(sent).toHaveLength(3));
 
     expect(sent[1]).toEqual({
       tabId: 11,
       message: { type: "glossa.toggleTranslationState" },
       options: { frameId: 0 }
     });
+    expect(sent[2]).toEqual({
+      tabId: 11,
+      message: { type: "glossa.setTranslationState", enabled: true }
+    });
+  });
+
+  it("waits for an explicit booting phase instead of treating startup as an unavailable page", async () => {
+    document.body.innerHTML = bodyFromHtml(readFileSync(resolve("src/popup/popup.html"), "utf8"));
+    let stateReads = 0;
+    const chromeMock = {
+      runtime: { openOptionsPage: vi.fn(), lastError: undefined },
+      storage: { local: { get: (_key: string, callback: (value: Record<string, unknown>) => void) => callback({}) } },
+      tabs: {
+        query: vi.fn(async () => [{ id: 11 }]),
+        sendMessage: vi.fn(async (_tabId: number, message: unknown) => {
+          if ((message as { type?: string }).type !== "glossa.getTranslationState") {
+            return { ok: true, enabled: true };
+          }
+          stateReads += 1;
+          return stateReads === 1 ? { ok: true, phase: "booting" } : { ok: true, enabled: false };
+        })
+      }
+    };
+    vi.stubGlobal("chrome", chromeMock as unknown as typeof chrome);
+    vi.resetModules();
+
+    await import("../../src/popup/popup");
+    await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>("#translate-page")?.disabled).toBe(false));
+
+    expect(stateReads).toBe(2);
+    expect(document.querySelector("#page-state-label")?.textContent).toBe("翻译已关闭");
   });
 });
 

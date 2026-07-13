@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { attachGlossPort, type GlossPortDependencies } from "../../src/background/glossPort";
 import type { GlossResolverSession, GlossResolverSink } from "../../src/background/glossResolver";
+import { glossScanConfigHash } from "../../src/core/cache";
 import { createGlossPortMessage } from "../../src/shared/messages";
 import {
   DEFAULT_SETTINGS,
@@ -82,36 +83,55 @@ describe("background gloss port state transitions", () => {
     ]);
   });
 
-  it("rejects chunks with a different scan identity, an unexpected index, or a reused chunk id", async () => {
-    const ledger: string[] = [];
-    const fixture = createFixture({ ledger });
-    fixture.receive(start("scan-1"));
-    await waitForMicrotask(() => ledger.includes("session:create"), "session is created");
+  it("closes the session after the first invalid chunk sequence", async () => {
+    const foreignLedger: string[] = [];
+    const foreign = createFixture({ ledger: foreignLedger });
+    foreign.receive(start("scan-1"));
+    await waitForMicrotask(() => foreignLedger.includes("session:create"), "foreign fixture opens");
+    foreign.receive(chunk("scan-other", "foreign", 0));
+    await waitForMicrotask(() => errorCount(foreign.messages) === 1, "foreign scan error");
+    foreign.receive(chunk("scan-1", "chunk-0", 0));
+    await drainMicrotasks();
+    expect(foreignLedger.filter((entry) => entry.startsWith("accept:"))).toEqual([]);
+    expect(errorCount(foreign.messages)).toBe(1);
 
-    fixture.receive(chunk("scan-other", "foreign", 0));
-    await waitForMicrotask(() => errorCount(fixture.messages) === 1, "foreign scan error");
-    expect(ledger.filter((entry) => entry.startsWith("accept:"))).toEqual([]);
+    const orderLedger: string[] = [];
+    const outOfOrder = createFixture({ ledger: orderLedger });
+    outOfOrder.receive(start("scan-1"));
+    await waitForMicrotask(() => orderLedger.includes("session:create"), "order fixture opens");
+    outOfOrder.receive(chunk("scan-1", "out-of-order", 1));
+    await waitForMicrotask(() => errorCount(outOfOrder.messages) === 1, "out-of-order error");
+    expect(orderLedger.filter((entry) => entry.startsWith("accept:"))).toEqual([]);
 
-    fixture.receive(chunk("scan-1", "out-of-order", 1));
-    await waitForMicrotask(
-      () => errorCount(fixture.messages) === 2 || ledger.includes("accept:1:start"),
-      "out-of-order chunk result"
-    );
-
-    fixture.receive(chunk("scan-1", "chunk-0", 0));
-    await waitForMicrotask(() => fixture.messages.some(isAckFor("chunk-0")), "valid first chunk acknowledgement");
-    fixture.receive(chunk("scan-1", "chunk-0", 1));
-    await waitForMicrotask(
-      () => errorCount(fixture.messages) === 3 || ledger.filter((entry) => entry === "accept:1:start").length > 1,
-      "duplicate chunk result"
-    );
-
-    expect(ledger.filter((entry) => entry.startsWith("accept:"))).toEqual([
+    const duplicateLedger: string[] = [];
+    const duplicate = createFixture({ ledger: duplicateLedger });
+    duplicate.receive(start("scan-1"));
+    await waitForMicrotask(() => duplicateLedger.includes("session:create"), "duplicate fixture opens");
+    duplicate.receive(chunk("scan-1", "chunk-0", 0));
+    await waitForMicrotask(() => duplicate.messages.some(isAckFor("chunk-0")), "first chunk acknowledgement");
+    duplicate.receive(chunk("scan-1", "chunk-0", 1));
+    await waitForMicrotask(() => errorCount(duplicate.messages) === 1, "duplicate id error");
+    expect(duplicateLedger.filter((entry) => entry.startsWith("accept:"))).toEqual([
       "accept:0:start",
       "accept:0:end"
     ]);
-    expect(errorCount(fixture.messages)).toBe(3);
-    expect(fixture.messages.filter((message) => message.type === "gloss.chunk.ack")).toHaveLength(1);
+    expect(duplicate.messages.filter((message) => message.type === "gloss.chunk.ack")).toHaveLength(1);
+  });
+
+  it("rejects a scan whose captured configuration no longer matches current settings", async () => {
+    const settings = deferred<GlossaSettings>();
+    const ledger: string[] = [];
+    const fixture = createFixture({ settings, ledger });
+
+    fixture.receive(start("scan-1"));
+    settings.resolve({ ...DEFAULT_SETTINGS, knownWordList: "senior-high" });
+    await waitForMicrotask(() => errorCount(fixture.messages) === 1, "obsolete configuration error");
+
+    expect(ledger).toEqual(["settings:get", "post:gloss.error"]);
+    expect(fixture.messages[0]).toMatchObject({
+      type: "gloss.error",
+      payload: { scanId: "scan-1", reason: "runtime" }
+    });
   });
 
   it("closes a pending session on disconnect without acknowledging or finishing queued work", async () => {
@@ -219,7 +239,11 @@ function createFixture(options: FixtureOptions = {}) {
 }
 
 function start(scanId: string) {
-  return createGlossPortMessage("gloss.scan.start", { scanId, pageUrl: PAGE_URL });
+  return createGlossPortMessage("gloss.scan.start", {
+    scanId,
+    pageUrl: PAGE_URL,
+    scanConfigHash: glossScanConfigHash(DEFAULT_SETTINGS)
+  });
 }
 
 function chunk(scanId: string, chunkId: string, chunkIndex: number) {

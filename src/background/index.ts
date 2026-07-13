@@ -21,11 +21,16 @@ const handleMessage = createBackgroundMessageHandler({
   ai,
   anki,
   async getTopFrameTranslationState(tabId) {
-    const response = await chrome.tabs.sendMessage(tabId, { type: "glossa.getTranslationState" }, { frameId: 0 });
-    if (!isTranslationControlResponse(response)) {
-      throw new Error("Top-frame translation state response is malformed");
+    while (true) {
+      const response = await chrome.tabs.sendMessage(tabId, { type: "glossa.getTranslationState" }, { frameId: 0 });
+      if (isTranslationControlResponse(response)) {
+        return response.enabled;
+      }
+      if (!isTranslationBootingResponse(response)) {
+        throw new Error("Top-frame translation state response is malformed");
+      }
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 100));
     }
-    return response.enabled;
   }
 });
 
@@ -60,8 +65,7 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, sender, sendResponse)
       result: "ok"
     });
     if (message.type === "gloss.cache.clear") {
-      await storage.glossCache.clear();
-      glossResolver.clearMemory();
+      await glossResolver.clearCache();
       sendResponse(createBackgroundResponse(message, "gloss.cache.cleared", {}));
       return;
     }
@@ -92,6 +96,13 @@ function isTranslationControlResponse(value: unknown): value is { ok: true; enab
     && value.ok === true
     && "enabled" in value
     && typeof value.enabled === "boolean";
+}
+
+function isTranslationBootingResponse(value: unknown): value is { phase: "booting" } {
+  return typeof value === "object"
+    && value !== null
+    && "phase" in value
+    && value.phase === "booting";
 }
 
 chrome.runtime.onConnect.addListener((port) => {
