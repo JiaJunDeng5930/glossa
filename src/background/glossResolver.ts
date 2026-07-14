@@ -131,6 +131,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     inFlight,
     remember,
     putCache,
+    isCacheEpochCurrent: (epoch) => epoch === cacheEpoch,
     aiFrameMaxItems: deps.aiFrameMaxItems ?? DEFAULT_AI_FRAME_MAX_ITEMS,
     aiFrameMaxMs: deps.aiFrameMaxMs ?? DEFAULT_AI_FRAME_MAX_MS
   });
@@ -141,16 +142,15 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
         return false;
       }
       await deps.storage.glossCache.put(key, value);
-      return true;
+      return capturedEpoch === cacheEpoch;
     });
     cacheLane = task.then(() => undefined, () => undefined);
     return task;
   }
 
-  function retireCacheWork(): void {
+  function clearCachedValues(): void {
     cacheEpoch += 1;
     memoryCache.clear();
-    aiOutlet.invalidate();
   }
 
   function remember(key: string, item: GlossItem): void {
@@ -181,7 +181,6 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     const sessionSink: GlossResolverSink = {
       emit: (payload) => sink.emit(payload),
       isActive: () => sessionGeneration === generation
-        && sessionCacheEpoch === cacheEpoch
         && sink.isActive?.() !== false
     };
     const startedAt = nowMs();
@@ -249,6 +248,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 settings,
                 now,
                 cacheEpoch: sessionCacheEpoch,
+                isCacheEpochCurrent: () => sessionCacheEpoch === cacheEpoch,
                 pageUrl,
                 inFlight,
                 recall,
@@ -322,10 +322,10 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   return {
     createSession,
     clearMemory() {
-      retireCacheWork();
+      memoryCache.clear();
     },
     clearCache() {
-      retireCacheWork();
+      clearCachedValues();
       const task = cacheLane.then(() => deps.storage.glossCache.clear());
       cacheLane = task.then(() => undefined, () => undefined);
       return task;
@@ -361,6 +361,7 @@ async function resolveToken(input: {
   settings: GlossaSettings;
   now: number;
   cacheEpoch: number;
+  isCacheEpochCurrent(): boolean;
   pageUrl: string;
   inFlight: Map<string, InFlightGloss>;
   recall(key: string): GlossItem | undefined;
@@ -390,6 +391,8 @@ async function resolveToken(input: {
 
     const cached = await input.glossCacheReads.get(cacheKey);
     if (input.sink.isActive?.() === false) {
+      return;
+    } else if (!input.isCacheEpochCurrent()) {
       return;
     } else if (cached) {
       const item = rehydrateCachedGloss(cached, input.token);
@@ -457,6 +460,7 @@ function createAiOutlet(input: {
   inFlight: Map<string, InFlightGloss>;
   remember(key: string, item: GlossItem): void;
   putCache(epoch: number, key: string, value: GlossCacheEntry): Promise<boolean>;
+  isCacheEpochCurrent(epoch: number): boolean;
   aiFrameMaxItems: number;
   aiFrameMaxMs: number;
 }) {
@@ -536,6 +540,7 @@ async function executeFrame(
     inFlight: Map<string, InFlightGloss>;
     remember(key: string, item: GlossItem): void;
     putCache(epoch: number, key: string, value: GlossCacheEntry): Promise<boolean>;
+    isCacheEpochCurrent(epoch: number): boolean;
   },
   frame: AiFrame,
   trigger: string
@@ -574,12 +579,14 @@ async function executeFrame(
           miss.dbCacheKey,
           { ...readyItem, createdAt: miss.now }
         );
-        if (!committed || frame.cancelled) {
+        if (frame.cancelled) {
           resolveInFlightMiss(deps.inFlight, miss, { ok: false, cancelled: true });
           unresolved.delete(miss);
           continue;
         }
-        deps.remember(miss.memoryKey, readyItem);
+        if (committed && deps.isCacheEpochCurrent(miss.cacheEpoch)) {
+          deps.remember(miss.memoryKey, readyItem);
+        }
         if (miss.sink.isActive?.() !== false) {
           miss.trackWrite(() => persistShownRecord(deps.storage, miss.token, miss.now));
           miss.emit({ tokenId: miss.token.id, status: "ready", item: readyItem });

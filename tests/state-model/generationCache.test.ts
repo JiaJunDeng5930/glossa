@@ -56,7 +56,7 @@ describe("generation and cache state transitions", () => {
     ]);
   });
 
-  it("does not let an AI cache put cross a completed manual clear", async () => {
+  it("settles in-flight AI without repopulating caches after a manual clear", async () => {
     const fixture = createMemoryStorage();
     const activeSettings = settings("active-model");
     const response = deferred<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>();
@@ -74,8 +74,16 @@ describe("generation and cache state transitions", () => {
     response.resolve({ items: [{ tokenId: "stale-token", targetText: "stale", display: "旧结果" }] });
     await scan;
 
-    expect(events).toEqual([{ tokenId: "stale-token", status: "pending" }]);
+    expect(events).toEqual([
+      { tokenId: "stale-token", status: "pending" },
+      { tokenId: "stale-token", status: "ready", item: { tokenId: "stale-token", targetText: "stale", display: "旧结果" } }
+    ]);
     expect(fixture.glossCache.size).toBe(0);
+
+    const replayEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    await resolveScan(resolver, sentence("replay-token", "stale"), activeSettings, 200, replayEvents);
+    expect(replayEvents).toEqual([{ tokenId: "replay-token", status: "hidden" }]);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(1);
   });
 
   it("does not replay a cache read that completed after a manual clear", async () => {
