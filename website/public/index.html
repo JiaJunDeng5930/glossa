@@ -177,7 +177,7 @@
                     inside a phrase, and the words that become
                     <span class="glossa-token story-gloss story-gloss-four card-target" data-glossa-token>
                       <span class="glossa-label" data-glossa-token-label>不可或缺</span>
-                      <span class="glossa-surface" data-glossa-token-surface>indispensable</span>
+                      <span class="glossa-surface" data-glossa-token-surface>indispensable<img class="story-pointer" src="./assets/mouse-pointer.png" alt="" aria-hidden="true" /></span>
                     </span>
                     to the argument.
                   </p>
@@ -188,7 +188,6 @@
                 </div>
 
                 <div class="selection-hint" aria-hidden="true"><kbd>Alt</kbd><span>按住并点击</span></div>
-                <img class="story-pointer" src="./assets/mouse-pointer.png" alt="" aria-hidden="true" />
                 <div class="story-dim" aria-hidden="true"></div>
 
                 <section class="anki-memory-card" aria-label="Anki 卡片预览">
@@ -315,6 +314,7 @@
         }
         setStoryValue("--card-y", "0px");
         setStoryValue("--card-scale", 1);
+        setStoryValue("--pointer-visible", 0);
         setStoryValue("--pointer-x", "0px");
         setStoryValue("--pointer-y", "0px");
         storyStep && (storyStep.textContent = "03");
@@ -355,6 +355,7 @@
         const chapterThree = chapterThreeEnter;
         const click = segment(progress, 0.68, 0.78);
         const card = segment(progress, 0.81, 0.93);
+        const pointerVisible = Math.min(click, 1 - segment(progress, 0.79, 0.86));
 
         setChapter(1, chapterOne, chapterOneExit * -20);
         setChapter(2, chapterTwo, (1 - chapterTwoEnter) * 20 - chapterTwoExit * 20);
@@ -370,6 +371,7 @@
         setStoryValue("--mask", segment(progress, 0.82, 0.9));
         setStoryValue("--card-y", `${(1 - card) * 24}px`);
         setStoryValue("--card-scale", 0.96 + card * 0.04);
+        setStoryValue("--pointer-visible", pointerVisible);
         setStoryValue("--pointer-x", `${(1 - click) * 34}px`);
         setStoryValue("--pointer-y", `${(1 - click) * 28}px`);
 

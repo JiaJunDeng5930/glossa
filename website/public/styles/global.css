@@ -612,6 +612,7 @@ button:focus-visible {
   --mask: 1;
   --card-y: 0px;
   --card-scale: 1;
+  --pointer-visible: 0;
   --pointer-x: 0px;
   --pointer-y: 0px;
   position: relative;
@@ -781,7 +782,8 @@ button:focus-visible {
 
 .card-target .glossa-surface {
   position: relative;
-  z-index: 4;
+  z-index: 6;
+  overflow: visible;
   background: rgba(227, 179, 77, calc(0.62 * var(--click)));
 }
 
@@ -824,12 +826,12 @@ button:focus-visible {
 
 .story-pointer {
   position: absolute;
-  top: 69%;
-  left: 26%;
-  z-index: 7;
+  top: 65%;
+  left: 46%;
+  z-index: 1;
   width: 1.85rem;
   height: auto;
-  opacity: var(--click);
+  opacity: var(--pointer-visible);
   transform: translate(var(--pointer-x), var(--pointer-y));
   pointer-events: none;
 }
@@ -962,28 +964,27 @@ button:focus-visible {
 
 .story.is-interactive .story-copy {
   position: relative;
-  display: flex;
+  display: grid;
   min-height: min(38rem, calc(100svh - var(--header-height) - 0.75rem));
-  flex-direction: column;
-  justify-content: center;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(1.25rem, 3vh, 2.25rem);
 }
 
 .story.is-interactive .story-copy > .eyebrow {
-  position: absolute;
-  top: 1.5rem;
-  left: 0;
+  position: static;
 }
 
 .story.is-interactive .story-chapters {
   position: relative;
-  display: block;
-  min-height: 25rem;
+  display: grid;
+  min-height: 0;
+  align-items: center;
   margin: 0;
 }
 
 .story.is-interactive .story-chapter {
-  position: absolute;
-  inset: 0 auto auto 0;
+  position: static;
+  grid-area: 1 / 1;
   width: 100%;
   will-change: opacity, transform;
 }
@@ -1004,9 +1005,7 @@ button:focus-visible {
 }
 
 .story.is-interactive .story-progress {
-  position: absolute;
-  bottom: 1.75rem;
-  left: 0;
+  position: static;
   display: grid;
   grid-template-columns: minmax(6rem, 11rem) auto;
   align-items: center;
