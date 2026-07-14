@@ -51,6 +51,24 @@ async function assertMobileNavigation(page, viewport) {
   }
 }
 
+async function assertStoryCopySeparation(page) {
+  const separation = await page.evaluate(() => {
+    const eyebrow = document.querySelector(".story-copy > .eyebrow").getBoundingClientRect();
+    const chapter = [...document.querySelectorAll(".story-chapter")]
+      .find((node) => Number.parseFloat(getComputedStyle(node).opacity) > 0.5)
+      .getBoundingClientRect();
+    const progress = document.querySelector(".story-progress").getBoundingClientRect();
+    return {
+      eyebrowBeforeChapter: eyebrow.bottom <= chapter.top,
+      chapterBeforeProgress: chapter.bottom + 16 <= progress.top,
+    };
+  });
+  assert.deepEqual(separation, {
+    eyebrowBeforeChapter: true,
+    chapterBeforeProgress: true,
+  });
+}
+
 test("landing page keeps its story, CTA, and responsive layout intact", async () => {
   const browser = await chromium.launch({ headless: true });
 
@@ -99,6 +117,26 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
       top: node.getBoundingClientRect().top + scrollY,
       distance: node.offsetHeight - innerHeight,
     }));
+    await page.evaluate(({ top, distance }) => scrollTo(0, top + distance * 0.785), geometry);
+    await page.waitForFunction(() => Number.parseFloat(getComputedStyle(document.querySelector(".story-pointer")).opacity) > 0.95);
+    const pointerAnchorState = await page.evaluate(() => {
+      const pointer = document.querySelector(".story-pointer");
+      const target = document.querySelector(".card-target .glossa-surface");
+      const pointerRect = pointer.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return {
+        anchoredToTarget: pointer.parentElement === target,
+        hotspotInsideTarget: pointerRect.left >= targetRect.left
+          && pointerRect.left <= targetRect.right
+          && pointerRect.top >= targetRect.top
+          && pointerRect.top <= targetRect.bottom,
+        cardOpacity: Number.parseFloat(getComputedStyle(document.querySelector(".anki-memory-card")).opacity),
+      };
+    });
+    assert.equal(pointerAnchorState.anchoredToTarget, true);
+    assert.equal(pointerAnchorState.hotspotInsideTarget, true);
+    assert.ok(pointerAnchorState.cardOpacity < 0.01);
+
     await page.evaluate(({ top, distance }) => scrollTo(0, top + distance * 0.94), geometry);
     await page.waitForFunction(() => Number.parseFloat(getComputedStyle(document.querySelector("[data-story]")).getPropertyValue("--card")) > 0.9);
 
@@ -114,13 +152,18 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
       const hint = document.querySelector(".selection-hint").getBoundingClientRect();
       const kicker = document.querySelector(".story-article-kicker").getBoundingClientRect();
       const heading = document.querySelector(".story-article h3").getBoundingClientRect();
-      const pointer = document.querySelector(".story-pointer").getBoundingClientRect();
-      const target = document.querySelector(".card-target .glossa-surface").getBoundingClientRect();
+      const pointer = document.querySelector(".story-pointer");
+      const target = document.querySelector(".card-target .glossa-surface");
+      const dim = document.querySelector(".story-dim");
       const card = document.querySelector(".anki-memory-card").getBoundingClientRect();
       const browserFrame = document.querySelector(".story-browser").getBoundingClientRect();
       return {
         hintOverlapsCopy: overlaps(hint, kicker) || overlaps(hint, heading),
-        pointerDistance: Math.hypot(pointer.left - target.left, pointer.top - target.top),
+        pointerOpacity: Number.parseFloat(getComputedStyle(pointer).opacity),
+        targetAboveDim: Number.parseInt(getComputedStyle(target).zIndex, 10)
+          > Number.parseInt(getComputedStyle(dim).zIndex, 10),
+        cardAboveTarget: Number.parseInt(getComputedStyle(document.querySelector(".anki-memory-card")).zIndex, 10)
+          > Number.parseInt(getComputedStyle(target).zIndex, 10),
         cardInsideFrame: card.top >= browserFrame.top
           && card.right <= browserFrame.right
           && card.bottom <= browserFrame.bottom
@@ -128,7 +171,9 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
       };
     });
     assert.equal(storyOverlayState.hintOverlapsCopy, false);
-    assert.ok(storyOverlayState.pointerDistance < 10);
+    assert.ok(storyOverlayState.pointerOpacity < 0.05);
+    assert.equal(storyOverlayState.targetAboveDim, true);
+    assert.equal(storyOverlayState.cardAboveTarget, true);
     assert.equal(storyOverlayState.cardInsideFrame, true);
     assert.match(await page.locator(".memory-word").textContent(), /Words that become indispensable to the argument\./);
     assert.equal(await page.locator(".memory-meaning p").count(), 0);
@@ -147,6 +192,7 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
       scrollTo(0, top);
     }, thresholdStoryTop);
     assert.equal(await thresholdStory.evaluate((node) => node.classList.contains("is-interactive")), true);
+    await assertStoryCopySeparation(page);
     assert.equal(await page.evaluate(() => {
       const header = document.querySelector(".site-header").getBoundingClientRect();
       const demo = document.querySelector(".story-browser").getBoundingClientRect();
@@ -193,6 +239,7 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload({ waitUntil: "load" });
     assert.equal(await page.locator("[data-story]").evaluate((node) => node.classList.contains("is-interactive")), false);
+    assert.ok(Number.parseFloat(await page.locator(".story-pointer").evaluate((node) => getComputedStyle(node).opacity)) < 0.05);
     assert.deepEqual(runtimeErrors, []);
   } finally {
     await browser.close();
