@@ -5,6 +5,51 @@ import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 
 const landingUrl = pathToFileURL(resolve("website/public/index.html")).href;
+const navigationHrefs = [
+  "#story",
+  "#details",
+  "#install",
+  "https://github.com/JiaJunDeng5930/glossa",
+];
+
+async function assertMobileNavigation(page, viewport) {
+  await page.setViewportSize(viewport);
+  await page.goto(landingUrl, { waitUntil: "load" });
+  await page.evaluate(() => { document.documentElement.style.scrollBehavior = "auto"; });
+
+  const navigation = page.getByRole("navigation", { name: "主导航" });
+  const links = navigation.getByRole("link");
+  assert.equal(await navigation.count(), 1);
+  assert.equal(await links.count(), navigationHrefs.length);
+  assert.deepEqual(await links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href"))), navigationHrefs);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewport.width);
+  assert.equal(await page.evaluate(() => {
+    const header = document.querySelector(".site-header").getBoundingClientRect();
+    const cta = document.querySelector(".button-primary").getBoundingClientRect();
+    return cta.top >= header.bottom;
+  }), true);
+
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  for (const href of navigationHrefs) {
+    await page.keyboard.press("Tab");
+    assert.deepEqual(await page.evaluate(() => ({
+      href: document.activeElement?.getAttribute("href"),
+      inNavigation: document.querySelector(".site-nav").contains(document.activeElement),
+      focusVisible: document.activeElement?.matches(":focus-visible"),
+    })), { href, inNavigation: true, focusVisible: true });
+  }
+
+  for (const href of navigationHrefs.slice(0, 3)) {
+    await navigation.locator(`a[href="${href}"]`).focus();
+    await page.keyboard.press("Enter");
+    await page.waitForFunction((hash) => location.hash === hash, href);
+    assert.equal(await page.locator(href).evaluate((target) => {
+      const header = document.querySelector(".site-header").getBoundingClientRect();
+      return target.getBoundingClientRect().top >= header.bottom - 1;
+    }), true);
+  }
+}
 
 test("landing page keeps its story, CTA, and responsive layout intact", async () => {
   const browser = await chromium.launch({ headless: true });
@@ -20,7 +65,6 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
 
     assert.match(await page.title(), /^Glossa/);
     assert.equal(await page.locator("#hero-title").textContent(), "生词智能语境翻译，让原文阅读不被打断。");
-    assert.equal(await page.locator(".hero-index").textContent(), "");
     assert.equal(await page.locator(".hero-caption span").count(), 0);
     assert.match(await page.locator(".margin-note").textContent(), /结合整句语境，\s*给出此处词义。/);
     assert.equal(
@@ -127,9 +171,11 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.reload({ waitUntil: "load" });
     assert.equal(await page.locator("[data-story]").evaluate((node) => node.classList.contains("is-interactive")), false);
+    assert.equal(await page.getByRole("navigation", { name: "主导航" }).evaluate((node) => (
+      getComputedStyle(node).display !== "none"
+    )), true);
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload({ waitUntil: "load" });
+    await assertMobileNavigation(page, { width: 390, height: 844 });
 
     assert.equal(await page.locator("[data-story]").evaluate((node) => node.classList.contains("is-interactive")), false);
     assert.equal(await page.locator(".story-chapter").count(), 3);
@@ -141,9 +187,7 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ()
     assert.equal(await page.locator(".details-intro h2 br").evaluate((node) => getComputedStyle(node).display), "none");
     assert.equal(await page.locator(".install-heading h2 br").evaluate((node) => getComputedStyle(node).display), "none");
 
-    await page.setViewportSize({ width: 320, height: 700 });
-    await page.reload({ waitUntil: "load" });
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+    await assertMobileNavigation(page, { width: 320, height: 700 });
 
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.emulateMedia({ reducedMotion: "reduce" });
