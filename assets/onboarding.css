@@ -36,10 +36,7 @@ body {
   min-height: 100vh;
   margin: 0;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 8% 8%, rgba(255, 255, 255, 0.78), transparent 30rem),
-    radial-gradient(circle at 88% 24%, rgba(180, 143, 92, 0.12), transparent 28rem),
-    var(--paper);
+  background: var(--paper);
   font: 15px/1.5 var(--sans);
   text-rendering: optimizeLegibility;
 }
@@ -203,7 +200,6 @@ h1 {
   width: 100%;
   border: 1px solid var(--line);
   background: rgba(250, 248, 241, 0.82);
-  box-shadow: 0 24px 62px rgba(23, 24, 20, 0.07);
 }
 
 .vocab-preview {
@@ -459,17 +455,18 @@ button {
   background: rgba(250, 248, 241, 0.78);
   font-weight: 750;
   cursor: pointer;
-  transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
-button:hover {
-  transform: translateY(-2px);
+button:where(:enabled):hover {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--paper-light);
 }
 
 button:disabled {
   cursor: progress;
   opacity: 0.66;
-  transform: none;
 }
 
 .primary-action {
@@ -478,11 +475,12 @@ button:disabled {
   border-color: #a93c1f;
   color: #fffaf2;
   background: var(--accent);
-  box-shadow: 0 9px 20px rgba(var(--glossa-theme-accent-rgb), 0.18);
 }
 
-.primary-action:hover {
-  box-shadow: 0 12px 24px rgba(var(--glossa-theme-accent-rgb), 0.24);
+.primary-action:where(:enabled):hover {
+  border-color: var(--ink);
+  color: var(--paper-light);
+  background: var(--ink);
 }
 
 .secondary-action {

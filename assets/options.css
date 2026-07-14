@@ -35,10 +35,7 @@ html {
 body {
   margin: 0;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 7% 4%, rgba(255, 255, 255, 0.78), transparent 28rem),
-    radial-gradient(circle at 92% 18%, rgba(180, 143, 92, 0.11), transparent 30rem),
-    var(--paper);
+  background: var(--paper);
   font: 15px/1.5 var(--sans);
   text-rendering: optimizeLegibility;
 }
@@ -75,8 +72,7 @@ textarea {
   gap: 38px;
   padding: 34px 28px 30px;
   border-right: 1px solid var(--line);
-  background: rgba(250, 248, 241, 0.72);
-  backdrop-filter: blur(18px);
+  background: var(--paper-light);
 }
 
 .brand-block {
@@ -232,7 +228,6 @@ h1 {
   overflow: hidden;
   border: 1px solid var(--line);
   background: rgba(250, 248, 241, 0.82);
-  box-shadow: 0 24px 64px rgba(23, 24, 20, 0.055);
 }
 
 .settings-grid {
@@ -482,19 +477,12 @@ button {
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
-    color 150ms ease,
-    transform 150ms ease,
-    box-shadow 150ms ease;
-}
-
-button:hover {
-  transform: translateY(-2px);
+    color 150ms ease;
 }
 
 button:disabled {
   cursor: progress;
   opacity: 0.66;
-  transform: none;
 }
 
 button svg {
@@ -513,11 +501,12 @@ button svg {
   border-color: #a93c1f;
   color: #fffaf2;
   background: var(--accent);
-  box-shadow: 0 9px 20px rgba(var(--glossa-theme-accent-rgb), 0.18);
 }
 
-.primary-action:hover {
-  box-shadow: 0 12px 24px rgba(var(--glossa-theme-accent-rgb), 0.24);
+.primary-action:where(:enabled):hover {
+  border-color: var(--ink);
+  color: var(--paper-light);
+  background: var(--ink);
 }
 
 .secondary,
@@ -844,6 +833,19 @@ button svg {
   border-color: color-mix(in srgb, var(--red) 36%, var(--line));
   color: var(--red);
   background: transparent;
+}
+
+button:where(:enabled):hover {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--paper-light);
+}
+
+.danger-action:where(:enabled):hover,
+.known-word-row button:where(:enabled):hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--paper-light);
 }
 
 @keyframes glossa-spin {

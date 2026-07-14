@@ -73,9 +73,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     .selection-veil {
       position: fixed;
       inset: 0;
-      background:
-        radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.18), transparent 26rem),
-        ${GLOSSA_THEME.selectionWash};
+      background: ${GLOSSA_THEME.selectionWash};
       opacity: 0;
       pointer-events: none;
       transition: opacity 160ms ease;
