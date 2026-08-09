@@ -58,11 +58,3 @@ export function transitionExpiredLearning(record: VocabularyRecord, now: number)
   }
   return record;
 }
-
-export function shouldRequestGloss(record: VocabularyRecord | undefined, now: number): boolean {
-  if (record === undefined) {
-    return true;
-  }
-  const current = transitionExpiredLearning(record, now);
-  return current.state === "candidate" || current.state === "learning_active";
-}

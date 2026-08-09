@@ -81,7 +81,6 @@ async function boot(): Promise<void> {
     return;
   }
   let settings = settingsResponse.payload.settings;
-  const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
   const storageChanges = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.storage?.onChanged;
   let queuedSettingsChange: GlossaSettings | undefined;
   let reconcileSettingsChange: ((nextSettings: GlossaSettings) => Promise<void>) | undefined;
