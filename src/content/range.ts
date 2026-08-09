@@ -7,13 +7,6 @@ export function rangeForToken(token: ScannedToken, doc: Document = token.textNod
   return range;
 }
 
-export function rectForToken(token: ScannedToken): DOMRect {
-  const range = rangeForToken(token);
-  const rect = range.getBoundingClientRect();
-  range.detach();
-  return rect;
-}
-
 export interface TokenRenderValidation {
   ok: boolean;
   range?: Range;

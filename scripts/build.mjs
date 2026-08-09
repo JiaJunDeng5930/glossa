@@ -9,10 +9,6 @@ const dist = resolve(root, "dist");
 const watch = process.argv.includes("--watch");
 
 await rm(dist, { recursive: true, force: true });
-await mkdir(resolve(dist, "onboarding"), { recursive: true });
-await mkdir(resolve(dist, "options"), { recursive: true });
-await mkdir(resolve(dist, "popup"), { recursive: true });
-await mkdir(resolve(dist, "assets"), { recursive: true });
 
 const context = await esbuild.context({
   entryPoints: {
