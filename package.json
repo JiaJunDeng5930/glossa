@@ -20,7 +20,7 @@
     "prepare": "node scripts/install-hooks.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0",
+    "@playwright/test": "^1.60.0",
     "@types/chrome": "^0.0.315",
     "@types/node": "^26.2.0",
     "esbuild": "^0.25.3",
