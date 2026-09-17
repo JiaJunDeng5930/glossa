@@ -132,10 +132,20 @@ export function writeSettingsForm(form: HTMLFormElement, settings: GlossaSetting
   setFormInput(form, "aiRequestTimeoutSeconds", String(msToSeconds(settings.ai.requestTimeoutMs)));
   setFormInput(form, "modelVersion", settings.modelVersion);
   setFormInput(form, "ankiEndpoint", settings.anki.endpoint);
+  writeAnkiSelects(form, settings);
   setFormInput(form, "ankiRequestTimeoutSeconds", String(msToSeconds(settings.anki.requestTimeoutMs)));
   setFormInput(form, "duplicatePromptSeconds", String(msToSeconds(settings.anki.duplicatePromptMs)));
   setFormInput(form, "glossPrompt", settings.prompts.gloss);
   setFormInput(form, "ankiPrompt", settings.prompts.ankiCard);
+}
+
+/**
+ * Update the setting represented by each dynamic Anki select while retaining
+ * any choices already loaded from the current catalog.
+ */
+export function writeAnkiSelects(form: HTMLFormElement, settings: GlossaSettings): void {
+  writeDynamicSelect(form, "ankiDeck", settings.anki.deck);
+  writeDynamicSelect(form, "ankiModelName", settings.anki.modelName);
 }
 
 export function populateProviderSelect(select: HTMLSelectElement): void {
@@ -255,6 +265,18 @@ export function msToHours(value: number): number {
 
 function readOptionalInput(form: HTMLFormElement, name: string): string | undefined {
   return optionalFormControl(form, name)?.value;
+}
+
+function writeDynamicSelect(form: HTMLFormElement, name: string, value: string): void {
+  const control = optionalFormControl(form, name);
+  if (!(control instanceof HTMLSelectElement)) return;
+  if (![...control.options].some((option) => option.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    control.append(option);
+  }
+  control.value = value;
 }
 
 function hasControl(form: HTMLFormElement, name: string): boolean {

@@ -1287,7 +1287,10 @@ test("content bundle cancels duplicate prompts when translation is disabled", as
   });
   await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
 
+  // Selection listeners attach after the asynchronous boot scan, not after script loading.
+  await expect.poll(() => sentMessageTypes(page)).toContain("gloss.scan.end");
   await page.keyboard.down("Alt");
+  await expect(page.locator("html")).toHaveAttribute("data-glossa-selecting", "true");
   await clickWord(page, "#target", "archive");
   await page.keyboard.up("Alt");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();

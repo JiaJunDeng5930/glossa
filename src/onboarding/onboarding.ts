@@ -15,6 +15,7 @@ import {
   readSettingsForm,
   setSelectOptions,
   setTestState,
+  writeAnkiSelects,
   writeSettingsForm
 } from "../shared/settingsForm";
 import { createSettingsDraft, type SettingsDraft } from "../shared/settingsDraft";
@@ -248,6 +249,7 @@ async function refreshSettingsFromWorker(): Promise<void> {
     draft?.acceptExternal(settings);
     if (!draft) return;
     if (!formValidationError) writeSettingsForm(form, draft.value);
+    else writeAnkiSelects(form, draft.value);
     applyProviderFields(form, draft.value.ai.provider);
     updatePreview(draft.value);
     updateControllers(draft.value);

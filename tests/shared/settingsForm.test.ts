@@ -69,3 +69,32 @@ describe("settings form provider choices", () => {
     expect(form.querySelector<HTMLElement>('[data-ai-field="api-key"]')!.hidden).toBe(false);
   });
 });
+
+describe("settings form dynamic Anki choices", () => {
+  it("keeps catalog choices and represents an Anki value outside the catalog", () => {
+    const form = document.createElement("form");
+    form.innerHTML = `
+      <select name="ankiDeck"><option value="Catalog deck">Catalog deck</option></select>
+      <select name="ankiModelName"><option value="Catalog model">Catalog model</option></select>`;
+    const settings = normalizeSettings({ anki: { deck: "External deck", modelName: "External model" } });
+
+    writeSettingsForm(form, settings);
+
+    const values = (name: string) => Array.from((form.elements.namedItem(name) as HTMLSelectElement).options, option => option.value);
+    expect(values("ankiDeck")).toEqual(["Catalog deck", "External deck"]);
+    expect(values("ankiModelName")).toEqual(["Catalog model", "External model"]);
+    expect((form.elements.namedItem("ankiDeck") as HTMLSelectElement).value).toBe("External deck");
+    expect((form.elements.namedItem("ankiModelName") as HTMLSelectElement).value).toBe("External model");
+  });
+
+  it("creates a visible value when no Anki catalog has loaded", () => {
+    const form = document.createElement("form");
+    form.innerHTML = `<select name="ankiDeck"></select><select name="ankiModelName"></select>`;
+    const settings = normalizeSettings({ anki: { deck: "External deck", modelName: "External model" } });
+
+    writeSettingsForm(form, settings);
+
+    expect((form.elements.namedItem("ankiDeck") as HTMLSelectElement).value).toBe("External deck");
+    expect((form.elements.namedItem("ankiModelName") as HTMLSelectElement).value).toBe("External model");
+  });
+});
