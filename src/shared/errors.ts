@@ -1,4 +1,4 @@
-import type { ErrorPayload, ErrorReason, ErrorService } from "./types";
+import { ERROR_CODES, type ErrorCode, type ErrorPayload, type ErrorReason, type ErrorService } from "./types";
 
 export class GlossaDiagnosticError extends Error {
   readonly payload: ErrorPayload;
@@ -15,11 +15,12 @@ export class GlossaDiagnosticError extends Error {
 export function createErrorPayload(
   reason: ErrorReason,
   message: string,
-  options: { service?: ErrorService; status?: number } = {}
+  options: { code?: ErrorCode; service?: ErrorService; status?: number } = {}
 ): ErrorPayload {
   return {
     reason,
     message,
+    ...(options.code ? { code: options.code } : {}),
     ...(options.service ? { service: options.service } : {}),
     ...(options.status === undefined ? {} : { status: options.status })
   };
@@ -28,7 +29,7 @@ export function createErrorPayload(
 export function createDiagnosticError(
   reason: ErrorReason,
   message: string,
-  options: { service?: ErrorService; status?: number; cause?: unknown } = {}
+  options: { code?: ErrorCode; service?: ErrorService; status?: number; cause?: unknown } = {}
 ): GlossaDiagnosticError {
   return new GlossaDiagnosticError(createErrorPayload(reason, message, options), options.cause);
 }
@@ -90,7 +91,8 @@ export function isErrorPayload(value: unknown): value is ErrorPayload {
   return isErrorReason(payload.reason)
     && typeof payload.message === "string"
     && (payload.service === undefined || isErrorService(payload.service))
-    && (payload.status === undefined || typeof payload.status === "number");
+    && (payload.status === undefined || (typeof payload.status === "number" && Number.isFinite(payload.status)))
+    && (payload.code === undefined || (ERROR_CODES as readonly unknown[]).includes(payload.code));
 }
 
 export function isErrorReason(value: unknown): value is ErrorReason {

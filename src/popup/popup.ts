@@ -1,13 +1,12 @@
 import { diagnosticPayloadFrom, isErrorPayload } from "../shared/errors";
-import { mergeStoredSettings, type StoredGlossaSettings } from "../shared/settings";
+import { createRequestMessage } from "../shared/messages";
+import { sendRuntimeRequest } from "../shared/runtimeClient";
 import { DEFAULT_SETTINGS } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 
 const DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE = "无法读取快捷键设置";
-// A missing receiver is distinct from a registered content script that explicitly reports booting.
 const STATE_PROBE_ATTEMPTS = 61;
 const STATE_PROBE_RETRY_MS = 100;
-
 const translateButton = document.querySelector<HTMLButtonElement>("#translate-page")!;
 const translateButtonLabel = document.querySelector<HTMLElement>("#translate-page-label")!;
 const pageStateLabel = document.querySelector<HTMLElement>("#page-state-label")!;
@@ -19,17 +18,9 @@ let currentTabId: number | undefined;
 let translationEnabled = false;
 
 void initializeTranslationState();
-void renderTranslateShortcutHint().catch((error) => {
-  setStatus(shortcutSettingsFailureMessage(error));
-});
-
-translateButton.addEventListener("click", () => {
-  void toggleCurrentTab();
-});
-
-optionsButton.addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
-});
+void renderTranslateShortcutHint().catch(() => setStatus(DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE));
+translateButton.addEventListener("click", () => void toggleCurrentTab());
+optionsButton.addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 async function initializeTranslationState(): Promise<void> {
   setStatus("");
@@ -64,9 +55,7 @@ async function probeTranslationState(tabId: number): Promise<unknown> {
       return response;
     } catch (error) {
       receiverAttempts += 1;
-      if (receiverAttempts === STATE_PROBE_ATTEMPTS || !isReceiverStartupError(error)) {
-        throw error;
-      }
+      if (receiverAttempts === STATE_PROBE_ATTEMPTS || !isReceiverStartupError(error)) throw error;
       await new Promise<void>((resolve) => globalThis.setTimeout(resolve, STATE_PROBE_RETRY_MS));
     }
   }
@@ -78,34 +67,22 @@ function isReceiverStartupError(error: unknown): boolean {
 }
 
 async function toggleCurrentTab(): Promise<void> {
-  if (currentTabId === undefined) {
-    return;
-  }
+  if (currentTabId === undefined) return;
   setStatus("");
   translateButton.disabled = true;
   translateButtonLabel.textContent = translationEnabled ? "正在停止…" : "正在开启…";
   try {
-    // Frame zero owns the live route state and computes the toggle atomically.
-    const response = await chrome.tabs.sendMessage(currentTabId, {
-      type: "glossa.toggleTranslationState"
-    }, { frameId: 0 });
+    const response = await chrome.tabs.sendMessage(currentTabId, { type: "glossa.toggleTranslationState" }, { frameId: 0 });
     if (!isTranslationStateResponse(response)) {
       setStatus(messageFromControlResponse(response));
       renderAvailableState();
       return;
     }
     translationEnabled = response.enabled;
-    await chrome.tabs.sendMessage(currentTabId, {
-      type: "glossa.setTranslationState",
-      enabled: translationEnabled
-    });
+    await chrome.tabs.sendMessage(currentTabId, { type: "glossa.setTranslationState", enabled: translationEnabled });
     window.close();
   } catch (error) {
-    setStatus(userMessageForError(diagnosticPayloadFrom(error, {
-      reason: "runtime",
-      message: "Translation toggle failed",
-      service: "runtime"
-    }), "runtime"));
+    setStatus(userMessageForError(diagnosticPayloadFrom(error, { reason: "runtime", message: "Translation toggle failed", service: "runtime" }), "runtime"));
     renderAvailableState();
   }
 }
@@ -133,29 +110,10 @@ function setStatus(value: string): void {
 }
 
 async function renderTranslateShortcutHint(): Promise<void> {
-  const settings = await readPopupSettings();
-  renderShortcutHint(settings.translateShortcutKey);
-}
-
-async function readPopupSettings() {
-  const stored = await readChromeLocalSettings();
-  return mergeStoredSettings(stored);
-}
-
-function readChromeLocalSettings(): Promise<StoredGlossaSettings | undefined> {
-  if (!globalThis.chrome?.storage?.local) {
-    return Promise.resolve(undefined);
-  }
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get("settings", (result) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      resolve(result.settings as StoredGlossaSettings | undefined);
-    });
-  });
+  const response = await sendRuntimeRequest(createRequestMessage("popup", "settings.get", {}));
+  if (response.type === "error") throw new Error(response.payload.message);
+  if (response.type !== "settings.response") throw new Error("Unexpected settings response");
+  renderShortcutHint(response.payload.settings.translateShortcutKey);
 }
 
 function renderShortcutHint(shortcut: string): void {
@@ -185,38 +143,19 @@ function shortcutNodes(parts: string[]): Node[] {
   return nodes;
 }
 
-function shortcutSettingsFailureMessage(_error: unknown): string {
-  return DEFAULT_SHORTCUT_SETTINGS_FAILURE_MESSAGE;
-}
-
 function isTranslationStateResponse(value: unknown): value is { ok: true; enabled: boolean } {
-  return typeof value === "object"
-    && value !== null
-    && "ok" in value
-    && value.ok === true
-    && "enabled" in value
-    && typeof value.enabled === "boolean";
+  return typeof value === "object" && value !== null && "ok" in value && value.ok === true && "enabled" in value && typeof value.enabled === "boolean";
 }
 
 function isTranslationBootingResponse(value: unknown): value is { phase: "booting" } {
-  return typeof value === "object"
-    && value !== null
-    && "phase" in value
-    && value.phase === "booting";
+  return typeof value === "object" && value !== null && "phase" in value && value.phase === "booting";
 }
 
 function messageFromControlResponse(value: unknown): string {
-  if (hasControlError(value)) {
-    return userMessageForError(value.error, "runtime");
-  }
+  if (hasControlError(value)) return userMessageForError(value.error, "runtime");
   return "扩展运行时错误";
 }
 
 function hasControlError(value: unknown): value is { ok: false; error: Parameters<typeof userMessageForError>[0] } {
-  return typeof value === "object"
-    && value !== null
-    && "ok" in value
-    && value.ok === false
-    && "error" in value
-    && isErrorPayload(value.error);
+  return typeof value === "object" && value !== null && "ok" in value && value.ok === false && "error" in value && isErrorPayload(value.error);
 }

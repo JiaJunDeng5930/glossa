@@ -1,3 +1,10 @@
+import { DEFAULT_AI_PROVIDER, getAiProviderDescriptor, type AiProvider } from "./aiProviders";
+export { AI_PROVIDERS, type AiProvider } from "./aiProviders";
+import type { RuntimeToBackgroundMessage, BackgroundResponseMessage, RequestMessage } from "./messages";
+export type { RuntimeToBackgroundMessage, BackgroundResponseMessage } from "./messages";
+import type { KnownWordListId } from "./knownWordLists";
+export { KNOWN_WORD_LIST_IDS, type KnownWordListId } from "./knownWordLists";
+
 export type VocabularyState = "known" | "learning_active" | "ignored" | "candidate";
 
 export interface VocabularyRecord {
@@ -7,11 +14,8 @@ export interface VocabularyRecord {
   lang: string;
   state: VocabularyState;
   expiresAt?: number;
-  shownCount: number;
-  clickCount: number;
   lastShownAt?: number;
   lastClickedAt?: number;
-  ankiNoteIds: number[];
 }
 
 export interface CardedWordRecord {
@@ -42,14 +46,13 @@ export interface GlossItem {
   tokenId: string;
   targetText: string;
   display: string;
-  phrase?: string;
 }
 
 export interface GlossCacheEntry extends GlossItem {
   createdAt: number;
 }
 
-export type MessageSource = "content-script" | "service-worker" | "options";
+export type MessageSource = "content-script" | "service-worker" | "options" | "onboarding" | "popup";
 export type MessageVersion = 1;
 export type ErrorReason = "network" | "timeout" | "unauthorized" | "not-found" | "service-error" | "invalid-response" | "runtime" | "outcome-unknown";
 export type ErrorService = "ai" | "anki" | "runtime";
@@ -88,16 +91,12 @@ export interface GlossChunkAckPayload {
   acceptedTokens: number;
 }
 
-export type GlossTokenStatus = "ready" | "pending" | "hidden" | "error";
-
-export interface GlossTokenPayload {
-  scanId: string;
-  tokenId: string;
-  status: GlossTokenStatus;
-  item?: GlossItem;
-  message?: string;
-  error?: ErrorPayload;
-}
+export type GlossOutcome = { status: "ready"; item: GlossItem }
+  | { status: "pending" }
+  | { status: "hidden" }
+  | { status: "error"; error: ErrorPayload };
+export type GlossTokenOutcome = { tokenId: string } & GlossOutcome;
+export type GlossTokenPayload = { scanId: string } & GlossTokenOutcome;
 
 export interface GlossDonePayload {
   scanId: string;
@@ -122,7 +121,7 @@ export interface UserWordClickPayload {
 }
 
 export interface WordClickedOkPayload {
-  noteId?: number;
+  noteId: number;
 }
 
 export interface WordCardDuplicatePayload {
@@ -132,24 +131,11 @@ export interface WordCardDuplicatePayload {
   promptMs: number;
 }
 
-export type SettingsGetPayload = Record<string, never>;
-
-export interface SettingsGetResponsePayload {
-  settings: GlossaSettings;
-}
-
-export type TranslationStateSyncPayload = Record<string, never>;
-
-export interface TranslationStateResponsePayload {
-  enabled: boolean;
-}
-
-export type GlossCacheClearPayload = Record<string, never>;
-export type GlossCacheClearedPayload = Record<string, never>;
-export type CardHistoryResetPayload = Record<string, never>;
-export type CardHistoryResetOkPayload = Record<string, never>;
+export const ERROR_CODES = ["anki-deck-not-found", "anki-model-not-found", "anki-no-compatible-model", "anki-empty-card"] as const;
+export type ErrorCode = typeof ERROR_CODES[number];
 
 export interface ErrorPayload {
+  code?: ErrorCode;
   reason: ErrorReason;
   message: string;
   service?: ErrorService;
@@ -163,34 +149,17 @@ export type GlossChunkAckMessage = GlossPortMessage<"gloss.chunk.ack", GlossChun
 export type GlossTokenMessage = GlossPortMessage<"gloss.token", GlossTokenPayload>;
 export type GlossDoneMessage = GlossPortMessage<"gloss.done", GlossDonePayload>;
 export type GlossPortErrorMessage = GlossPortMessage<"gloss.error", GlossPortErrorPayload>;
-export type UserWordClickMessage = MessageEnvelope<"word.clicked", "content-script", "service-worker", UserWordClickPayload>;
-export type WordClickedOkMessage = MessageEnvelope<"word.clicked.ok", "service-worker", "content-script", WordClickedOkPayload>;
-export type WordCardDuplicateMessage = MessageEnvelope<"word.card.duplicate", "service-worker", "content-script", WordCardDuplicatePayload>;
-export type SettingsGetMessage = MessageEnvelope<"settings.get", "content-script", "service-worker", SettingsGetPayload>;
-export type SettingsGetResponseMessage = MessageEnvelope<"settings.response", "service-worker", "content-script", SettingsGetResponsePayload>;
-// @behavior glossa.extension_contracts.frame_state_sync A newly ready child frame asks the service worker for the top frame's current translation state.
-export type TranslationStateSyncMessage = MessageEnvelope<"translation.state.sync", "content-script", "service-worker", TranslationStateSyncPayload>;
-export type TranslationStateResponseMessage = MessageEnvelope<"translation.state.response", "service-worker", "content-script", TranslationStateResponsePayload>;
-export type GlossCacheClearMessage = MessageEnvelope<"gloss.cache.clear", "options", "service-worker", GlossCacheClearPayload>;
-export type GlossCacheClearedMessage = MessageEnvelope<"gloss.cache.cleared", "service-worker", "options", GlossCacheClearedPayload>;
-// @behavior glossa.extension_contracts.card_history_reset The options page resets local card history through the service worker and receives an empty success response.
-export type CardHistoryResetMessage = MessageEnvelope<"card.history.reset", "options", "service-worker", CardHistoryResetPayload>;
-export type CardHistoryResetOkMessage = MessageEnvelope<"card.history.reset.ok", "service-worker", "options", CardHistoryResetOkPayload>;
-export type ErrorMessage = MessageEnvelope<"error", "service-worker", "content-script", ErrorPayload>;
-export type OptionsErrorMessage = MessageEnvelope<"error", "service-worker", "options", ErrorPayload>;
-
+export type UserWordClickMessage = RequestMessage<"word.clicked">;
+export type SettingsGetMessage = RequestMessage<"settings.get">;
+export type ContentToBackgroundMessage = Extract<RuntimeToBackgroundMessage, {source:"content-script"}>;
+export type OptionsToBackgroundMessage = Extract<RuntimeToBackgroundMessage, {source:"options"}>;
+export type ErrorMessage = Extract<BackgroundResponseMessage, {type:"error"}>;
+export type OptionsErrorMessage = ErrorMessage;
 export type GlossPortInboundMessage = GlossScanStartMessage | GlossScanChunkMessage | GlossScanEndMessage;
 export type GlossPortOutboundMessage = GlossTokenMessage | GlossDoneMessage | GlossPortErrorMessage | GlossChunkAckMessage;
 
-export type ContentToBackgroundMessage = UserWordClickMessage | SettingsGetMessage | TranslationStateSyncMessage;
-export type OptionsToBackgroundMessage = GlossCacheClearMessage | CardHistoryResetMessage;
-export type RuntimeToBackgroundMessage = ContentToBackgroundMessage | OptionsToBackgroundMessage;
-export type BackgroundResponseMessage = WordClickedOkMessage | WordCardDuplicateMessage | SettingsGetResponseMessage | TranslationStateResponseMessage | GlossCacheClearedMessage | CardHistoryResetOkMessage | ErrorMessage | OptionsErrorMessage;
-
-export type AiProvider = "glossa-backend" | "openai-responses" | "openai-chat-completions" | "openai-completions";
-export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
-export const KNOWN_WORD_LIST_IDS = ["junior-high", "senior-high", "cet4", "cet6", "toefl", "gre", "coca-20000"] as const;
-export type KnownWordListId = typeof KNOWN_WORD_LIST_IDS[number];
+export const REASONING_EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh"] as const;
+export type ReasoningEffort = typeof REASONING_EFFORTS[number];
 
 export const GLOSS_TARGET_LANG = "zh-CN";
 
@@ -245,10 +214,6 @@ export interface AnkiCard {
   back: string;
 }
 
-export interface AnkiCardOutput {
-  cards: AnkiCard[];
-}
-
 export const DEFAULT_SETTINGS: GlossaSettings = {
   shortcutKey: "Alt",
   translateShortcutKey: "Alt+G",
@@ -272,8 +237,8 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
     ankiCard: "Create Anki cards for the clicked English word. Put an English example sentence for the target sense on the front and bold the target word. Put only the direct Simplified Chinese meaning for the current context on the back."
   },
   ai: {
-    provider: "openai-responses",
-    endpoint: "https://api.openai.com/v1/responses",
+    provider: DEFAULT_AI_PROVIDER,
+    endpoint: getAiProviderDescriptor(DEFAULT_AI_PROVIDER).defaultEndpoint,
     reasoningEffort: "medium",
     requestTimeoutMs: 30_000
   },

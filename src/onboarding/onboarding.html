@@ -15,7 +15,7 @@
         <output id="status" role="status"></output>
       </header>
 
-      <section class="onboarding-step" data-step="0" aria-labelledby="smart-heading">
+      <section class="onboarding-step" data-step="smart" aria-labelledby="smart-heading">
         <div class="step-copy">
           <p class="document-label">识别</p>
           <h1 id="smart-heading">智能识别生词</h1>
@@ -37,7 +37,7 @@
         </article>
       </section>
 
-      <section class="onboarding-step reading-step" data-step="1" aria-labelledby="translation-heading" hidden>
+      <section class="onboarding-step reading-step" data-step="translation" aria-labelledby="translation-heading" hidden>
         <div class="step-copy">
           <p class="document-label">首次使用</p>
           <h1 id="translation-heading">翻译本页</h1>
@@ -54,7 +54,7 @@
         </article>
       </section>
 
-      <section class="onboarding-step reading-step" data-step="2" aria-labelledby="anki-click-heading" hidden>
+      <section class="onboarding-step reading-step" data-step="anki-click" aria-labelledby="anki-click-heading" hidden>
         <div class="step-copy">
           <p class="document-label">制卡</p>
           <h1 id="anki-click-heading">加入 Anki</h1>
@@ -74,7 +74,7 @@
         </article>
       </section>
 
-      <section class="onboarding-step" data-step="3" aria-labelledby="word-list-heading" hidden>
+      <section class="onboarding-step" data-step="word-list" aria-labelledby="word-list-heading" hidden>
         <div class="step-copy">
           <p class="document-label">词表</p>
           <h1 id="word-list-heading">选择基础词表</h1>
@@ -88,7 +88,7 @@
         </div>
       </section>
 
-      <section class="onboarding-step" data-step="4" aria-labelledby="appearance-heading" hidden>
+      <section class="onboarding-step" data-step="appearance" aria-labelledby="appearance-heading" hidden>
         <div class="step-copy">
           <p class="document-label">外观</p>
           <h1 id="appearance-heading">设置释义样式</h1>
@@ -113,7 +113,7 @@
           </label>
           <label>
             <span>深浅 <output id="gloss-background-opacity-value" for="gloss-background-opacity">94%</output></span>
-            <input id="gloss-background-opacity" name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
+            <input id="gloss-background-opacity" name="glossBackgroundOpacity" type="range">
           </label>
           <label>
             字体
@@ -126,7 +126,7 @@
           </label>
           <label>
             字号
-            <input name="glossFontSize" type="number" min="9" max="24" step="1">
+            <input name="glossFontSize" type="number">
           </label>
           <div id="gloss-preview" class="gloss-preview" aria-label="释义样式预览">
             <p>
@@ -151,7 +151,7 @@
         </div>
       </section>
 
-      <section class="onboarding-step" data-step="5" aria-labelledby="ai-heading" hidden>
+      <section class="onboarding-step" data-step="ai" aria-labelledby="ai-heading" hidden>
         <div class="step-copy">
           <p class="document-label">AI</p>
           <h1 id="ai-heading">连接 AI 服务</h1>
@@ -160,12 +160,7 @@
         <div class="settings-form">
           <label>
             AI 服务
-            <select name="provider">
-              <option value="openai-responses">OpenAI Responses API</option>
-              <option value="openai-chat-completions">OpenAI Chat Completions API</option>
-              <option value="openai-completions">OpenAI Completions API</option>
-              <option value="glossa-backend">Glossa 后端</option>
-            </select>
+          <select name="provider"></select>
           </label>
           <label>
             AI 接口地址
@@ -181,25 +176,18 @@
           </label>
           <label data-ai-field="reasoning">
             推理强度
-            <select name="reasoningEffort">
-              <option value="none">无</option>
-              <option value="minimal">极简</option>
-              <option value="low">低</option>
-              <option value="medium">中</option>
-              <option value="high">高</option>
-              <option value="xhigh">超高</option>
-            </select>
+            <select name="reasoningEffort"></select>
           </label>
           <label>
             AI 超时秒数
-            <input name="aiRequestTimeoutSeconds" type="number" min="1" step="1">
+            <input name="aiRequestTimeoutSeconds" type="number">
           </label>
           <button id="test-ai" class="secondary-action" type="button" data-state="idle">测试连接</button>
           <output id="ai-status" class="inline-status" role="status"></output>
         </div>
       </section>
 
-      <section class="onboarding-step" data-step="6" aria-labelledby="anki-heading" hidden>
+      <section class="onboarding-step" data-step="anki" aria-labelledby="anki-heading" hidden>
         <div class="step-copy">
           <p class="document-label">Anki</p>
           <h1 id="anki-heading">连接 AnkiConnect</h1>
@@ -220,11 +208,11 @@
           </label>
           <label>
             Anki 超时秒数
-            <input name="ankiRequestTimeoutSeconds" type="number" min="1" step="1">
+            <input name="ankiRequestTimeoutSeconds" type="number">
           </label>
           <label>
             重复制卡提示秒数
-            <input name="duplicatePromptSeconds" type="number" min="1" step="1">
+            <input name="duplicatePromptSeconds" type="number">
           </label>
           <button id="refresh-anki" class="secondary-action" type="button" data-state="idle">刷新 Anki</button>
           <button id="test-anki" class="secondary-action" type="button" data-state="idle">测试连接</button>
@@ -232,7 +220,7 @@
         </div>
       </section>
 
-      <section class="onboarding-step finish-step" data-step="7" aria-labelledby="finish-heading" hidden>
+      <section class="onboarding-step finish-step" data-step="finish" aria-labelledby="finish-heading" hidden>
         <div class="step-copy">
           <p class="document-label">完成</p>
           <h1 id="finish-heading">可以开始阅读</h1>

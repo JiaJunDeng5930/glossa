@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { glossOutputSettingsChanged, mergeStoredSettings, settingsOverrides } from "../../src/shared/settings";
+import { glossOutputSettingsChanged, mergeStoredSettings, settingsOverrides, normalizeSettings, validateSettingsPatch, applySettingsPatch, diffSettings } from "../../src/shared/settings";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
 describe("settings default overrides", () => {
@@ -36,5 +36,36 @@ describe("settings default overrides", () => {
       appearance: { ...current.appearance, fontSize: current.appearance.fontSize + 1 },
       ai: { ...current.ai, requestTimeoutMs: current.ai.requestTimeoutMs + 1 }
     })).toBe(false);
+  });
+});
+
+describe("settings field rules", () => {
+  it("repairs malformed stored leaves without preserving unknown legacy fields", () => {
+    const result = normalizeSettings({ ai: { provider: "bad", endpoint: "file:///secret", requestTimeoutMs: Infinity }, appearance: { fontSize: 900 }, learningWindowDays: -2, autoTranslateEnabled: "yes", legacy: true });
+    expect(result).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("rejects invalid patches rather than silently changing their intent", () => {
+    for (const patch of [{unknown:1},{ai:null},{ai:{requestTimeoutMs:999}},{anki:{endpoint:"file:///tmp"}},{learningWindowDays:NaN},{appearance:{fontSize:25}},{prompts:{gloss:""}},{knownWordList:"unsupported"},{ai:{apiKey:42}}]) {
+      expect(() => validateSettingsPatch(patch)).toThrow();
+    }
+    expect(validateSettingsPatch({ai:{apiKey:null},learningWindowDays:1.5})).toEqual({ai:{apiKey:null},learningWindowDays:1.5});
+  });
+
+  it("merges disjoint leaf patches and explicitly deletes a key", () => {
+    const base = normalizeSettings({ai:{apiKey:"secret"}});
+    const first = applySettingsPatch(base,{appearance:{fontSize:14},anki:{deck:"Study"}});
+    const second = applySettingsPatch(first,{appearance:{textColor:"#123456"},ai:{apiKey:null}});
+    expect(second.appearance).toMatchObject({fontSize:14,textColor:"#123456"});
+    expect(second.anki.deck).toBe("Study");
+    expect(second.ai.apiKey).toBeUndefined();
+    expect(diffSettings(base,second)).toEqual({appearance:{fontSize:14,textColor:"#123456"},anki:{deck:"Study"},ai:{apiKey:null}});
+  });
+
+  it("switches provider defaults while retaining a custom endpoint", () => {
+    expect(applySettingsPatch(DEFAULT_SETTINGS,{ai:{provider:"openai-completions"}}).ai.endpoint).toBe("https://api.openai.com/v1/completions");
+    const custom=normalizeSettings({ai:{endpoint:"https://custom.test/api"}});
+    expect(applySettingsPatch(custom,{ai:{provider:"openai-completions"}}).ai.endpoint).toBe(custom.ai.endpoint);
+    expect(normalizeSettings(settingsOverrides(applySettingsPatch(DEFAULT_SETTINGS,{ai:{provider:"openai-completions"}})))).toEqual(applySettingsPatch(DEFAULT_SETTINGS,{ai:{provider:"openai-completions"}}));
   });
 });

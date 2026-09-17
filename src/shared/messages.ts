@@ -1,247 +1,67 @@
-import { KNOWN_WORD_LIST_IDS } from "./types";
-import type {
-  AiProvider,
-  BackgroundResponseMessage,
-  CardHistoryResetOkPayload,
-  CardHistoryResetPayload,
-  ContentToBackgroundMessage,
-  ErrorPayload,
-  GlossaSettings,
-  GlossCacheClearPayload,
-  GlossCacheClearedPayload,
-  GlossChunkAckPayload,
-  GlossDonePayload,
-  GlossItem,
-  GlossPortInboundMessage,
-  GlossPortOutboundMessage,
-  GlossPortErrorPayload,
-  GlossScanChunkPayload,
-  GlossScanEndPayload,
-  GlossScanStartPayload,
-  GlossTokenPayload,
-  GlossTokenStatus,
-  KnownWordListId,
-  MessageEnvelope,
-  MessageSource,
-  OptionsToBackgroundMessage,
-  ReasoningEffort,
-  RuntimeToBackgroundMessage,
-  SentenceCandidate,
-  SettingsGetPayload,
-  SettingsGetResponsePayload,
-  TranslationStateResponsePayload,
-  TranslationStateSyncPayload,
-  TokenCandidate,
-  UserWordClickPayload,
-  WordCardDuplicatePayload,
-  WordClickedOkPayload
-} from "./types";
 import { isErrorPayload } from "./errors";
-
+import { validateSettings, validateSettingsPatch, type SettingsPatch } from "./settings";
+import type { ErrorPayload, GlossaSettings, GlossChunkAckPayload, GlossDonePayload, GlossItem, GlossPortInboundMessage, GlossPortOutboundMessage, GlossPortErrorPayload, GlossScanChunkPayload, GlossScanEndPayload, GlossScanStartPayload, GlossTokenPayload, MessageEnvelope, MessageSource, SentenceCandidate, TokenCandidate, UserWordClickPayload, VocabularyRecord, WordCardDuplicatePayload, WordClickedOkPayload } from "./types";
 export const MESSAGE_VERSION = 1;
-
-type ContentPayloadByType = {
-  "settings.get": SettingsGetPayload;
-  "translation.state.sync": TranslationStateSyncPayload;
-  "word.clicked": UserWordClickPayload;
-};
-
-type OptionsPayloadByType = {
-  "gloss.cache.clear": GlossCacheClearPayload;
-  "card.history.reset": CardHistoryResetPayload;
-};
-
-type BackgroundPayloadByType = {
-  "settings.response": SettingsGetResponsePayload;
-  "translation.state.response": TranslationStateResponsePayload;
-  "word.clicked.ok": WordClickedOkPayload;
-  "word.card.duplicate": WordCardDuplicatePayload;
-  "gloss.cache.cleared": GlossCacheClearedPayload;
-  "card.history.reset.ok": CardHistoryResetOkPayload;
-  error: ErrorPayload;
-};
-
-type GlossPortPayloadByType = {
-  "gloss.scan.start": GlossScanStartPayload;
-  "gloss.scan.chunk": GlossScanChunkPayload;
-  "gloss.scan.end": GlossScanEndPayload;
-  "gloss.chunk.ack": GlossChunkAckPayload;
-  "gloss.token": GlossTokenPayload;
-  "gloss.done": GlossDonePayload;
-  "gloss.error": GlossPortErrorPayload;
-};
-
-export function createContentMessage<TType extends keyof ContentPayloadByType>(
-  type: TType,
-  payload: ContentPayloadByType[TType]
-): Extract<ContentToBackgroundMessage, { type: TType }> {
-  return createEnvelope(type, "content-script", "service-worker", payload) as unknown as Extract<ContentToBackgroundMessage, { type: TType }>;
-}
-
-export function createOptionsMessage<TType extends keyof OptionsPayloadByType>(
-  type: TType,
-  payload: OptionsPayloadByType[TType]
-): Extract<OptionsToBackgroundMessage, { type: TType }> {
-  return createEnvelope(type, "options", "service-worker", payload) as unknown as Extract<OptionsToBackgroundMessage, { type: TType }>;
-}
-
-export function createBackgroundResponse<TType extends keyof BackgroundPayloadByType>(
-  request: Pick<RuntimeToBackgroundMessage, "requestId" | "source">,
-  type: TType,
-  payload: BackgroundPayloadByType[TType]
-): Extract<BackgroundResponseMessage, { type: TType }> {
-  return {
-    type,
-    version: MESSAGE_VERSION,
-    requestId: request.requestId,
-    source: "service-worker",
-    target: request.source,
-    createdAt: Date.now(),
-    payload
-  } as Extract<BackgroundResponseMessage, { type: TType }>;
-}
-
-export function validateRuntimeMessage(value: unknown): RuntimeToBackgroundMessage {
+type Guard<T> = (value: unknown) => value is T;
+const checked = <T>(validate: (value: unknown) => T): Guard<T> => (value): value is T => { try { validate(value); return true; } catch { return false; } };
+const settingsResponse: Guard<{settings:GlossaSettings}> = (v): v is {settings:GlossaSettings} => isPlainObject(v) && checked(validateSettings)(v.settings);
+const settingsPatch: Guard<{patch:SettingsPatch}> = (v): v is {patch:SettingsPatch} => isPlainObject(v) && Object.keys(v).length === 1 && checked(validateSettingsPatch)(v.patch);
+const lemmaPayload: Guard<{lemma:string}> = (v): v is {lemma:string} => isPlainObject(v) && Object.keys(v).length === 1 && typeof v.lemma === "string" && v.lemma.trim().length > 0;
+const knownRecords: Guard<{records:VocabularyRecord[]}> = (v): v is {records:VocabularyRecord[]} => isPlainObject(v) && Array.isArray(v.records) && v.records.every(isVocabularyRecord);
+const clickedOk: Guard<WordClickedOkPayload> = (v): v is WordClickedOkPayload => isPlainObject(v) && Number.isSafeInteger(v.noteId) && (v.noteId as number) > 0;
+const duplicate: Guard<WordCardDuplicatePayload> = (v): v is WordCardDuplicatePayload => isPlainObject(v) && typeof v.lang === "string" && typeof v.lemma === "string" && typeof v.surface === "string" && isFiniteNumber(v.promptMs);
+const enabled: Guard<{enabled:boolean}> = (v): v is {enabled:boolean} => isPlainObject(v) && typeof v.enabled === "boolean";
+const frontend = ["content-script", "options", "onboarding", "popup"] as const;
+// Runtime routes and TypeScript request/response relations derive from this same table.
+export const RpcContract = {
+  "settings.get": { sources: frontend, payload: isEmptyPayload, responses: { "settings.response": settingsResponse } },
+  "settings.patch": { sources: ["options", "onboarding", "popup"], payload: settingsPatch, responses: { "settings.response": settingsResponse } },
+  "known.words.list": { sources: ["options"], payload: isEmptyPayload, responses: { "known.words.list.result": knownRecords } },
+  "known.words.add": { sources: ["options"], payload: lemmaPayload, responses: { "known.words.changed": isEmptyPayload } },
+  "known.words.remove": { sources: ["options"], payload: lemmaPayload, responses: { "known.words.changed": isEmptyPayload } },
+  "known.words.clear": { sources: ["options"], payload: isEmptyPayload, responses: { "known.words.changed": isEmptyPayload } },
+  "word.clicked": { sources: ["content-script"], payload: isUserWordClickPayload, responses: { "word.clicked.ok": clickedOk, "word.card.duplicate": duplicate } },
+  "translation.state.sync": { sources: ["content-script"], payload: isEmptyPayload, responses: { "translation.state.response": enabled } },
+  "gloss.cache.clear": { sources: ["options"], payload: isEmptyPayload, responses: { "gloss.cache.cleared": isEmptyPayload } },
+  "card.history.reset": { sources: ["options"], payload: isEmptyPayload, responses: { "card.history.reset.ok": isEmptyPayload } }
+} as const;
+export type RuntimeRequestType = keyof typeof RpcContract;
+type GuardValue<G> = G extends Guard<infer T> ? T : never;
+type Source<T extends RuntimeRequestType> = typeof RpcContract[T]["sources"][number];
+export type RequestPayload<T extends RuntimeRequestType> = GuardValue<typeof RpcContract[T]["payload"]>;
+export type RequestMessage<T extends RuntimeRequestType = RuntimeRequestType> = T extends RuntimeRequestType ? { [S in Source<T>]: MessageEnvelope<T,S,"service-worker",RequestPayload<T>> }[Source<T>] : never;
+export type SuccessType<T extends RuntimeRequestType> = keyof typeof RpcContract[T]["responses"] & string;
+export type ResponsePayload<T extends RuntimeRequestType,R extends SuccessType<T> | "error"> = R extends "error" ? ErrorPayload : R extends keyof typeof RpcContract[T]["responses"] ? GuardValue<typeof RpcContract[T]["responses"][R]> : never;
+export type ResponseMessage<T extends RuntimeRequestType = RuntimeRequestType> = T extends RuntimeRequestType ? { [R in SuccessType<T> | "error"]: MessageEnvelope<R,"service-worker",Source<T>,ResponsePayload<T,R>> }[SuccessType<T> | "error"] : never;
+export type RuntimeToBackgroundMessage = RequestMessage;
+export type BackgroundResponseMessage = ResponseMessage;
+type RequestForSource<S extends MessageSource> = { [T in RuntimeRequestType]: S extends Source<T> ? T : never }[RuntimeRequestType];
+export function createRequestMessage<S extends Exclude<MessageSource,"service-worker">,T extends RequestForSource<S>>(source:S,type:T,payload:RequestPayload<T>): Extract<RequestMessage<T>,{source:S}> { return createEnvelope(type,source,"service-worker",payload) as unknown as Extract<RequestMessage<T>,{source:S}>; }
+export function createContentMessage<T extends RequestForSource<"content-script">>(type:T,payload:RequestPayload<T>): Extract<RequestMessage<T>,{source:"content-script"}> { return createRequestMessage("content-script",type,payload); }
+export function createOptionsMessage<T extends RequestForSource<"options">>(type:T,payload:RequestPayload<T>): Extract<RequestMessage<T>,{source:"options"}> { return createRequestMessage("options",type,payload); }
+export function createBackgroundResponse<Q extends RequestMessage,R extends SuccessType<Q["type"]> | "error">(request:Q,type:R,payload:ResponsePayload<Q["type"],NoInfer<R>>): Extract<ResponseMessage<Q["type"]>,{type:R}> { return {type,version:MESSAGE_VERSION,requestId:request.requestId,source:"service-worker",target:request.source,createdAt:Date.now(),payload} as unknown as Extract<ResponseMessage<Q["type"]>,{type:R}>; }
+export function validateRuntimeMessage(value:unknown): RuntimeToBackgroundMessage {
   const envelope = validateEnvelope(value);
-  if (envelope.source === "content-script") {
-    return validateContentMessage(envelope);
-  }
-  if (envelope.source === "options") {
-    return validateOptionsMessage(envelope);
-  }
-  throw new Error("Unexpected message route");
+  if (!Object.hasOwn(RpcContract, envelope.type)) throw new Error("Unknown message type");
+  const contract = RpcContract[envelope.type as RuntimeRequestType];
+  if (envelope.target !== "service-worker" || !(contract.sources as readonly string[]).includes(envelope.source)) throw new Error("Unexpected message route");
+  if (!contract.payload(envelope.payload)) throw new Error(`Malformed ${envelope.type} payload`);
+  return envelope as RuntimeToBackgroundMessage;
 }
-
-export function createGlossPortMessage<TType extends keyof GlossPortPayloadByType>(
-  type: TType,
-  payload: GlossPortPayloadByType[TType]
-): Extract<GlossPortInboundMessage | GlossPortOutboundMessage, { type: TType }> {
-  return {
-    type,
-    version: MESSAGE_VERSION,
-    createdAt: Date.now(),
-    payload
-  } as Extract<GlossPortInboundMessage | GlossPortOutboundMessage, { type: TType }>;
+export function validateContentMessage(value:unknown): Extract<RequestMessage,{source:"content-script"}> { const request=validateRuntimeMessage(value); if(request.source !== "content-script") throw new Error("Unexpected message route"); return request; }
+export function validateOptionsMessage(value:unknown): Extract<RequestMessage,{source:"options"}> { const request=validateRuntimeMessage(value); if(request.source !== "options") throw new Error("Unexpected message route"); return request; }
+export function validateBackgroundResponse<T extends RuntimeRequestType>(value:unknown,request:RequestMessage<T>): ResponseMessage<T> {
+  const envelope=validateEnvelope(value);
+  if(envelope.requestId !== request.requestId) throw new Error("Response requestId mismatch");
+  if(envelope.source !== "service-worker" || envelope.target !== request.source) throw new Error("Unexpected response route");
+  const responses:Record<string,Guard<unknown>>=RpcContract[request.type].responses;
+  const guard=envelope.type === "error" ? isErrorPayload : Object.hasOwn(responses, envelope.type) ? responses[envelope.type] : undefined;
+  if(!guard) throw new Error("Unexpected response type for request");
+  if(!guard(envelope.payload)) throw new Error(`Malformed ${envelope.type} payload`);
+  return envelope as ResponseMessage<T>;
 }
-
-export function validateContentMessage(value: unknown): ContentToBackgroundMessage {
-  const envelope = validateEnvelope(value);
-  if (envelope.version !== MESSAGE_VERSION) {
-    throw new Error("Unsupported message version");
-  }
-  if (envelope.source !== "content-script" || envelope.target !== "service-worker") {
-    throw new Error("Unexpected message route");
-  }
-  if (envelope.type === "settings.get") {
-    if (!isEmptyPayload(envelope.payload)) {
-      throw new Error("Malformed settings.get payload");
-    }
-    return envelope as ContentToBackgroundMessage;
-  }
-  if (envelope.type === "translation.state.sync") {
-    if (!isEmptyPayload(envelope.payload)) {
-      throw new Error("Malformed translation.state.sync payload");
-    }
-    return envelope as ContentToBackgroundMessage;
-  }
-  if (envelope.type === "word.clicked") {
-    if (!isUserWordClickPayload(envelope.payload)) {
-      throw new Error("Malformed word.clicked payload");
-    }
-    return envelope as ContentToBackgroundMessage;
-  }
-  throw new Error("Unknown message type");
-}
-
-export function validateOptionsMessage(value: unknown): OptionsToBackgroundMessage {
-  const envelope = validateEnvelope(value);
-  if (envelope.version !== MESSAGE_VERSION) {
-    throw new Error("Unsupported message version");
-  }
-  if (envelope.source !== "options" || envelope.target !== "service-worker") {
-    throw new Error("Unexpected message route");
-  }
-  if (envelope.type === "gloss.cache.clear") {
-    if (!isEmptyPayload(envelope.payload)) {
-      throw new Error("Malformed gloss.cache.clear payload");
-    }
-    return envelope as OptionsToBackgroundMessage;
-  }
-  if (envelope.type === "card.history.reset") {
-    if (!isEmptyPayload(envelope.payload)) {
-      throw new Error("Malformed card.history.reset payload");
-    }
-    return envelope as OptionsToBackgroundMessage;
-  }
-  throw new Error("Unknown message type");
-}
-
-export function validateBackgroundResponse(value: unknown, request: RuntimeToBackgroundMessage): BackgroundResponseMessage {
-  const envelope = validateEnvelope(value);
-  if (envelope.version !== MESSAGE_VERSION) {
-    throw new Error("Unsupported response version");
-  }
-  if (envelope.requestId !== request.requestId) {
-    throw new Error("Response requestId mismatch");
-  }
-  if (envelope.source !== "service-worker" || envelope.target !== request.source) {
-    throw new Error("Unexpected response route");
-  }
-  if (
-    envelope.type !== "settings.response"
-    && envelope.type !== "translation.state.response"
-    && envelope.type !== "word.clicked.ok"
-    && envelope.type !== "word.card.duplicate"
-    && envelope.type !== "gloss.cache.cleared"
-    && envelope.type !== "card.history.reset.ok"
-    && envelope.type !== "error"
-  ) {
-    throw new Error("Unknown response type");
-  }
-  if (envelope.type === "settings.response") {
-    if (!isSettingsGetResponsePayload(envelope.payload)) {
-      throw new Error("Malformed settings.response payload");
-    }
-    return envelope as BackgroundResponseMessage;
-  }
-  if (envelope.type === "word.clicked.ok") {
-    if (!isWordClickedOkPayload(envelope.payload)) {
-      throw new Error("Malformed word.clicked.ok payload");
-    }
-    return envelope as BackgroundResponseMessage;
-  }
-  if (envelope.type === "word.card.duplicate") {
-    if (!isWordCardDuplicatePayload(envelope.payload)) {
-      throw new Error("Malformed word.card.duplicate payload");
-    }
-    return envelope as BackgroundResponseMessage;
-  }
-  if (envelope.type === "gloss.cache.cleared") {
-    if (!isEmptyPayload(envelope.payload)) {
-      throw new Error("Malformed gloss.cache.cleared payload");
-    }
-    return envelope as BackgroundResponseMessage;
-  }
-  if (envelope.type === "translation.state.response") {
-    if (!isTranslationStateResponsePayload(envelope.payload)) {
-      throw new Error("Malformed translation.state.response payload");
-    }
-    return envelope as BackgroundResponseMessage;
-  }
-  if (envelope.type === "card.history.reset.ok") {
-    if (!isEmptyPayload(envelope.payload)) {
-      throw new Error("Malformed card.history.reset.ok payload");
-    }
-    return envelope as BackgroundResponseMessage;
-  }
-  if (envelope.type === "error") {
-    if (!isErrorPayload(envelope.payload)) {
-      throw new Error("Malformed error payload");
-    }
-    return envelope as BackgroundResponseMessage;
-  }
-  return envelope as BackgroundResponseMessage;
-}
+type GlossPortMessage = GlossPortInboundMessage | GlossPortOutboundMessage;
+export function createGlossPortMessage<T extends GlossPortMessage["type"]>(type:T,payload:Extract<GlossPortMessage,{type:T}>["payload"]): Extract<GlossPortMessage,{type:T}> { return {type,version:MESSAGE_VERSION,createdAt:Date.now(),payload} as Extract<GlossPortMessage,{type:T}>; }
 
 export function validateGlossPortInbound(value: unknown): GlossPortInboundMessage {
   const message = validateGlossPortEnvelope(value);
@@ -321,10 +141,6 @@ export function validateGlossPortOutbound(value: unknown, scanId?: string): Glos
   throw new Error("Unknown gloss port message type");
 }
 
-export function messageTimeoutError(message: Pick<RuntimeToBackgroundMessage, "type" | "requestId">): Error {
-  return new Error(`Message timeout for ${message.type} (${message.requestId})`);
-}
-
 function createEnvelope<TType extends string, TSource extends MessageSource, TTarget extends MessageSource, TPayload>(
   type: TType,
   source: TSource,
@@ -357,7 +173,7 @@ function validateGlossPortEnvelope(value: unknown): { type: string; version: typ
   if (message.version !== MESSAGE_VERSION) {
     throw new Error("Unsupported gloss port message version");
   }
-  if (typeof message.createdAt !== "number") {
+  if (!isFiniteNumber(message.createdAt)) {
     throw new Error("Missing gloss port createdAt");
   }
   return message as { type: string; version: 1; createdAt: number; payload: unknown };
@@ -380,7 +196,7 @@ function validateEnvelope(value: unknown): MessageEnvelope<string, MessageSource
   if (!isMessageSource(envelope.source) || !isMessageSource(envelope.target)) {
     throw new Error("Invalid message route");
   }
-  if (typeof envelope.createdAt !== "number") {
+  if (!isFiniteNumber(envelope.createdAt)) {
     throw new Error("Missing createdAt");
   }
   return envelope as unknown as MessageEnvelope<string, MessageSource, MessageSource, unknown>;
@@ -419,28 +235,10 @@ function isGlossScanChunkPayload(value: unknown): value is GlossScanChunkPayload
 }
 
 function isGlossTokenPayload(value: unknown): value is GlossTokenPayload {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  if (typeof value.scanId !== "string" || typeof value.tokenId !== "string" || !isGlossTokenStatus(value.status)) {
-    return false;
-  }
-  if (value.message !== undefined && typeof value.message !== "string") {
-    return false;
-  }
-  if (value.item !== undefined && !isGlossItem(value.item)) {
-    return false;
-  }
-  if (value.error !== undefined && !isErrorPayload(value.error)) {
-    return false;
-  }
-  if (value.status === "ready" && !isGlossItem(value.item)) {
-    return false;
-  }
-  if (value.status === "error" && !isErrorPayload(value.error)) {
-    return false;
-  }
-  return true;
+  if (!isPlainObject(value) || typeof value.scanId !== "string" || typeof value.tokenId !== "string") return false;
+  if (value.status === "ready") return isGlossItem(value.item) && value.error === undefined && value.message === undefined;
+  if (value.status === "error") return isErrorPayload(value.error) && value.item === undefined && value.message === undefined;
+  return (value.status === "pending" || value.status === "hidden") && value.item === undefined && value.error === undefined && value.message === undefined;
 }
 
 function isTokenCandidate(value: unknown): value is TokenCandidate {
@@ -479,127 +277,10 @@ function isGlossItem(value: unknown): value is GlossItem {
   }
   return typeof value.tokenId === "string"
     && typeof value.targetText === "string"
-    && typeof value.display === "string"
-    && (value.phrase === undefined || typeof value.phrase === "string");
+    && typeof value.display === "string";
 }
 
-function isSettingsGetResponsePayload(value: unknown): value is SettingsGetResponsePayload {
-  return isPlainObject(value) && isGlossaSettings(value.settings);
-}
-
-function isTranslationStateResponsePayload(value: unknown): value is TranslationStateResponsePayload {
-  return isPlainObject(value) && typeof value.enabled === "boolean";
-}
-
-function isWordClickedOkPayload(value: unknown): value is WordClickedOkPayload {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return value.noteId === undefined || isFiniteNumber(value.noteId);
-}
-
-function isWordCardDuplicatePayload(value: unknown): value is WordCardDuplicatePayload {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return typeof value.lang === "string"
-    && typeof value.lemma === "string"
-    && typeof value.surface === "string"
-    && isFiniteNumber(value.promptMs);
-}
-
-function isGlossaSettings(value: unknown): value is GlossaSettings {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return typeof value.shortcutKey === "string"
-    && typeof value.translateShortcutKey === "string"
-    && typeof value.autoTranslateEnabled === "boolean"
-    && isFiniteNumber(value.learningWindowDays)
-    && isFiniteNumber(value.glossCacheTtlMs)
-    && isKnownWordListId(value.knownWordList)
-    && typeof value.promptVersion === "string"
-    && typeof value.modelVersion === "string"
-    && isAppearanceSettings(value.appearance)
-    && isPromptSettings(value.prompts)
-    && isAiSettings(value.ai)
-    && isAnkiSettings(value.anki);
-}
-
-function isAppearanceSettings(value: unknown): value is GlossaSettings["appearance"] {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return typeof value.textColor === "string"
-    && typeof value.backgroundColor === "string"
-    && typeof value.cardSuccessBackgroundColor === "string"
-    && typeof value.cardErrorBackgroundColor === "string"
-    && isFiniteNumber(value.backgroundOpacity)
-    && typeof value.fontFamily === "string"
-    && isFiniteNumber(value.fontSize);
-}
-
-function isPromptSettings(value: unknown): value is GlossaSettings["prompts"] {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return typeof value.gloss === "string" && typeof value.ankiCard === "string";
-}
-
-function isAiSettings(value: unknown): value is GlossaSettings["ai"] {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return isAiProvider(value.provider)
-    && typeof value.endpoint === "string"
-    && (value.apiKey === undefined || typeof value.apiKey === "string")
-    && isReasoningEffort(value.reasoningEffort)
-    && isFiniteNumber(value.requestTimeoutMs);
-}
-
-function isAnkiSettings(value: unknown): value is GlossaSettings["anki"] {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return typeof value.endpoint === "string"
-    && typeof value.deck === "string"
-    && typeof value.modelName === "string"
-    && isFiniteNumber(value.requestTimeoutMs)
-    && isFiniteNumber(value.duplicatePromptMs);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isMessageSource(value: unknown): value is MessageSource {
-  return value === "content-script" || value === "service-worker" || value === "options";
-}
-
-function isGlossTokenStatus(value: unknown): value is GlossTokenStatus {
-  return value === "ready" || value === "pending" || value === "hidden" || value === "error";
-}
-
-function isAiProvider(value: unknown): value is AiProvider {
-  return value === "glossa-backend"
-    || value === "openai-responses"
-    || value === "openai-chat-completions"
-    || value === "openai-completions";
-}
-
-function isReasoningEffort(value: unknown): value is ReasoningEffort {
-  return value === "none"
-    || value === "minimal"
-    || value === "low"
-    || value === "medium"
-    || value === "high"
-    || value === "xhigh";
-}
-
-function isKnownWordListId(value: unknown): value is KnownWordListId {
-  return typeof value === "string" && (KNOWN_WORD_LIST_IDS as readonly string[]).includes(value);
-}
+function isFiniteNumber(value:unknown): value is number { return typeof value === "number" && Number.isFinite(value); }
+function isPlainObject(value:unknown): value is Record<string,unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+function isMessageSource(value:unknown): value is MessageSource { return typeof value === "string" && ["content-script","service-worker","options","onboarding","popup"].includes(value); }
+function isVocabularyRecord(value:unknown): value is VocabularyRecord { return isPlainObject(value) && typeof value.key === "string" && typeof value.lang === "string" && typeof value.lemma === "string" && typeof value.surface === "string" && ["candidate","known","learning_active","ignored"].includes(value.state as string) && (value.expiresAt === undefined || isFiniteNumber(value.expiresAt)) && (value.lastShownAt === undefined || isFiniteNumber(value.lastShownAt)) && (value.lastClickedAt === undefined || isFiniteNumber(value.lastClickedAt)); }

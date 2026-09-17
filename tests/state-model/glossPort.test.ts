@@ -157,6 +157,7 @@ describe("background gloss port state transitions", () => {
     fixture.receive(end("scan-1"));
     fixture.disconnect();
     expect(sink?.isActive?.()).toBe(false);
+    expect(fixture.session.close).toHaveBeenCalledOnce();
     pendingChunk.resolve();
     await drainMicrotasks();
 
@@ -181,6 +182,7 @@ function createFixture(options: FixtureOptions = {}) {
   const onDisconnect = createTestEvent<[]>();
   const messages: GlossPortOutboundMessage[] = [];
   const session: GlossResolverSession = {
+    close: vi.fn(),
     acceptChunk: options.acceptChunk ?? (async (_chunkId, chunkIndex) => {
       ledger.push(`accept:${chunkIndex}:start`, `accept:${chunkIndex}:end`);
     }),
@@ -226,6 +228,7 @@ function createFixture(options: FixtureOptions = {}) {
   attachGlossPort(port, dependencies);
 
   return {
+    session,
     ledger,
     messages,
     receive(message: unknown) {

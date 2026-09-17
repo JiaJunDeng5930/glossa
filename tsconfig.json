@@ -9,9 +9,9 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "isolatedModules": true,
-    "types": ["chrome", "node", "vitest/globals"],
+    "types": ["chrome"],
     "skipLibCheck": true,
     "outDir": "dist"
   },
-  "include": ["src", "tests", "scripts", "tools", "playwright.config.ts"]
+  "include": ["src"]
 }

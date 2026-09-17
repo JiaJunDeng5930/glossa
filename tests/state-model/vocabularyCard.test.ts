@@ -1,3 +1,5 @@
+import { createMemoryStorage } from "../helpers/memoryStorage";
+import { deferred } from "./asyncHarness";
 import { describe, expect, it, vi } from "vitest";
 
 import { createGlossResolver } from "../../src/background/glossResolver";
@@ -5,33 +7,28 @@ import { createBackgroundMessageHandler } from "../../src/background/messages";
 import { buildGlossCacheKey } from "../../src/core/cache";
 import { createDiagnosticError } from "../../src/shared/errors";
 import { createContentMessage, createOptionsMessage } from "../../src/shared/messages";
-import { removeKnownRecord } from "../../src/options/knownWordStorage";
 import type { ExtensionStorage } from "../../src/storage/db";
 import {
   DEFAULT_SETTINGS,
   GLOSS_TARGET_LANG,
-  type AnkiCardOutput,
-  type CardedWordRecord,
   type ErrorReason,
-  type GlossaSettings,
-  type GlossCacheEntry,
-  type GlossTokenPayload,
+  type GlossTokenOutcome,
   type SentenceCandidate,
   type VocabularyRecord,
   type VocabularyState
 } from "../../src/shared/types";
 
 describe("vocabulary and card state transitions", () => {
-  it("preserves a committed shown count when card creation follows it", async () => {
+  it("preserves a committed shown timestamp when card creation follows it", async () => {
     const fixture = createMemoryStorage();
     const input = glossSentence("shown-token", "submit");
     await seedGloss(fixture, input, "提交");
     const resolver = createGlossResolver({
       storage: fixture.storage,
-      ai: { glossFrame: vi.fn(), ankiCard: vi.fn() },
+      ai: { glossFrame: vi.fn() },
       dbReadCoalesceMs: 0
     });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, input, events);
     const { handler, anki } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
@@ -41,10 +38,7 @@ describe("vocabulary and card state transitions", () => {
     expect(response).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
     expect(anki.createNote).toHaveBeenCalledTimes(1);
     expect(fixture.lexicon.get("en:submit")).toMatchObject({
-      state: "learning_active",
-      shownCount: 1,
-      clickCount: 1,
-      ankiNoteIds: [42]
+      state: "learning_active", lastClickedAt: 1_000, lastShownAt: 200
     });
   });
 
@@ -58,26 +52,23 @@ describe("vocabulary and card state transitions", () => {
       lemma: "submit",
       surface: "submit",
       state: "ignored",
-      shownCount: 0,
-      clickCount: 0,
-      ankiNoteIds: []
     });
     const resolver = createGlossResolver({
       storage: fixture.storage,
-      ai: { glossFrame: vi.fn(), ankiCard: vi.fn() },
+      ai: { glossFrame: vi.fn() },
       dbReadCoalesceMs: 0
     });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, input, events);
-    expect(fixture.lexicon.get("en:submit")).toMatchObject({ state: "ignored", shownCount: 0 });
+    expect(fixture.lexicon.get("en:submit")).toMatchObject({ state: "ignored" });
 
     const { handler } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
     await expect(handler(wordMessage("submit", "ignored-token"))).resolves.toMatchObject({
       type: "word.clicked.ok",
       payload: { noteId: 42 }
     });
-    expect(fixture.lexicon.get("en:submit")).toMatchObject({ state: "learning_active", clickCount: 1 });
+    expect(fixture.lexicon.get("en:submit")).toMatchObject({ state: "learning_active" });
   });
 
   it("does not let a stale shown read overwrite a card transition", async () => {
@@ -98,10 +89,10 @@ describe("vocabulary and card state transitions", () => {
     });
     const resolver = createGlossResolver({
       storage: fixture.storage,
-      ai: { glossFrame: vi.fn(), ankiCard: vi.fn() },
+      ai: { glossFrame: vi.fn() },
       dbReadCoalesceMs: 0
     });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
     const scan = resolveScan(resolver, input, events);
     await shownStarted.promise;
     const { handler } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
@@ -112,10 +103,7 @@ describe("vocabulary and card state transitions", () => {
 
     expect(card).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
     expect(fixture.lexicon.get("en:submit")).toMatchObject({
-      state: "learning_active",
-      shownCount: 1,
-      clickCount: 1,
-      ankiNoteIds: [42]
+      state: "learning_active", lastClickedAt: 1_000, lastShownAt: 200
     });
   });
 
@@ -127,62 +115,28 @@ describe("vocabulary and card state transitions", () => {
       lemma: "submit",
       surface: "submit",
       state: "known",
-      shownCount: 1,
-      clickCount: 0,
-      ankiNoteIds: [99],
       lastShownAt: 500
     };
     fixture.lexicon.set(record.key, record);
-    const preserveStarted = deferred<void>();
-    const releasePreserve = deferred<void>();
-    const originalCardedPut = fixture.storage.cardedWords.put;
-    let putCount = 0;
-    fixture.storage.cardedWords.put = vi.fn(async (key, value) => {
-      putCount += 1;
-      if (putCount === 1) {
-        preserveStarted.resolve();
-        await releasePreserve.promise;
-      }
-      await originalCardedPut(key, value);
+    const removeStarted = deferred<void>();
+    const releaseRemove = deferred<void>();
+    const originalRemove = fixture.storage.lexicon.removeKnown;
+    fixture.storage.lexicon.removeKnown = vi.fn(async (lemma) => {
+      removeStarted.resolve();
+      await releaseRemove.promise;
+      await originalRemove(lemma);
     });
-
-    const remove = removeKnownRecord(fixture.storage, record, () => 600);
-    await preserveStarted.promise;
     const { handler } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
+    const remove = handler(createOptionsMessage("known.words.remove", { lemma: record.lemma }));
+    await removeStarted.promise;
     const card = await handler(wordMessage("submit", "card-after-remove", true));
-    releasePreserve.resolve();
+    releaseRemove.resolve();
     await remove;
 
     expect(card).toMatchObject({ type: "word.clicked.ok", payload: { noteId: 42 } });
     expect(fixture.lexicon.get(record.key)).toMatchObject({
-      state: "learning_active",
-      clickCount: 1,
-      ankiNoteIds: [99, 42]
+      state: "learning_active", lastClickedAt: 1_000
     });
-  });
-
-  it.each([
-    { count: 0, cards: [] },
-    {
-      count: 2,
-      cards: [
-        { front: "first", back: "第一张" },
-        { front: "second", back: "第二张" }
-      ]
-    }
-  ])("rejects AI cardinality $count before addNote", async ({ cards }) => {
-    const fixture = createMemoryStorage();
-    const { handler, anki } = cardHandler(fixture.storage, cards);
-
-    const response = await handler(wordMessage("submit"));
-
-    expect(response).toMatchObject({
-      type: "error",
-      payload: { reason: "invalid-response", service: "ai" }
-    });
-    expect(anki.createNote).not.toHaveBeenCalled();
-    expect(fixture.lexicon.get("en:submit")).toBeUndefined();
-    expect(fixture.cardedWords.get("en:submit")).toBeUndefined();
   });
 
   it("serializes duplicate same-word commands and calls addNote at most once", async () => {
@@ -190,7 +144,7 @@ describe("vocabulary and card state transitions", () => {
     const note = deferred<number>();
     const ai = {
       glossFrame: vi.fn(),
-      ankiCard: vi.fn(async () => ({ cards: [{ front: "submit", back: "提交" }] }))
+      ankiCard: vi.fn(async () => ({ front: "submit", back: "提交" }))
     };
     const anki = { createNote: vi.fn(() => note.promise) };
     const handler = createBackgroundMessageHandler({ storage: fixture.storage, ai, anki, now: () => 1_000 });
@@ -214,7 +168,7 @@ describe("vocabulary and card state transitions", () => {
     const fixture = createMemoryStorage();
     const ai = {
       glossFrame: vi.fn(),
-      ankiCard: vi.fn(async () => ({ cards: [{ front: "submit", back: "提交" }] }))
+      ankiCard: vi.fn(async () => ({ front: "submit", back: "提交" }))
     };
     const anki = {
       createNote: vi.fn(async () => {
@@ -235,7 +189,7 @@ describe("vocabulary and card state transitions", () => {
 
   it("keeps user success after a note id when local persistence fails", async () => {
     const fixture = createMemoryStorage();
-    fixture.storage.cardedWords.put = vi.fn(async () => {
+    fixture.storage.recordCardCreated = vi.fn(async () => {
       throw new Error("card marker write failed");
     });
     const { handler, anki } = cardHandler(fixture.storage, [{ front: "submit", back: "提交" }]);
@@ -259,13 +213,13 @@ describe("vocabulary and card state transitions", () => {
       glossFrame: vi.fn(),
       ankiCard: vi.fn(async ({ token }: { token: { lemma: string } }) => {
         ledger.push(`ai:${token.lemma}`);
-        return { cards: [{ front: token.lemma, back: token.lemma }] };
+        return { front: token.lemma, back: token.lemma };
       })
     };
     const anki = {
-      createNote: vi.fn(({ token }: { token: { lemma: string } }) => {
-        ledger.push(`anki:${token.lemma}`);
-        return token.lemma === "submit" ? firstNote.promise : Promise.resolve(84);
+      createNote: vi.fn(({ card }: { card: { front: string } }) => {
+        ledger.push(`anki:${card.front}`);
+        return card.front === "submit" ? firstNote.promise : Promise.resolve(84);
       })
     };
     const handler = createBackgroundMessageHandler({ storage: fixture.storage, ai, anki, now: () => 1_000 });
@@ -290,7 +244,7 @@ describe("vocabulary and card state transitions", () => {
 });
 
 function cardHandler(storage: ExtensionStorage, cards: Array<{ front: string; back: string }>) {
-  const ai = { glossFrame: vi.fn(), ankiCard: vi.fn(async () => ({ cards })) };
+  const ai = { glossFrame: vi.fn(), ankiCard: vi.fn(async () => cards[0]!) };
   const anki = { createNote: vi.fn(async () => 42) };
   return { handler: createBackgroundMessageHandler({ storage, ai, anki, now: () => 1_000 }), ai, anki };
 }
@@ -347,84 +301,11 @@ async function seedGloss(fixture: ReturnType<typeof createMemoryStorage>, input:
 async function resolveScan(
   resolver: ReturnType<typeof createGlossResolver>,
   sentences: SentenceCandidate[],
-  events: Array<Omit<GlossTokenPayload, "scanId">>
+  events: Array<GlossTokenOutcome>
 ): Promise<void> {
   const session = resolver.createSession("https://example.test/page", DEFAULT_SETTINGS, 200, {
     emit: (event) => events.push(event)
   });
   await session.acceptChunk("chunk-0", 0, sentences);
   await session.finish();
-}
-
-function createMemoryStorage(): {
-  storage: ExtensionStorage;
-  lexicon: Map<string, VocabularyRecord>;
-  cardedWords: Map<string, CardedWordRecord>;
-} {
-  let storedSettings: GlossaSettings = DEFAULT_SETTINGS;
-  const lexicon = new Map<string, VocabularyRecord>();
-  const glossCache = new Map<string, GlossCacheEntry>();
-  const cardCache = new Map<string, AnkiCardOutput>();
-  const cardedWords = new Map<string, CardedWordRecord>();
-  const readMany = <T>(store: Map<string, T>, keys: string[]) => new Map(
-    keys.flatMap((key) => store.has(key) ? [[key, store.get(key)!] as const] : [])
-  );
-  const storage: ExtensionStorage = {
-    settings: {
-      async get() { return storedSettings; },
-      async set(value) { storedSettings = value; }
-    },
-    lexicon: {
-      async get(key) { return lexicon.get(key); },
-      async getMany(keys) { return readMany(lexicon, keys); },
-      async listByState(state: VocabularyState) { return Array.from(lexicon.values()).filter((record) => record.state === state); },
-      async update(key, transition) {
-        const next = transition(lexicon.get(key));
-        if (next) lexicon.set(key, next); else lexicon.delete(key);
-        return next;
-      },
-      async put(record) { lexicon.set(record.key, record); },
-      async delete(key) { lexicon.delete(key); }
-    },
-    glossCache: {
-      async get(key) { return glossCache.get(key); },
-      async getMany(keys) { return readMany(glossCache, keys); },
-      async getFresh(key, now, ttlMs) {
-        const value = glossCache.get(key);
-        return value && now < value.createdAt + ttlMs ? value : undefined;
-      },
-      async getFreshMany(keys, now, ttlMs) {
-        return new Map(Array.from(readMany(glossCache, keys)).filter(([, value]) => now < value.createdAt + ttlMs));
-      },
-      async put(key, value) { glossCache.set(key, value); },
-      async delete(key) { glossCache.delete(key); },
-      async clear() { glossCache.clear(); }
-    },
-    cardCache: keyValueStore(cardCache, readMany),
-    cardedWords: keyValueStore(cardedWords, readMany),
-    async resetCardHistory() {
-      cardCache.clear();
-      cardedWords.clear();
-      for (const [key, record] of lexicon) {
-        lexicon.set(key, { ...record, ankiNoteIds: [] });
-      }
-    }
-  };
-  return { storage, lexicon, cardedWords };
-}
-
-function keyValueStore<T>(store: Map<string, T>, readMany: <V>(store: Map<string, V>, keys: string[]) => Map<string, V>) {
-  return {
-    async get(key: string) { return store.get(key); },
-    async getMany(keys: string[]) { return readMany(store, keys); },
-    async put(key: string, value: T) { store.set(key, value); },
-    async delete(key: string) { store.delete(key); },
-    async clear() { store.clear(); }
-  };
-}
-
-function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((innerResolve) => { resolve = innerResolve; });
-  return { promise, resolve };
 }

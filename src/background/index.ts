@@ -1,5 +1,5 @@
-import { createAnkiClient } from "./anki";
-import { createAiBackend } from "./ai";
+import { createAnkiClient } from "../shared/services/ankiClient";
+import { createAiClient } from "../shared/services/aiClient";
 import { createGlossResolver } from "./glossResolver";
 import { attachGlossPort } from "./glossPort";
 import { createBackgroundMessageHandler } from "./messages";
@@ -13,7 +13,7 @@ import { createExtensionStorage } from "../storage/db";
 import type { ErrorMessage, MessageSource, OptionsErrorMessage } from "../shared/types";
 
 const storage = createExtensionStorage();
-const ai = createAiBackend();
+const ai = createAiClient();
 const anki = createAnkiClient();
 const glossResolver = createGlossResolver({ storage, ai });
 const handleMessage = createBackgroundMessageHandler({
@@ -133,8 +133,8 @@ function createInvalidMessageResponse(value: unknown, error: unknown): ErrorMess
 }
 
 function responseTargetFrom(value: unknown): Exclude<MessageSource, "service-worker"> {
-  if (typeof value === "object" && value !== null && "source" in value && value.source === "options") {
-    return "options";
+  if (typeof value === "object" && value !== null && "source" in value && (value.source === "options" || value.source === "onboarding" || value.source === "popup")) {
+    return value.source;
   }
   return "content-script";
 }

@@ -6,7 +6,6 @@ import { createGlossOverlay } from "../../src/content/overlay";
 import { createSelectionController } from "../../src/content/selection";
 import { createSourceFingerprint, type ScannedToken } from "../../src/content/scanner";
 import { createTranslationShortcutHandler } from "../../src/content/translationShortcut";
-import { runSettingsConnectionTest } from "../../src/shared/settingsForm";
 
 describe("runtime state-machine contracts: content and UI", () => {
   let originalPart: PropertyDescriptor | undefined;
@@ -52,7 +51,7 @@ describe("runtime state-machine contracts: content and UI", () => {
       overlay.applyCardFeedback({ tokenId: token.id, feedback: "card-pending" });
       const rendered = document.querySelector<HTMLElement>(`[data-glossa-token="${token.id}"]`)!;
 
-      overlay.applyTokenOutcome(undefined, {
+      overlay.applyTokenOutcome(token, {
         scanId: "scan-1",
         tokenId: token.id,
         status: "hidden"
@@ -124,39 +123,6 @@ describe("runtime state-machine contracts: content and UI", () => {
     expect(document.documentElement.dataset.glossaSelecting).toBeUndefined();
     document.removeEventListener("keydown", pageKeydown);
     selection.detach();
-  });
-
-  it("does not let a stale connection result overwrite the latest UI task", async () => {
-    const button = document.createElement("button");
-    const first = deferred<void>();
-    const second = deferred<void>();
-    const statuses: Array<{ value: string; state: string }> = [];
-    let currentOperation = 1;
-    const firstRun = runSettingsConnectionTest(
-      button,
-      () => first.promise,
-      "ai",
-      (value, state) => statuses.push({ value, state }),
-      "first",
-      () => currentOperation === 1
-    );
-    currentOperation = 2;
-    const secondRun = runSettingsConnectionTest(
-      button,
-      () => second.promise,
-      "ai",
-      (value, state) => statuses.push({ value, state }),
-      "second",
-      () => currentOperation === 2
-    );
-
-    second.resolve();
-    await secondRun;
-    first.resolve();
-    await firstRun;
-
-    expect(statuses.filter(({ state }) => state === "success")).toEqual([{ value: "second", state: "success" }]);
-    expect(button.dataset.state).toBe("success");
   });
 
   it("asks frame zero to toggle its live state instead of deriving a desired state from popup cache", async () => {
@@ -248,7 +214,6 @@ function tokenFromText(textNode: Text, surface: string, scanVersion: number): Sc
     nodeStartOffset,
     nodeEndOffset,
     sentenceText: text,
-    sourceText: surface,
     sourceFingerprint: createSourceFingerprint(text, nodeStartOffset, nodeEndOffset),
     scanVersion
   };

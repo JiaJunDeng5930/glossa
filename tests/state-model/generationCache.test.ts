@@ -1,18 +1,17 @@
+import { createMemoryStorage } from "../helpers/memoryStorage";
+import { deferred } from "./asyncHarness";
+import type { GlossFrameBackendInput, GlossBackendOutput } from "../../src/shared/services/aiClient";
 import { describe, expect, it, vi } from "vitest";
 
 import { createGlossResolver } from "../../src/background/glossResolver";
 import { buildGlossCacheKey, glossGenerationIdentity } from "../../src/core/cache";
-import type { ExtensionStorage } from "../../src/storage/db";
 import {
   DEFAULT_SETTINGS,
   GLOSS_TARGET_LANG,
-  type AnkiCardOutput,
-  type CardedWordRecord,
   type GlossaSettings,
   type GlossCacheEntry,
-  type GlossTokenPayload,
+  type GlossTokenOutcome,
   type SentenceCandidate,
-  type VocabularyRecord,
   type VocabularyState
 } from "../../src/shared/types";
 
@@ -21,17 +20,17 @@ describe("generation and cache state transitions", () => {
     const fixture = createMemoryStorage();
     const oldSettings = settings("old-model");
     const newSettings = settings("new-model");
-    const oldEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const newEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const oldEvents: Array<GlossTokenOutcome> = [];
+    const newEvents: Array<GlossTokenOutcome> = [];
     const ai = {
-      glossFrame: vi.fn((input: { settings: GlossaSettings; items: Array<{ token: { id: string; surface: string } }>; signal?: AbortSignal }) => {
+      glossFrame: vi.fn((input: GlossFrameBackendInput) => {
         if (input.settings.modelVersion === "old-model") {
-          return new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((_resolve, reject) => {
+          return new Promise<GlossBackendOutput>((_resolve, reject) => {
             input.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
           });
         }
         return Promise.resolve({
-          items: input.items.map(({ token }) => ({ tokenId: token.id, targetText: token.surface, display: "新版" }))
+          items: input.items.map(({ requestItemId, token }) => ({ requestItemId, value: { targetText: token.surface, display: "新版" } }))
         });
       }),
       ankiCard: vi.fn()
@@ -52,26 +51,26 @@ describe("generation and cache state transitions", () => {
       { tokenId: "new-token", status: "ready", item: { tokenId: "new-token", targetText: "archive", display: "新版" } }
     ]);
     expect(Array.from(fixture.glossCache.values())).toEqual([
-      expect.objectContaining({ tokenId: "new-token", display: "新版", createdAt: 200 })
+      expect.objectContaining({ display: "新版", createdAt: 200 })
     ]);
   });
 
   it("settles in-flight AI without repopulating caches after a manual clear", async () => {
     const fixture = createMemoryStorage();
     const activeSettings = settings("active-model");
-    const response = deferred<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>();
+    const response = deferred<GlossBackendOutput>();
     const ai = {
-      glossFrame: vi.fn(() => response.promise),
+      glossFrame: vi.fn((_input: GlossFrameBackendInput) => response.promise),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
     await resolver.activateGeneration(glossGenerationIdentity(activeSettings));
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
     const scan = resolveScan(resolver, sentence("stale-token", "stale"), activeSettings, 100, events);
     await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
     await resolver.clearCache();
-    response.resolve({ items: [{ tokenId: "stale-token", targetText: "stale", display: "旧结果" }] });
+    response.resolve(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "旧结果"));
     await scan;
 
     expect(events).toEqual([
@@ -80,7 +79,7 @@ describe("generation and cache state transitions", () => {
     ]);
     expect(fixture.glossCache.size).toBe(0);
 
-    const replayEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const replayEvents: Array<GlossTokenOutcome> = [];
     await resolveScan(resolver, sentence("replay-token", "stale"), activeSettings, 200, replayEvents);
     expect(replayEvents).toEqual([{ tokenId: "replay-token", status: "hidden" }]);
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
@@ -95,7 +94,7 @@ describe("generation and cache state transitions", () => {
     const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
     await resolver.activateGeneration(glossGenerationIdentity(activeSettings));
     const input = sentence("cached-token", "cached");
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
     const scan = resolveScan(resolver, input, activeSettings, 100, events);
     await vi.waitFor(() => expect(fixture.storage.glossCache.getFreshMany).toHaveBeenCalledTimes(1));
     const key = await cacheKey(input[0]!, activeSettings);
@@ -128,14 +127,14 @@ describe("generation and cache state transitions", () => {
     const originalRead = fixture.storage.glossCache.getFreshMany;
     fixture.storage.glossCache.getFreshMany = vi.fn((keys, now, ttlMs) => originalRead(keys, now, ttlMs));
     const ai = {
-      glossFrame: vi.fn(async () => ({ items: [{ tokenId: "fresh-token", targetText: "fresh", display: "新结果" }] })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新结果")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
     await resolver.activateGeneration(glossGenerationIdentity(activeSettings));
 
     const clear = resolver.clearCache();
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
     const scan = resolveScan(resolver, input, activeSettings, 100, events);
     await Promise.resolve();
     expect(fixture.storage.glossCache.getFreshMany).not.toHaveBeenCalled();
@@ -175,7 +174,7 @@ async function resolveScan(
   sentences: SentenceCandidate[],
   activeSettings: GlossaSettings,
   now: number,
-  events: Array<Omit<GlossTokenPayload, "scanId">>
+  events: Array<GlossTokenOutcome>
 ): Promise<void> {
   const session = resolver.createSession("https://example.test/page", activeSettings, now, {
     emit: (event) => events.push(event)
@@ -195,71 +194,6 @@ async function cacheKey(input: SentenceCandidate, activeSettings: GlossaSettings
   });
 }
 
-function createMemoryStorage(): {
-  storage: ExtensionStorage;
-  glossCache: Map<string, GlossCacheEntry>;
-} {
-  let storedSettings = DEFAULT_SETTINGS;
-  const lexicon = new Map<string, VocabularyRecord>();
-  const glossCache = new Map<string, GlossCacheEntry>();
-  const cardCache = new Map<string, AnkiCardOutput>();
-  const cardedWords = new Map<string, CardedWordRecord>();
-  const readMany = <T>(store: Map<string, T>, keys: string[]) => new Map(
-    keys.flatMap((key) => store.has(key) ? [[key, store.get(key)!] as const] : [])
-  );
-  const storage: ExtensionStorage = {
-    settings: {
-      async get() { return storedSettings; },
-      async set(value) { storedSettings = value; }
-    },
-    lexicon: {
-      async get(key) { return lexicon.get(key); },
-      async getMany(keys) { return readMany(lexicon, keys); },
-      async listByState(state: VocabularyState) { return Array.from(lexicon.values()).filter((record) => record.state === state); },
-      async update(key, transition) {
-        const next = transition(lexicon.get(key));
-        if (next) lexicon.set(key, next); else lexicon.delete(key);
-        return next;
-      },
-      async put(record) { lexicon.set(record.key, record); },
-      async delete(key) { lexicon.delete(key); }
-    },
-    glossCache: {
-      async get(key) { return glossCache.get(key); },
-      async getMany(keys) { return readMany(glossCache, keys); },
-      async getFresh(key, now, ttlMs) {
-        const value = glossCache.get(key);
-        return value && now < value.createdAt + ttlMs ? value : undefined;
-      },
-      async getFreshMany(keys, now, ttlMs) {
-        return new Map(Array.from(readMany(glossCache, keys)).filter(([, value]) => now < value.createdAt + ttlMs));
-      },
-      async put(key, value) { glossCache.set(key, value); },
-      async delete(key) { glossCache.delete(key); },
-      async clear() { glossCache.clear(); }
-    },
-    cardCache: keyValueStore(cardCache, readMany),
-    cardedWords: keyValueStore(cardedWords, readMany),
-    async resetCardHistory() {
-      cardCache.clear();
-      cardedWords.clear();
-    }
-  };
-  return { storage, glossCache };
-}
-
-function keyValueStore<T>(store: Map<string, T>, readMany: <V>(store: Map<string, V>, keys: string[]) => Map<string, V>) {
-  return {
-    async get(key: string) { return store.get(key); },
-    async getMany(keys: string[]) { return readMany(store, keys); },
-    async put(key: string, value: T) { store.set(key, value); },
-    async delete(key: string) { store.delete(key); },
-    async clear() { store.clear(); }
-  };
-}
-
-function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((innerResolve) => { resolve = innerResolve; });
-  return { promise, resolve };
+function frameReply(input: GlossFrameBackendInput, display: string): GlossBackendOutput {
+  return { items: input.items.map(({requestItemId, token}) => ({requestItemId, value: {targetText: token.surface, display}})) };
 }

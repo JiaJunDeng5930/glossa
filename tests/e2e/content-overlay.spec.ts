@@ -872,7 +872,7 @@ test("content bundle preserves pending card feedback through a generation rescan
     changeSettings({ ...current, modelVersion: "gpt-revised" });
   });
   await expect(page.locator("[data-glossa-token]")).toHaveAttribute("data-glossa-feedback", "card-pending", { timeout: 2_000 });
-  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("data-glossa-gloss-display", "新版");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("data-glossa-status", "ready");
 
   await page.evaluate(() => (Reflect.get(window, "__resolvePendingCard") as () => void)());
   await expect(page.locator("[data-glossa-token]")).toHaveAttribute("data-glossa-feedback", "card-success");
@@ -1320,7 +1320,7 @@ test("content bundle keeps waiting for slow card creation Anki errors", async ({
             source: "service-worker",
             target: message.source,
             createdAt: Date.now(),
-            payload: { reason: "service-error", message: "model was not found: Basic", service: "anki" }
+            payload: { reason: "service-error", code: "anki-model-not-found", message: "model was not found: Basic", service: "anki" }
           };
           callback?.(response);
           resolve(response);
@@ -2055,7 +2055,7 @@ test("content bundle preserves existing glosses while mutation rescans wait for 
   });
 });
 
-test("content bundle defers chunk outcomes until a large text-node scan finishes", async ({ page }) => {
+test("content bundle renders each frozen chunk while continuing a large text-node scan", async ({ page }) => {
   const words = largeWordList(150);
   const target = words[140]!;
   await page.setContent(`<main><p>${words.join(" ")}.</p></main>`);
@@ -2070,6 +2070,10 @@ test("content bundle defers chunk outcomes until a large text-node scan finishes
           targetText: token.surface,
           display: token.surface.toUpperCase()
         }));
+      }
+      if (Reflect.get(window, "__firstChunkPaint") === undefined) {
+        const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+        Reflect.set(window, "__firstChunkPaint", document.querySelectorAll("[data-glossa-token]").length > 0 && !sent.some(item => item.type === "gloss.scan.end"));
       }
       emit(glossDone(message.payload.scanId));
     });
@@ -2093,9 +2097,36 @@ test("content bundle defers chunk outcomes until a large text-node scan finishes
       }, 0), 0);
   });
   expect(scannedTokenCount).toBe(words.length);
+  expect(await page.evaluate(() => Reflect.get(window, "__firstChunkPaint"))).toBe(true);
 });
 
-test("content bundle replays queued ready outcomes after scan invalidation", async ({ page }) => {
+test("content bundle yields during empty discovery and paints before scan completion", async ({ page }) => {
+  await page.setContent(`<main><p>Quizzical archive appears here.</p><section>${'<span>12345</span>'.repeat(40000)}</section></main>`);
+  await installChromeRuntime(page, { autoTranslateEnabled: true, knownWordList: "junior-high" });
+  await page.evaluate(() => {
+    const events: Array<{ event: string; at: number }> = [];
+    Reflect.set(window, "__discoveryEvents", events);
+    Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      events.push({ event: "first-chunk", at: performance.now() });
+      const token = message.payload.sentences.flatMap(sentence => sentence.tokens)[0]!;
+      const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item: unknown) => unknown;
+      emit(glossToken(message.payload.scanId, token.id, "ready", { tokenId: token.id, display: "释义", targetText: token.surface }));
+      if (document.querySelector("[data-glossa-token]")) events.push({ event: "first-render", at: performance.now() });
+      setTimeout(() => {
+        const sent = Reflect.get(window, "__glossaMessages") as Array<{ type: string }>;
+        events.push({ event: sent.some(item => item.type === "gloss.scan.end") ? "timer-after-end" : "timer-during-discovery", at: performance.now() });
+      }, 0);
+      emit((Reflect.get(window, "glossDone") as (id: string) => unknown)(message.payload.scanId));
+    });
+  });
+  await page.addScriptTag({ type: "module", path: resolve("dist/content.js") });
+  await expect.poll(async () => (await sentMessageTypes(page)).includes("gloss.scan.end")).toBe(true);
+  const events = await page.evaluate(() => Reflect.get(window, "__discoveryEvents") as Array<{ event: string; at: number }>);
+  expect(events.map(item => item.event)).toEqual(["first-chunk", "first-render", "timer-during-discovery"]);
+  console.log("content.discovery.evidence", JSON.stringify(events));
+});
+
+test("content bundle preserves already rendered outcomes after scan invalidation", async ({ page }) => {
   const words = largeWordList(150);
   const target = words[0]!;
   await page.setContent(`<main><p>${words.join(" ")}.</p><p id="mutating">before</p></main>`);
@@ -2133,7 +2164,7 @@ test("content bundle replays queued ready outcomes after scan invalidation", asy
   await expect(page.locator("#mutating")).toHaveText("after");
 });
 
-test("content bundle aborts chunk scans after a deferred gloss error", async ({ page }) => {
+test("content bundle aborts chunk scans after a gloss error", async ({ page }) => {
   const words = largeWordList(150);
   await page.setContent(`<main><p>${words.join(" ")}.</p></main>`);
   await installChromeRuntime(page, { shortcutKey: "Alt", autoTranslateEnabled: true, knownWordList: "junior-high" });
@@ -2464,7 +2495,7 @@ async function installChromeRuntime(page: Page | Frame, settings: RuntimeSetting
         tokenId,
         status,
         ...(item ? { item } : {}),
-        ...(error ? { message: error.message, error } : {})
+        ...(error ? { error } : {})
       }
     }));
     Reflect.set(window, "glossDone", (scanId: string) => ({

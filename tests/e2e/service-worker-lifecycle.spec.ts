@@ -1,5 +1,13 @@
 import { chromium, expect, test, type BrowserContext, type CDPSession, type Page, type Worker } from "@playwright/test";
 import { resolve } from "node:path";
+import { createOptionsMessage } from "../../src/shared/messages";
+import {
+  launchExtensionFixture,
+  openExtensionOriginPage,
+  readExtensionDatabase,
+  seedLegacyDatabase,
+  sendExtensionMessage
+} from "../helpers/extensionFixture";
 
 test("extension service worker handles settings and card-history reset after restart", async () => {
   const extensionPath = resolve("dist");
@@ -15,6 +23,9 @@ test("extension service worker handles settings and card-history reset after res
   try {
     const serviceWorker = await waitForExtensionWorker(context);
     const extensionId = new URL(serviceWorker.url()).host;
+    const seedPage = await context.newPage();
+    await seedPage.goto(`chrome-extension://${extensionId}/manifest.json`);
+    await seedCardHistory(seedPage);
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/options/options.html`);
 
@@ -46,7 +57,6 @@ test("extension service worker handles settings and card-history reset after res
     });
     expect(second.requestId).not.toBe(first.requestId);
 
-    await seedCardHistory(page);
     page.once("dialog", (dialog) => {
       void dialog.accept();
     });
@@ -55,6 +65,51 @@ test("extension service worker handles settings and card-history reset after res
     await expect.poll(() => readCardHistory(page)).toEqual({ cardCache: 0, cardedWords: 0, noteIds: 0 });
   } finally {
     await context.close();
+  }
+});
+
+test("extension worker upgrades legacy IndexedDB state during a real restart", async () => {
+  const fixture = await launchExtensionFixture();
+  try {
+    const page = await openExtensionOriginPage(fixture.context, fixture.extensionOrigin);
+    const seed = await seedLegacyDatabase(page);
+    await stopServiceWorker(fixture.context, page, fixture.worker.url());
+
+    const response = await sendExtensionMessage(page, createOptionsMessage("known.words.list", {}));
+    expect(response).toMatchObject({
+      type: "known.words.list.result",
+      source: "service-worker",
+      target: "options",
+      payload: {
+        records: expect.arrayContaining([
+          expect.objectContaining({ key: seed.historyKey, state: "known" }),
+          expect.objectContaining({ key: seed.existingMarkerKey, state: "known" })
+        ])
+      }
+    });
+
+    const snapshot = await readExtensionDatabase(page);
+    expect(snapshot.version).toBe(3);
+    expect(snapshot.cardCache).toHaveLength(0);
+
+    const migrated = snapshot.lexicon.find((record) => record.key === seed.historyKey);
+    expect(migrated).toMatchObject({
+      key: seed.historyKey,
+      state: "known",
+      lastShownAt: 400,
+      lastClickedAt: 500
+    });
+    expect(migrated).not.toHaveProperty("shownCount");
+    expect(migrated).not.toHaveProperty("clickCount");
+    expect(migrated).not.toHaveProperty("ankiNoteIds");
+
+    const migratedMarker = snapshot.cardedWords.find((record) => record.key === seed.historyKey);
+    expect(migratedMarker).toMatchObject({ key: seed.historyKey, createdAt: 500 });
+    const existingMarker = snapshot.cardedWords.find((record) => record.key === seed.existingMarkerKey);
+    expect(existingMarker).toMatchObject({ key: seed.existingMarkerKey, createdAt: 777 });
+    expect(snapshot.lexicon.every((record) => !("shownCount" in record) && !("clickCount" in record) && !("ankiNoteIds" in record))).toBe(true);
+  } finally {
+    await fixture.close();
   }
 });
 
@@ -98,7 +153,7 @@ async function seedCardHistory(page: Page): Promise<void> {
 async function readCardHistory(page: Page): Promise<{ cardCache: number; cardedWords: number; noteIds: number }> {
   return await page.evaluate(async () => {
     return await new Promise<{ cardCache: number; cardedWords: number; noteIds: number }>((resolve, reject) => {
-      const request = indexedDB.open("glossa", 2);
+      const request = indexedDB.open("glossa");
       request.onsuccess = () => {
         const db = request.result;
         const tx = db.transaction(["cardCache", "cardedWords", "lexicon"], "readonly");
@@ -110,7 +165,9 @@ async function readCardHistory(page: Page): Promise<{ cardCache: number; cardedW
           resolve({
             cardCache: cardCache.result,
             cardedWords: cardedWords.result,
-            noteIds: (lexicon.result as Array<{ ankiNoteIds: number[] }>).reduce((total, record) => total + record.ankiNoteIds.length, 0)
+            noteIds: (lexicon.result as Array<{ ankiNoteIds?: unknown }>).reduce((total, record) => {
+              return total + (Array.isArray(record.ankiNoteIds) ? record.ankiNoteIds.length : 0);
+            }, 0)
           });
         };
         tx.onerror = () => reject(tx.error);

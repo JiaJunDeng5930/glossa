@@ -1,9 +1,12 @@
-import { createSourceFingerprint, type ScannedToken } from "./scanner";
+import type { ScannedToken } from "./scanner";
+import { occurrencesFor } from "./occurrence";
 
 export function rangeForToken(token: ScannedToken, doc: Document = token.textNode.ownerDocument): Range {
   const range = doc.createRange();
-  range.setStart(token.textNode, token.nodeStartOffset);
-  range.setEnd(token.textNode, token.nodeEndOffset);
+  const location = occurrencesFor(doc).locate(token);
+  if (!location) throw new Error("Source occurrence is no longer attached");
+  range.setStart(location.node, location.start);
+  range.setEnd(location.node, location.end);
   return range;
 }
 
@@ -18,17 +21,9 @@ export function validateTokenForRender(token: ScannedToken, expectedScanVersion:
   if (token.scanVersion !== expectedScanVersion) {
     return { ok: false, reason: "stale-scan" };
   }
-  if (!token.textNode.isConnected) {
-    return { ok: false, reason: "detached-node" };
-  }
-  const text = token.textNode.nodeValue ?? "";
-  const currentText = text.slice(token.nodeStartOffset, token.nodeEndOffset);
-  if (currentText !== token.sourceText) {
-    return { ok: false, reason: "changed-text" };
-  }
-  if (createSourceFingerprint(text, token.nodeStartOffset, token.nodeEndOffset) !== token.sourceFingerprint) {
-    return { ok: false, reason: "changed-text" };
-  }
+  const registry = occurrencesFor(token.textNode.ownerDocument);
+  if (!registry.token(token.id)) registry.register(token);
+  if (!registry.valid(token)) return { ok: false, reason: token.textNode.isConnected ? "changed-text" : "detached-node" };
   const range = rangeForToken(token);
   const rect = firstRenderableRect(range);
   if (!rect) {

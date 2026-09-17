@@ -21,8 +21,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 26
+          node-version-file: .node-version
           cache: npm
+      - name: Validate release tag
+        run: node scripts/check-release-version.mjs "$GITHUB_REF_NAME"
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run verify
@@ -32,14 +34,6 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $tag = $env:GITHUB_REF_NAME
-          $version = $tag -replace "^v", ""
-          $manifestVersion = node -p "JSON.parse(require('node:fs').readFileSync('manifest.json', 'utf8')).version"
-          $packageVersion = node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version"
-
-          if ($version -ne $manifestVersion -or $version -ne $packageVersion) {
-            throw "Tag $tag must match manifest.json and package.json version $manifestVersion."
-          }
-
           $archive = "glossa-extension-$tag.zip"
           if (Test-Path -LiteralPath $archive) {
             Remove-Item -LiteralPath $archive

@@ -21,7 +21,7 @@ Glossa 是一个 Chrome 扩展，用来在网页中给陌生英文单词显示�
 - 在网页正文中识别英文单词，并在单词上方显示中文释义
 - 根据已知词表隐藏常见词，减少干扰
 - 支持初中、高中、CET-4、CET-6、TOEFL、GRE、COCA 20000 等词表
-- 支持点击单词创建 Anki 卡片
+- 支持为点击的单词创建 Anki 卡片
 - 通过缓存减少重复 AI 请求
 - 支持快捷键开启、关闭页面翻译
 - 支持自定义释义样式、AI 设置、Anki 设置和提示词
@@ -41,10 +41,10 @@ Glossa 是一个 Chrome 扩展，用来在网页中给陌生英文单词显示�
 
 ### 添加单词到 Anki
 
-1. 点击带有释义的英文单词
-2. Glossa 会生成 Anki 卡片内容
+1. 按住设置的制卡快捷键并点击单词
+2. Glossa 会生成一张 Anki 卡片
 3. 卡片写入你配置的 Anki deck
-4. 遇到已添加过的单词时，页面右上角会出现确认提示
+4. 遇到已经制过卡的单词时，页面右上角会出现确认提示
 
 ## 配置
 
@@ -105,7 +105,7 @@ Anki model 需要包含 `Front` 和 `Back` 字段。
 
 ## 工作方式
 
-Glossa 在当前页面扫描可见文本，把候选单词发送给后台服务。后台会先查询本地缓存和词汇状态，再按需调用 AI 获取释义。点击单词时，后台会生成 Anki 卡片并通过 AnkiConnect 写入 Anki。
+Glossa 在当前页面扫描可见文本，把候选单词交给后台服务。后台先查询缓存和词汇状态，再按需调用 AI；制卡请求通过 AnkiConnect 写入用户配置的 deck。
 
 ## 常见问题
 
@@ -131,23 +131,15 @@ Glossa 在当前页面扫描可见文本，把候选单词发送给后台服务�
 
 ```bash
 npm run typecheck
+npm run wordlists:check
 npm run test
 npm run build
+npm run test:e2e
+npm run preview:ui
 npm run verify
 ```
 
-源码结构：
-
-```text
-src/content/      页面扫描、释义渲染、页面交互
-src/background/   AI 请求、AnkiConnect、缓存、词汇状态
-src/core/         词汇状态机、词形归一、缓存 key
-src/storage/      设置和 IndexedDB 存储
-src/options/      设置页
-src/onboarding/   首次使用引导页
-src/popup/        扩展弹窗
-src/shared/       消息协议、快捷键、诊断工具
-```
+后台、页面和引导的开发入口见各自的模块 README；跨模块的设计原因见 [ADR-0001](docs/adr/0001-async-ownership-and-contracts.md)。
 
 ## License
 

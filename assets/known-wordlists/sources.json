@@ -1,37 +1,91 @@
 {
   "junior-high": {
-    "label": "Junior high curriculum words",
-    "source": "Ministry of Education high school English curriculum standard vocabulary appendix; unstarred entries correspond to compulsory education stage words.",
-    "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip"
+    "asset": {
+      "sha256": "af683bc86bdaa85a2d0c6b4bf243ec32d43b3f23bb49e9b1c4c5bc59adaff955",
+      "lineCount": 1543
+    },
+    "upstreamProvenance": {
+      "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip",
+      "archiveSha256": "30204dfd2357c6d6f3bd66e55538f1fbb62a952459aff9c0293e3e2d608d004f",
+      "pdfSha256": "8ebd6bb12e9eb1c58e422ee01b540a4a71d2e681a4c4a764a36ee3a34b21c1be",
+      "pdf": "4.普通高中英语课程标准（2017年版2020年修订）.pdf"
+    }
   },
   "senior-high": {
-    "label": "Senior high curriculum words",
-    "source": "Ministry of Education high school English curriculum standard vocabulary appendix, 2017 edition with 2020 revision.",
-    "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip"
+    "asset": {
+      "sha256": "923bb950dbd025370fdb6312d80d6bbbabad787b0dcbc27bf76d182fc86389f2",
+      "lineCount": 3060
+    },
+    "upstreamProvenance": {
+      "url": "https://www.moe.gov.cn/srcsite/A26/s8001/202006/W020200603315372317586.zip",
+      "archiveSha256": "30204dfd2357c6d6f3bd66e55538f1fbb62a952459aff9c0293e3e2d608d004f",
+      "pdfSha256": "8ebd6bb12e9eb1c58e422ee01b540a4a71d2e681a4c4a764a36ee3a34b21c1be",
+      "pdf": "4.普通高中英语课程标准（2017年版2020年修订）.pdf"
+    }
   },
   "cet4": {
-    "label": "CET-4 word list",
-    "source": "Union of the senior-high curriculum list and the first English entry from each line of mahavivo/english-wordlists CET4_edited.txt.",
-    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/CET4_edited.txt"
+    "asset": {
+      "sha256": "7065b9d050989697624cc1c421cd5f55da10964089995c29d8537b68bd2b8521",
+      "lineCount": 4882
+    },
+    "upstreamProvenance": {
+      "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/395cebd583d97be61b065d281d16dc49c7e4a8b0/CET4_edited.txt",
+      "sha256": "662dcf755a053aa0c6951193d0c258c8fb1515d48a00cbc874057bb5103973b4",
+      "revision": "395cebd583d97be61b065d281d16dc49c7e4a8b0"
+    }
   },
   "cet6": {
-    "label": "CET-6 word list",
-    "source": "Union of the cumulative CET-4 list and the first English entry from each line of mahavivo/english-wordlists CET6_edited.txt.",
-    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/CET6_edited.txt"
+    "asset": {
+      "sha256": "20d3747f2b87a48d5606d8ec4a7ef1964bf906da7434e1a5270fa0556a64a2d2",
+      "lineCount": 5953
+    },
+    "upstreamProvenance": {
+      "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/395cebd583d97be61b065d281d16dc49c7e4a8b0/CET6_edited.txt",
+      "sha256": "2756c14f1f84d1985969b0e5080a7e8f5691c0ffcb32abbe1d3a061739e89572",
+      "revision": "395cebd583d97be61b065d281d16dc49c7e4a8b0"
+    }
   },
   "toefl": {
-    "label": "TOEFL word list",
-    "source": "Union of the senior-high curriculum list and the first English entry from each line of mahavivo/english-wordlists TOEFL.txt.",
-    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/TOEFL.txt"
+    "asset": {
+      "sha256": "28e3f766fecf3986e55bee9a1151ec24ffd8ce75da6d2c3f7e61e8ef166a3d12",
+      "lineCount": 6586
+    },
+    "upstreamProvenance": {
+      "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/395cebd583d97be61b065d281d16dc49c7e4a8b0/TOEFL.txt",
+      "sha256": "3a95d7ccb44a9e93b472fa55fe1898e99d9e302bcead6951aa333a948a27bd02",
+      "revision": "395cebd583d97be61b065d281d16dc49c7e4a8b0"
+    }
   },
   "gre": {
-    "label": "GRE word list",
-    "source": "Union of the senior-high curriculum list and the first English entry from each line of mahavivo/english-wordlists GRE_8000_Words.txt.",
-    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/GRE_8000_Words.txt"
+    "asset": {
+      "sha256": "a94a84116f291bb7144b29b27d9909da0f0608b86c061e641b391a2edb2bfdb7",
+      "lineCount": 10326
+    },
+    "upstreamProvenance": {
+      "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/395cebd583d97be61b065d281d16dc49c7e4a8b0/GRE_8000_Words.txt",
+      "sha256": "133d2507356af1bdfdd526231185b36ccf33fb62c6310957652f69f8282db8e0",
+      "revision": "395cebd583d97be61b065d281d16dc49c7e4a8b0"
+    }
   },
   "coca-20000": {
-    "label": "COCA 20000 frequency list",
-    "source": "Extracted first English entry from each line of mahavivo/english-wordlists COCA_20000.txt.",
-    "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/master/COCA_20000.txt"
+    "asset": {
+      "sha256": "f2da1ac4c95e872b199c761cc02e1e1fd78bed767a5b87a53b450d5d4fe1e575",
+      "lineCount": 17620
+    },
+    "upstreamProvenance": {
+      "url": "https://raw.githubusercontent.com/mahavivo/english-wordlists/395cebd583d97be61b065d281d16dc49c7e4a8b0/COCA_20000.txt",
+      "sha256": "30e238cc345ca5f3ebb17c078c96c521f54dc8ea64f41fdfdadab3b404b4bbb6",
+      "revision": "395cebd583d97be61b065d281d16dc49c7e4a8b0"
+    }
+  },
+  "_canonical": {
+    "path": "scripts/data/known-wordlists-canonical.json",
+    "sha256": "6a13ea3b231e894f14fc3a9484a34c54a1276da91b617fbd1598f219d4706266",
+    "capturedFrom": "assets/known-wordlists/*.txt at commit 6c0cc3a399ffddc032e03d175f0796dc46c20f34; all seven baseline assets verified byte-for-byte",
+    "derivation": [
+      "The checked-in word lists at the recorded commit are the versioned import baseline. The original upstream import process was not recorded; upstreamProvenance identifies reference snapshots, not proven historical inputs.",
+      "The canonical source contains strictly sorted, normalized words with explicit list membership. IDs and output filenames come exclusively from src/shared/knownWordLists.ts.",
+      "Run node scripts/known-wordlists.mjs --derive --output-dir <directory> to generate all assets offline; --check generates the same bytes and compares them with the checked-in assets and recorded hashes."
+    ]
   }
 }

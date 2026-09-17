@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { renderWord } from "./fixtures";
 import { createSelectionController } from "../../src/content/selection";
 
 describe("selection controller", () => {
@@ -30,9 +31,9 @@ describe("selection controller", () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     button.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
 
-    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ surface: "Save" }));
+    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ token: expect.objectContaining({ surface: "Save" }) }));
     expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({
-      renderToken: expect.objectContaining({ sourceText: "Save" })
+      renderToken: expect.objectContaining({ surface: "Save" })
     }));
     expect(onButtonClick).not.toHaveBeenCalled();
     expect(onSelectionModeChange).toHaveBeenNthCalledWith(1, true);
@@ -87,7 +88,7 @@ describe("selection controller", () => {
     expect(mouseDown.defaultPrevented).toBe(true);
     expect(onPointerDown).not.toHaveBeenCalled();
     expect(onMouseDown).not.toHaveBeenCalled();
-    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ surface: "Save" }));
+    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ token: expect.objectContaining({ surface: "Save" }) }));
 
     controller.detach();
   });
@@ -221,7 +222,9 @@ describe("selection controller", () => {
   });
 
   it("recomputes rendered token context when surrounding text changes", () => {
-    document.body.innerHTML = `<p>Updated <span data-glossa-token="t-submit" data-glossa-owned="1" data-glossa-surface="Submit" data-glossa-lemma="submit" data-glossa-original-start="0" data-glossa-original-end="6" data-glossa-sentence="A submit button finishes the form." data-glossa-sentence-start="2" data-glossa-sentence-end="8"><span data-glossa-token-label="t-submit">提交</span><span data-glossa-token-surface="t-submit">Submit</span></span> context appears.</p>`;
+    document.body.innerHTML = `<p>Before Submit context appears.</p>`;
+    const { token, wrapper } = renderWord(document.querySelector("p")!.firstChild as Text, "Submit");
+    wrapper.previousSibling!.textContent = "Updated ";
     const onWordSelected = vi.fn();
     const controller = createSelectionController({
       document,
@@ -235,10 +238,10 @@ describe("selection controller", () => {
     controller.detach();
 
     expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({
-      token: expect.objectContaining({ id: "t-submit", lemma: "submit", surface: "Submit", startOffset: 8, endOffset: 14 }),
+      token: expect.objectContaining({ id: token.id, lemma: "submit", surface: "Submit", startOffset: 8, endOffset: 14 }),
       sentence: "Updated Submit context appears."
     }));
-    expect(onWordSelected.mock.calls[0]?.[0].renderToken).toBeUndefined();
+    expect(onWordSelected.mock.calls[0]?.[0].renderToken).toBeDefined();
   });
 
   it("supports captured shortcut combinations", () => {
@@ -258,7 +261,7 @@ describe("selection controller", () => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     button.dispatchEvent(new KeyboardEvent("keyup", { key: "k", bubbles: true }));
 
-    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ surface: "Save" }));
+    expect(onWordSelected).toHaveBeenCalledWith(expect.objectContaining({ token: expect.objectContaining({ surface: "Save" }) }));
 
     controller.detach();
   });

@@ -1,11 +1,16 @@
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { extname, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as esbuild from "esbuild";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const dist = resolve(root, "dist");
 const preview = resolve(root, "ui-preview");
+const translationEntry = resolve(preview, "translation.ts");
+const generatedPreview = resolve(preview, ".generated/translation.js");
+
+await buildTranslationPreview();
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -23,6 +28,28 @@ const pages = [
   { name: "settings", label: "设置页", port: preferredPort + 1 },
   { name: "popup", label: "插件弹窗", port: preferredPort + 2 }
 ];
+
+async function buildTranslationPreview() {
+  try {
+    const info = await stat(translationEntry);
+    if (!info.isFile()) throw new Error(`${translationEntry} is not a file.`);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new Error(`Missing preview entry ${translationEntry}; add the shared translation preview entry before starting the UI preview.`);
+    }
+    throw error;
+  }
+  await mkdir(resolve(preview, ".generated"), { recursive: true });
+  await esbuild.build({
+    entryPoints: [translationEntry],
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "chrome120",
+    outfile: generatedPreview,
+    logLevel: "info"
+  });
+}
 
 for (const page of pages) {
   const server = createServer((request, response) => {

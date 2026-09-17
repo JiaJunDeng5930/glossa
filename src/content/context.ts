@@ -1,144 +1,76 @@
+import { occurrencesFor } from './occurrence';
+import { isReadableElement, yieldToPage, type ReadingPolicy } from './readability';
 const SENTENCE_RE = /[^.!?\n]+[.!?]?/g;
-const CONTEXT_BOUNDARY_SELECTOR = "p,li,blockquote,dd,dt,figcaption,td,th,h1,h2,h3,h4,h5,h6,main,section,article,aside,nav,header,footer,address,div";
-const EXCLUDED_SELECTOR = [
-  "script",
-  "style",
-  "noscript",
-  "template",
-  "textarea",
-  "input",
-  "select",
-  "option",
-  "pre",
-  "code",
-  "[contenteditable='true']",
-  "[contenteditable='']",
-  "[hidden]",
-  "[aria-hidden='true']",
-  "[data-glossa-owned='1']",
-  "[translate='no']",
-  ".notranslate"
-].join(",");
-
-interface TextSegment {
-  node: Text;
-  start: number;
-  end: number;
+const BOUNDARIES = 'p,li,blockquote,dd,dt,figcaption,td,th,h1,h2,h3,h4,h5,h6,main,section,article,aside,nav,header,footer,address,div';
+interface ContextSnapshot { text: string; segments: WeakMap<Text, number>; sentences: Array<{ start: number; end: number }> }
+export interface SentenceContext { boundary: Node; sentenceStart: number; text: string; startOffset: number; endOffset: number }
+function boundaryFor(node: Text): Node {
+  const registry = occurrencesFor(node.ownerDocument);
+  const token = registry.findFromNode(node);
+  const wrapper = token && registry.handlesFor(token.id)?.wrapper;
+  const parent = wrapper?.parentNode ?? node.parentNode;
+  const element = parent instanceof Element ? parent : node.parentElement;
+  return element?.closest(BOUNDARIES) ?? parent ?? node.getRootNode();
 }
-
-interface ContextSnapshot {
-  text: string;
-  segments: WeakMap<Text, TextSegment>;
+function* snapshotSteps(boundary: Node, snapshot: ContextSnapshot, policy: ReadingPolicy = "automatic"): Generator<void> {
+  const stack: Node[] = [];
+  if (boundary.firstChild) stack.push(boundary.firstChild);
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (node.nextSibling) stack.push(node.nextSibling);
+    if (node instanceof Element && !isReadableElement(node, true, policy)) { if (!occurrencesFor(node.ownerDocument).findFromNode(node)) snapshot.text += ' '; yield; continue; }
+    if (node instanceof Text) { snapshot.segments.set(node, snapshot.text.length); snapshot.text += node.data; }
+    else if (node instanceof Element && node.tagName === 'BR') snapshot.text += '\n';
+    else if (node.firstChild) stack.push(node.firstChild);
+    yield;
+  }
 }
-
-export interface SentenceContext {
-  boundary: Node;
-  sentenceStart: number;
-  text: string;
-  startOffset: number;
-  endOffset: number;
+function* sentenceSteps(snapshot: ContextSnapshot): Generator<void> {
+  for (const match of snapshot.text.matchAll(SENTENCE_RE)) {
+    const raw = match[0];
+    snapshot.sentences.push({ start: match.index! + raw.length - raw.trimStart().length, end: match.index! + raw.trimEnd().length });
+    yield;
+  }
 }
+function resolve(snapshot: ContextSnapshot, boundary: Node, node: Text, start: number, end: number): SentenceContext | undefined {
+  const offset = snapshot.segments.get(node);
+  if (offset === undefined) return undefined;
+  let left = 0, right = snapshot.sentences.length;
+  while (left < right) { const middle = (left + right) >>> 1; if (snapshot.sentences[middle]!.end < offset + end) left = middle + 1; else right = middle; }
+  const sentence = snapshot.sentences[left];
+  if (sentence && offset + start >= sentence.start && offset + end <= sentence.end) return { boundary, sentenceStart: sentence.start, text: snapshot.text.slice(sentence.start, sentence.end), startOffset: offset + start - sentence.start, endOffset: offset + end - sentence.start };
 
-export function createSentenceContextResolver(): (node: Text, startOffset: number, endOffset: number) => SentenceContext | undefined {
+  return undefined;
+}
+export function createSentenceContextResolver(policy: ReadingPolicy = "automatic"): (node: Text, start: number, end: number) => SentenceContext | undefined {
   const snapshots = new WeakMap<Node, ContextSnapshot>();
-
-  return (node, startOffset, endOffset) => {
-    const boundary = contextBoundary(node);
+  return (node, start, end) => {
+    const boundary = boundaryFor(node);
     let snapshot = snapshots.get(boundary);
-    if (!snapshot) {
-      snapshot = buildSnapshot(boundary, node.ownerDocument);
-      snapshots.set(boundary, snapshot);
-    }
-    const segment = snapshot.segments.get(node);
-    if (!segment) {
-      return undefined;
-    }
-    const absoluteStart = segment.start + startOffset;
-    const absoluteEnd = segment.start + endOffset;
-    for (const match of snapshot.text.matchAll(SENTENCE_RE)) {
-      const raw = match[0];
-      const leading = raw.length - raw.trimStart().length;
-      const trailing = raw.length - raw.trimEnd().length;
-      const sentenceStart = (match.index ?? 0) + leading;
-      const sentenceEnd = (match.index ?? 0) + raw.length - trailing;
-      if (absoluteStart < sentenceStart || absoluteEnd > sentenceEnd) {
-        continue;
-      }
-      return {
-        boundary,
-        sentenceStart,
-        text: snapshot.text.slice(sentenceStart, sentenceEnd),
-        startOffset: absoluteStart - sentenceStart,
-        endOffset: absoluteEnd - sentenceStart
-      };
-    }
-    return undefined;
+    if (!snapshot) { snapshot = { text: '', segments: new WeakMap(), sentences: [] }; for (const _ of snapshotSteps(boundary, snapshot, policy)) { /* synchronous manual selection */ } for (const _ of sentenceSteps(snapshot)) { /* one immutable sentence index per boundary */ } snapshots.set(boundary, snapshot); }
+    return resolve(snapshot, boundary, node, start, end);
   };
 }
-
-function contextBoundary(node: Text): Node {
-  const sourceWrapper = node.parentElement?.closest("[data-glossa-token]");
-  const sourceParent = sourceWrapper?.parentNode;
-  const startElement = sourceParent instanceof Element ? sourceParent : node.parentElement;
-  return startElement?.closest(CONTEXT_BOUNDARY_SELECTOR)
-    ?? sourceParent
-    ?? startElement
-    ?? node.getRootNode();
-}
-
-function buildSnapshot(boundary: Node, doc: Document): ContextSnapshot {
-  const segments = new WeakMap<Text, TextSegment>();
-  let text = "";
-  const walker = doc.createTreeWalker(boundary, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-  let current = walker.nextNode();
-  while (current) {
-    if (
-      current.nodeType === Node.ELEMENT_NODE
-      && (current as Element).tagName === "BR"
-      && isContextElement(current as Element, boundary)
-    ) {
-      text += "\n";
-    } else if (current.nodeType === Node.TEXT_NODE && isContextText(current as Text, boundary)) {
-      const textNode = current as Text;
-      const value = textNode.nodeValue ?? "";
-      const start = text.length;
-      text += value;
-      segments.set(textNode, { node: textNode, start, end: text.length });
+export function createAsyncSentenceContextResolver(shouldContinue: () => boolean = () => true): (node: Text, start: number, end: number) => Promise<SentenceContext | undefined> {
+  const snapshots = new WeakMap<Node, Promise<ContextSnapshot>>();
+  const boundaries = new WeakMap<Text, Node>();
+  return async (node, start, end) => {
+    let boundary = boundaries.get(node);
+    if (!boundary) { boundary = boundaryFor(node); boundaries.set(node, boundary); }
+    let promise = snapshots.get(boundary);
+    if (!promise) {
+      promise = (async () => {
+        const snapshot: ContextSnapshot = { text: '', segments: new WeakMap(), sentences: [] }; let began = performance.now();
+        for (const _ of snapshotSteps(boundary!, snapshot)) {
+          if (!shouldContinue()) break;
+          if (performance.now() - began >= 8) { await yieldToPage(); began = performance.now(); }
+        }
+        for (const _ of sentenceSteps(snapshot)) { if (!shouldContinue()) break; if (performance.now() - began >= 8) { await yieldToPage(); began = performance.now(); } }
+        return snapshot;
+      })();
+      snapshots.set(boundary, promise);
     }
-    current = walker.nextNode();
-  }
-  return { text, segments };
-}
-
-function isContextText(node: Text, boundary: Node): boolean {
-  const sourceSurface = node.parentElement?.closest("[data-glossa-token-surface]");
-  const sourceWrapper = sourceSurface?.closest("[data-glossa-token]");
-  return isContextElement(node.parentElement, boundary, sourceSurface, sourceWrapper);
-}
-
-function isContextElement(
-  source: Element | null,
-  boundary: Node,
-  sourceSurface?: Element | null,
-  sourceWrapper?: Element | null
-): boolean {
-  let element = source;
-  while (element) {
-    // Existing wrappers contribute their source surface; generated label and measurement nodes remain excluded.
-    const isSourceScaffold = sourceSurface !== null
-      && sourceSurface !== undefined
-      && (element === sourceSurface || sourceSurface.contains(element) || element === sourceWrapper);
-    if (element.matches(EXCLUDED_SELECTOR) && !isSourceScaffold) {
-      return false;
-    }
-    const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-    if (style && (style.display === "none" || style.visibility === "hidden" || style.opacity === "0")) {
-      return false;
-    }
-    if (element === boundary) {
-      break;
-    }
-    element = element.parentElement;
-  }
-  return true;
+    const snapshot = await promise;
+    return shouldContinue() ? resolve(snapshot, boundary, node, start, end) : undefined;
+  };
 }

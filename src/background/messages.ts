@@ -3,17 +3,15 @@ import { hashText } from "../shared/hash";
 import { createDiagnosticError, diagnosticPayloadFrom } from "../shared/errors";
 import { trace } from "../shared/diagnostics";
 import { createBackgroundResponse } from "../shared/messages";
-import {
-  createCandidateRecord,
-  markRecordClicked,
-  vocabularyKey
-} from "../core/state";
+import { vocabularyKey } from "../core/state";
+import { createSettingsService } from "./settingsService";
+import { createVocabularyService } from "./vocabularyService";
 import type { ExtensionStorage } from "../storage/db";
-import type { AiBackend } from "./ai";
-import type { AnkiClient } from "./anki";
+import type { AiClient } from "../shared/services/aiClient";
+import type { AnkiClient } from "../shared/services/ankiClient";
 import type {
   BackgroundResponseMessage,
-  CardHistoryResetMessage,
+  RuntimeToBackgroundMessage,
   ContentToBackgroundMessage,
   WordCardDuplicatePayload,
   WordClickedOkPayload
@@ -22,8 +20,8 @@ import { GLOSS_TARGET_LANG } from "../shared/types";
 
 export interface BackgroundMessageHandlerDeps {
   storage: ExtensionStorage;
-  ai: AiBackend;
-  anki: AnkiClient;
+  ai: Pick<AiClient, "ankiCard">;
+  anki: Pick<AnkiClient, "createNote">;
   getTopFrameTranslationState?: (tabId: number) => Promise<boolean>;
   now?: () => number;
 }
@@ -32,10 +30,12 @@ export interface BackgroundMessageContext {
   tabId?: number;
 }
 
-type BackgroundHandledMessage = ContentToBackgroundMessage | CardHistoryResetMessage;
+type BackgroundHandledMessage = Exclude<RuntimeToBackgroundMessage, { type: "gloss.cache.clear" }>;
 
 export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDeps) {
   const now = deps.now ?? Date.now;
+  const settingsService = createSettingsService(deps.storage);
+  const vocabularyService = createVocabularyService(deps.storage);
   const wordClickLanes = new Map<string, Promise<void>>();
   const activeWordClicks = new Set<Promise<void>>();
   let cardHistoryBarrier = Promise.resolve();
@@ -43,6 +43,24 @@ export function createBackgroundMessageHandler(deps: BackgroundMessageHandlerDep
     try {
       if (message.type === "settings.get") {
         return createBackgroundResponse(message, "settings.response", { settings: await deps.storage.settings.get() });
+      }
+      if (message.type === "settings.patch") {
+        return createBackgroundResponse(message, "settings.response", { settings: await settingsService.patch(message.payload.patch) });
+      }
+      if (message.type === "known.words.list") {
+        return createBackgroundResponse(message, "known.words.list.result", { records: await vocabularyService.listKnown() });
+      }
+      if (message.type === "known.words.add") {
+        await vocabularyService.addKnown(message.payload.lemma, now());
+        return createBackgroundResponse(message, "known.words.changed", {});
+      }
+      if (message.type === "known.words.remove") {
+        await vocabularyService.removeKnown(message.payload.lemma);
+        return createBackgroundResponse(message, "known.words.changed", {});
+      }
+      if (message.type === "known.words.clear") {
+        await vocabularyService.clearKnown();
+        return createBackgroundResponse(message, "known.words.changed", {});
       }
       // @behavior glossa.extension_contracts.frame_state_sync.relay The service worker relays a child frame's startup request to frame zero in the same tab.
       if (message.type === "translation.state.sync") {
@@ -118,8 +136,7 @@ async function handleWordClicked(
   // The hold-and-click gesture commits the card immediately; only an existing word-level card requires confirmation.
   const settings = await deps.storage.settings.get();
   const wordKey = vocabularyKey("en", payload.token.lemma);
-  const existing = await deps.storage.lexicon.get(wordKey);
-  if (payload.allowDuplicateCard !== true && (await deps.storage.cardedWords.get(wordKey) || (existing?.ankiNoteIds.length ?? 0) > 0)) {
+  if (payload.allowDuplicateCard !== true && await deps.storage.cardedWords.get(wordKey)) {
     return {
       kind: "duplicate",
       payload: {
@@ -137,17 +154,12 @@ async function handleWordClicked(
     promptVersion: await promptCacheVersion(settings, settings.prompts.ankiCard),
     sentence: payload.sentence
   });
-  const cachedCardOutput = await deps.storage.cardCache.get(cardKey);
-  const cardOutput = cachedCardOutput ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
-  if (cardOutput.cards.length !== 1) {
-    throw createDiagnosticError("invalid-response", "AI must return exactly one Anki card", { service: "ai" });
-  }
-  const sanitizedCardOutput = { cards: cardOutput.cards };
-  await deps.storage.cardCache.put(cardKey, sanitizedCardOutput);
-  const card = sanitizedCardOutput.cards[0]!;
-  let noteId: number | undefined;
+  const cachedCard = await deps.storage.cardCache.get(cardKey);
+  const card = cachedCard ?? await deps.ai.ankiCard({ settings, sentence: payload.sentence, token: payload.token });
+  await deps.storage.cardCache.put(cardKey, card);
+  let noteId: number;
   try {
-    noteId = await deps.anki.createNote({ settings, card, token: payload.token });
+    noteId = await deps.anki.createNote({ settings, card });
   } catch (error) {
     const diagnostic = diagnosticPayloadFrom(error, {
       reason: "service-error",
@@ -163,24 +175,10 @@ async function handleWordClicked(
     }
     throw error;
   }
-  if (noteId === undefined) {
-    throw createDiagnosticError("service-error", "AnkiConnect did not create a note", { service: "anki" });
-  }
-
-  await persistAfterExternalCommit("carded-word", () => deps.storage.cardedWords.put(wordKey, {
-      key: wordKey,
-      lang: "en",
-      lemma: payload.token.lemma.toLocaleLowerCase("en-US"),
-      createdAt: now
-    }));
-  await persistAfterExternalCommit("lexicon-card-created", () => deps.storage.lexicon.update(wordKey, (current) => {
-    const clicked = markRecordClicked(
-      current ?? createCandidateRecord(payload.token.lemma, payload.token.surface, "en", now),
-      now,
-      settings.learningWindowDays
-    );
-    return { ...clicked, ankiNoteIds: [...new Set([...clicked.ankiNoteIds, noteId])] };
-  }).then(() => undefined));
+  await persistAfterExternalCommit("card-created", () => deps.storage.recordCardCreated({
+    lang: "en", lemma: payload.token.lemma, surface: payload.token.surface,
+    createdAt: now, learningWindowDays: settings.learningWindowDays
+  }));
   return { kind: "created", payload: { noteId } };
 }
 

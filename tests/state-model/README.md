@@ -1,6 +1,6 @@
-# Runtime state-machine tests
+# State-model tests
 
-These tests evaluate Glossa's production coordinators. They do not parse or validate `docs/async-state-model.md`; the document supplies the expected behavior, while the tests drive real code and observe messages, DOM state, storage records, and external-call order.
+`tests/state-model` runs the production coordinators under Vitest. The tests observe protocol messages, DOM state, storage records, and external-call order; they do not parse a design document or implement a second state machine.
 
 Run the focused suite with:
 
@@ -8,19 +8,6 @@ Run the focused suite with:
 npm run test:state-model
 ```
 
-The state-model files are also ordinary Vitest tests, so `npm test` and `npm run verify` include them. A failure is evidence that production behavior no longer satisfies the model and must not be converted to a skipped, todo, or expected-failure test.
+The same tests are included in `npm run test` and `npm run verify`. Use deferred promises and explicit release points for asynchronous ordering. Assertions should target observable behavior and side effects, while type contracts and owner boundaries remain enforced by the production modules.
 
-The harness follows three rules:
-
-- Asynchronous order is controlled with deferred promises and explicit release points, never timing collisions.
-- Assertions target observable state and effects: port-message order, effect-call count, persistent records, response diagnostics, and rendered DOM state.
-- A production closure may be extracted into a small injectable coordinator for testability, but the extraction must preserve runtime semantics; tests must still execute the same coordinator used by the extension entry point.
-
-Coverage is split by owner boundary:
-
-- `glossPort.test.ts`: port command serialization, protocol identity/order, ACK/done ordering, and disconnect closure.
-- `generationCache.test.ts`: generation retirement and the manual-clear barrier against stale reads and writes.
-- `vocabularyCard.test.ts`: vocabulary interleavings, card cardinality and external-commit semantics, duplicate suppression, and reset barriers.
-- `contentUi.test.ts`: occurrence feedback priority, shortcut coordination, latest-result UI tasks, and popup live-state toggling.
-- `knownWordsLane.test.ts`: FIFO admission for refresh/add/remove/clear and final-view consistency.
-- Playwright scenarios cover browser-only owners such as overlapping content scans, settings document loading, Anki catalog revisions, and shortcut capture.
+The ownership rationale is recorded in [ADR-0001](../../docs/adr/0001-async-ownership-and-contracts.md). `docs/async-state-model.md` is background context only; changing it must not be required to make a test pass.
