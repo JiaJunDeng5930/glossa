@@ -157,6 +157,44 @@ test("options preserves a local edit made while a settings save is pending", asy
   await expect(page.locator("textarea[name=ankiPrompt]")).toHaveValue("Keep the current sentence.");
 });
 
+test("options refreshes external Anki choices before a later non-Anki save", async ({ page }) => {
+  await loadOptions(page);
+
+  await page.locator("textarea[name=glossPrompt]").fill("Keep the local prompt.");
+  await page.locator("input[name=learningWindowDays]").fill("0");
+  await expect(page.locator("#status")).toHaveText("设置格式无效，请修正后再保存");
+
+  const external = {
+    ...DEFAULT_SETTINGS,
+    learningWindowDays: 7,
+    prompts: { ...DEFAULT_SETTINGS.prompts, gloss: "Replace the prompt." },
+    anki: { ...DEFAULT_SETTINGS.anki, deck: "External deck", modelName: "External model" }
+  };
+  const settingsGetsBefore = await page.evaluate(() => {
+    const requests = (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string }> }).requests;
+    return requests.filter((request) => request.type === "settings.get").length;
+  });
+  await page.evaluate((next) => {
+    (Reflect.get(window, "__glossaUiFixture") as { emitSettings(settings: GlossaSettings): void }).emitSettings(next);
+  }, external);
+  await expect.poll(() => page.evaluate(() => {
+    const requests = (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string }> }).requests;
+    return requests.filter((request) => request.type === "settings.get").length;
+  })).toBe(settingsGetsBefore + 1);
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("External deck");
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("External model");
+  await expect(page.locator("textarea[name=glossPrompt]")).toHaveValue("Keep the local prompt.");
+
+  await page.locator("input[name=learningWindowDays]").fill("8");
+  await page.locator("#save-settings").click();
+  await expect(page.locator("#status")).toHaveText("已保存");
+  const patch = await page.evaluate(() => {
+    const requests = (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string; payload: unknown }> }).requests;
+    return requests.filter((request) => request.type === "settings.patch").at(-1)?.payload as { patch: Record<string, unknown> };
+  });
+  expect(patch.patch).toEqual({ learningWindowDays: 8, prompts: { gloss: "Keep the local prompt." } });
+});
+
 test("options refreshes Anki through a real click after the endpoint changes", async ({ page }) => {
   await loadUiPage(page, "options");
   await installUiRuntime(page);

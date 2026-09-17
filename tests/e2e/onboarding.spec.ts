@@ -80,6 +80,43 @@ test("onboarding keeps the form inert until settings arrive", async ({ page }) =
   await expect(page.locator("#settings-form")).toHaveJSProperty("inert", false);
 });
 
+test("onboarding refreshes external Anki choices before saving the active non-Anki step", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page);
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
+
+  for (let index = 0; index < 3; index += 1) await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "word-list");
+  await page.locator("select[name=knownWordList]").selectOption("senior-high");
+
+  const external = {
+    ...DEFAULT_SETTINGS,
+    anki: { ...DEFAULT_SETTINGS.anki, deck: "External deck", modelName: "External model" }
+  };
+  const settingsGetsBefore = await page.evaluate(() => {
+    const requests = (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string }> }).requests;
+    return requests.filter((request) => request.type === "settings.get").length;
+  });
+  await page.evaluate((next) => {
+    (Reflect.get(window, "__glossaUiFixture") as { emitSettings(settings: typeof next): void }).emitSettings(next);
+  }, external);
+  await expect.poll(() => page.evaluate(() => {
+    const requests = (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string }> }).requests;
+    return requests.filter((request) => request.type === "settings.get").length;
+  })).toBe(settingsGetsBefore + 1);
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("External deck");
+  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("External model");
+  await expect(page.locator("select[name=knownWordList]")).toHaveValue("senior-high");
+
+  await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "appearance");
+  const patch = await page.evaluate(() => {
+    const requests = (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string; payload: unknown }> }).requests;
+    return requests.filter((request) => request.type === "settings.patch").at(-1)?.payload as { patch: Record<string, unknown> };
+  });
+  expect(patch.patch).toEqual({ knownWordList: "senior-high" });
+});
+
 test("onboarding locks verified AI settings while advancing", async ({ page }) => {
   await loadUiPage(page, "onboarding");
   await installUiRuntime(page, {
