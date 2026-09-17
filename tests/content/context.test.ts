@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { renderWord } from "./fixtures";
 import { createSentenceContextResolver } from "../../src/content/context";
 
 describe("sentence context resolver", () => {
@@ -7,6 +8,7 @@ describe("sentence context resolver", () => {
     document.body.innerHTML = `<div>${Array.from({ length: 12 }, (_, index) => `<span>word${index}${index === 11 ? "." : " "}</span>`).join("")}</div>`;
     const nodes = Array.from(document.querySelectorAll("span"), (element) => element.firstChild as Text);
     const resolveContext = createSentenceContextResolver();
+    resolveContext(nodes[0]!, 0, nodes[0]!.data.trimEnd().length);
     const findSpy = vi.spyOn(Array.prototype, "find");
 
     const contexts = nodes.map((node) => resolveContext(node, 0, node.data.trimEnd().length));
@@ -25,7 +27,7 @@ describe("sentence context resolver", () => {
     const context = resolveContext(node, 8, 15);
 
     expect(context).toMatchObject({
-      text: "Visible archive appears clearly.",
+      text: "Visible archive  appears clearly.",
       startOffset: 8,
       endOffset: 15
     });
@@ -60,7 +62,8 @@ describe("sentence context resolver", () => {
   });
 
   it("uses page context around a rendered token without a semantic container", () => {
-    document.body.innerHTML = `Before <span data-glossa-token="t-archive" data-glossa-owned="1"><span data-glossa-token-label="t-archive">档案</span><span data-glossa-token-surface="t-archive">archive</span></span> appears here.`;
+    document.body.innerHTML = `Before archive appears here.`;
+    renderWord(document.body.firstChild as Text, "archive");
     const node = document.querySelector("[data-glossa-token-surface]")!.firstChild as Text;
     const resolveContext = createSentenceContextResolver();
 

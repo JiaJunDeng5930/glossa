@@ -22,10 +22,7 @@ export function createCandidateRecord(
     surface,
     lang,
     state: "candidate",
-    shownCount: 0,
-    clickCount: 0,
-    lastShownAt: now,
-    ankiNoteIds: []
+    lastShownAt: now
   };
 }
 
@@ -34,7 +31,6 @@ export function markRecordShown(record: VocabularyRecord, now: number): Vocabula
   return {
     ...record,
     state: record.state === "candidate" ? "known" : record.state,
-    shownCount: record.shownCount + 1,
     lastShownAt: now
   };
 }
@@ -45,7 +41,6 @@ export function markRecordClicked(record: VocabularyRecord, now: number, learnin
     ...record,
     state: "learning_active",
     expiresAt: now + learningWindowDays * DAY_MS,
-    clickCount: record.clickCount + 1,
     lastClickedAt: now
   };
 }

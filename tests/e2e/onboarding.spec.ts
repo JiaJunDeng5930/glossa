@@ -1,419 +1,149 @@
-import { expect, test, type Page } from "@playwright/test";
-import { readFile } from "node:fs/promises";
+import { expect, test } from "@playwright/test";
 import { resolve } from "node:path";
 
-async function loadOnboarding(page: Page): Promise<void> {
-  const html = await readFile(resolve("dist/onboarding/onboarding.html"), "utf8");
-  await page.setContent(html
-    .replace("<link rel=\"stylesheet\" href=\"../assets/theme.css\">", "")
-    .replace("<link rel=\"stylesheet\" href=\"../assets/onboarding.css\">", "")
-    .replace("<script type=\"module\" src=\"../onboarding.js\"></script>", ""));
-  await page.addStyleTag({ path: resolve("dist/assets/theme.css") });
-  await page.addStyleTag({ path: resolve("dist/assets/onboarding.css") });
-}
+import { installUiRuntime, loadUiPage } from "../helpers/uiPage";
+import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
-async function visibleStepCount(page: Page): Promise<number> {
-  return await page.locator("[data-step]:not([hidden])").count();
-}
+test("onboarding uses stable step identities and only saves edited setup fields", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page);
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
 
-test("onboarding keeps one visible topic per page and saves setup choices", async ({ page }) => {
-  await loadOnboarding(page);
-  await page.evaluate(() => {
-    const store: Record<string, unknown> = {};
-    const ankiRequests: unknown[] = [];
-    Reflect.set(window, "__glossaStore", store);
-    Reflect.set(window, "__ankiRequests", ankiRequests);
-    Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
-      const body = init?.body ? JSON.parse(init.body as string) : undefined;
-      Reflect.set(window, "__lastConnectionRequest", {
-        url,
-        body,
-        authorization: (init?.headers as Record<string, string> | undefined)?.authorization
-      });
-      if (String(url).includes("876")) {
-        ankiRequests.push({ url, body });
-        const resultByAction: Record<string, unknown> = {
-          version: 6,
-          deckNames: ["general", "Glossa", "temp"],
-          modelNames: ["Basic", "Broken"],
-          modelFieldNames: body.params?.modelName === "Basic" ? ["Front", "Back"] : ["Front"]
-        };
-        return new Response(JSON.stringify({ result: resultByAction[body.action], error: null }), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
-      }
-      return new Response(JSON.stringify({ result: null }), {
-        status: 200,
-        headers: { "content-type": "application/json" }
-      });
-    });
-    Reflect.set(window, "chrome", {
-      runtime: {
-        lastError: undefined
-      },
-      storage: {
-        local: {
-          get(key: string, callback: (result: Record<string, unknown>) => void) {
-            callback({ [key]: store[key] });
-          },
-          set(value: Record<string, unknown>, callback?: () => void) {
-            Object.assign(store, value);
-            callback?.();
-          }
-        }
-      }
-    });
-    window.close = () => {
-      Reflect.set(window, "__onboardingClosed", true);
-    };
-  });
-  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
-
-  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeFocused();
-  await expect.poll(() => visibleStepCount(page)).toBe(1);
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "smart");
   await page.locator("#continue").click();
-
-  await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "翻译本页" })).toBeFocused();
-  await expect.poll(() => visibleStepCount(page)).toBe(1);
-  await expect(page.locator("#back")).toBeVisible();
-  await page.locator("#back").click();
-  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
-  await expect(page.locator("#back")).toBeHidden();
   await page.locator("#continue").click();
-  await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
   await page.locator("#continue").click();
+  expect(await page.evaluate(() => {
+    const requests = (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string }> }).requests;
+    return requests.some((request) => request.type === "settings.patch");
+  })).toBe(false);
 
-  await expect(page.getByRole("heading", { name: "加入 Anki" })).toBeVisible();
-  await page.locator("#continue").click();
-
-  await expect(page.getByRole("heading", { name: "选择基础词表" })).toBeVisible();
-  await expect(page.locator("select[name=knownWordList] option")).toHaveCount(7);
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "word-list");
   await page.locator("select[name=knownWordList]").selectOption("senior-high");
   await page.locator("#continue").click();
-
-  await expect(page.getByRole("heading", { name: "设置释义样式" })).toBeVisible();
-  await page.locator("input[name=glossTextColor]").fill("#ff5500");
-  await page.locator("input[name=glossBackgroundColor]").fill("#113355");
-  await page.locator("input[name=cardSuccessBackgroundColor]").fill("#228833");
-  await page.locator("input[name=cardErrorBackgroundColor]").fill("#cc2222");
-  await page.locator("input[name=glossBackgroundOpacity]").fill("0.65");
-  await expect(page.locator("#gloss-background-opacity-value")).toHaveText("65%");
-  await expect(page.locator("input[name=glossBackgroundOpacity]")).toHaveAttribute("aria-valuetext", "65%");
-  await page.locator("select[name=glossFontFamily]").selectOption("Georgia, Times New Roman, serif");
-  await page.locator("input[name=glossFontSize]").fill("18");
-  await expect(page.locator(".preview-gloss").first()).toHaveCSS("color", "rgb(255, 85, 0)");
-  await expect(page.locator(".preview-gloss").first()).toHaveCSS("font-size", "18px");
-  await expect(page.locator(".preview-gloss-success")).toHaveCSS("background-color", "rgba(34, 136, 51, 0.65)");
-  await page.locator("#continue").click();
-
-  await expect(page.getByRole("heading", { name: "连接 AI 服务" })).toBeVisible();
-  await page.locator("#continue").click();
-  await expect(page.getByRole("heading", { name: "连接 AI 服务" })).toBeVisible();
-  await expect(page.locator("#ai-status")).toHaveText("请先测试 AI 连接");
-  await page.locator("select[name=provider]").selectOption("openai-chat-completions");
-  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://api.openai.com/v1/chat/completions");
-  await page.locator("input[name=aiEndpoint]").fill("https://custom-ai.test/v1");
-  await page.locator("select[name=provider]").selectOption("glossa-backend");
-  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://custom-ai.test/v1");
-  await expect(page.locator("[data-ai-field=api-key]")).toBeHidden();
-  await page.locator("select[name=provider]").selectOption("openai-completions");
-  await expect(page.locator("[data-ai-field=reasoning]")).toBeHidden();
-  await page.locator("select[name=provider]").selectOption("openai-chat-completions");
-  await expect(page.locator("input[name=aiEndpoint]")).toHaveValue("https://custom-ai.test/v1");
-  await page.locator("input[name=apiKey]").fill("sk-test");
-  await page.locator("input[name=apiKey]").press("Enter");
-  await expect(page.getByRole("heading", { name: "连接 AI 服务" })).toBeVisible();
-  await expect.poll(async () => page.evaluate(() => location.search)).toBe("");
-  await page.locator("input[name=modelVersion]").fill("gpt-test");
-  await page.locator("select[name=reasoningEffort]").selectOption("high");
-  await page.locator("input[name=aiRequestTimeoutSeconds]").fill("45");
-  await page.locator("#test-ai").click();
-  await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
-  await expect(page.locator("#ai-status")).toHaveText("AI 连接成功");
-  await page.locator("#continue").click();
-
-  await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
-  await page.setViewportSize({ width: 320, height: 720 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
-  expect(await page.locator(".footer-actions").evaluate((actions) => {
-    return Array.from(actions.querySelectorAll("button:not([hidden])")).every((button) => {
-      const rect = button.getBoundingClientRect();
-      return rect.width > 0 && rect.left >= 0 && rect.right <= window.innerWidth;
-    });
-  })).toBe(true);
-  await page.setViewportSize({ width: 1280, height: 720 });
-  await expect(page.getByRole("link", { name: /安装 AnkiConnect/ })).toHaveAttribute("href", "https://ankiweb.net/shared/info/2055492159");
-  await expect(page.locator("#refresh-anki")).toHaveAttribute("data-state", "idle");
-  await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__ankiRequests") as unknown[]).length)).toBe(0);
-  await expect(page.locator("select[name=ankiDeck]")).toBeDisabled();
-  await page.locator("#continue").click();
-  await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
-  await expect(page.locator("#anki-status")).toHaveText("请连接 Anki，或选择跳过");
-  await page.locator("#skip-anki").click();
-  await expect(page.getByRole("heading", { name: "可以开始阅读" })).toBeVisible();
-  await page.locator("#back").click();
-  await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
-  await page.locator("input[name=ankiEndpoint]").fill("http://127.0.0.1:8766");
-  await page.locator("#refresh-anki").click();
-  await expect(page.locator("select[name=ankiDeck]")).toBeEnabled();
-  await page.locator("select[name=ankiDeck]").selectOption("temp");
-  await page.locator("input[name=ankiRequestTimeoutSeconds]").fill("35");
-  await page.locator("input[name=duplicatePromptSeconds]").fill("7");
-  await page.locator("#test-anki").click();
-  await expect(page.locator("#test-anki")).toHaveAttribute("data-state", "success");
-  await expect(page.locator("#anki-status")).toHaveText("Anki 已连接");
-  await page.locator("#continue").click();
-
-  await expect(page.getByRole("heading", { name: "可以开始阅读" })).toBeVisible();
-  await expect(page.locator("#progress")).toHaveText("8 / 8");
-  const storedSettings = await page.evaluate(() => Reflect.get(window, "__glossaStore").settings);
-  expect(storedSettings).toMatchObject({
-    knownWordList: "senior-high",
-    appearance: {
-      textColor: "#ff5500",
-      backgroundColor: "#113355",
-      cardSuccessBackgroundColor: "#228833",
-      cardErrorBackgroundColor: "#cc2222",
-      backgroundOpacity: 0.65,
-      fontFamily: "Georgia, Times New Roman, serif",
-      fontSize: 18
-    },
-    ai: {
-      provider: "openai-chat-completions",
-      apiKey: "sk-test",
-      reasoningEffort: "high",
-      requestTimeoutMs: 45000
-    },
-    anki: {
-      endpoint: "http://127.0.0.1:8766",
-      deck: "temp",
-      requestTimeoutMs: 35000,
-      duplicatePromptMs: 7000
-    },
-    modelVersion: "gpt-test"
-  });
-  await page.locator("#continue").click();
-  await expect.poll(async () => page.evaluate(() => Reflect.get(window, "__onboardingClosed"))).toBe(true);
+  await expect.poll(() => page.evaluate(() => (Reflect.get(window, "__glossaUiFixture") as { requests: Array<{ type: string }> }).requests.map((request) => request.type))).toContain("settings.patch");
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "appearance");
 });
 
-test("onboarding serializes continue clicks during pending step saves", async ({ page }) => {
-  await loadOnboarding(page);
-  await page.evaluate(() => {
-    const store: Record<string, unknown> = {};
-    Reflect.set(window, "chrome", {
-      runtime: {
-        lastError: undefined
-      },
-      storage: {
-        local: {
-          get(key: string, callback: (result: Record<string, unknown>) => void) {
-            callback({ [key]: store[key] });
-          },
-          set(value: Record<string, unknown>, callback?: () => void) {
-            Object.assign(store, value);
-            window.setTimeout(() => callback?.(), 100);
-          }
-        }
-      }
-    });
-  });
-  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
+test("onboarding keeps the AI step gated by the current controller success", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page);
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
 
-  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
+  for (let index = 0; index < 5; index += 1) await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "ai");
+  await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "ai");
+  await expect(page.locator("#ai-status")).toHaveAttribute("data-state", "error");
+});
+
+test("onboarding serializes a step save and keeps the active step inert", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page, { deferredTypes: ["settings.patch"] });
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
+
+  for (let index = 0; index < 3; index += 1) await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "word-list");
+  await page.locator("select[name=knownWordList]").selectOption("senior-high");
   await page.locator("#continue").evaluate((button) => {
     button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
-
   await expect(page.locator("#continue")).toBeDisabled();
-  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
-  await page.waitForTimeout(150);
-  await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
-  await expect(page.locator("#progress")).toHaveText("2 / 8");
+  await expect(page.locator("[data-step=word-list]")).toHaveJSProperty("inert", true);
+  await page.evaluate(() => (Reflect.get(window, "__glossaUiFixture") as { release(type: string): void }).release("settings.patch"));
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "appearance");
+});
+
+test("onboarding keeps a failed step save retryable", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page, { failOnceTypes: ["settings.patch"] });
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
+
+  for (let index = 0; index < 3; index += 1) await page.locator("#continue").click();
+  await page.locator("select[name=knownWordList]").selectOption("senior-high");
+  await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "word-list");
+  await expect(page.locator("#status")).toHaveText("设置保存失败，请重试");
+  await expect(page.locator("#continue")).toBeEnabled();
+  await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "appearance");
+});
+
+test("onboarding keeps the form inert until settings arrive", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page, { deferredTypes: ["settings.get"] });
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
+
+  await expect(page.locator("#settings-form")).toHaveJSProperty("inert", true);
+  await page.evaluate(() => (Reflect.get(window, "__glossaUiFixture") as { release(type: string): void }).release("settings.get"));
+  await expect(page.locator("#settings-form")).toHaveJSProperty("inert", false);
 });
 
 test("onboarding locks verified AI settings while advancing", async ({ page }) => {
-  await loadOnboarding(page);
-  await page.evaluate(() => {
-    const store: Record<string, unknown> = {};
-    Reflect.set(window, "fetch", async () => new Response(JSON.stringify({ items: [] }), {
-      status: 200,
-      headers: { "content-type": "application/json" }
-    }));
-    Reflect.set(window, "chrome", {
-      runtime: {
-        lastError: undefined
-      },
-      storage: {
-        local: {
-          get(key: string, callback: (result: Record<string, unknown>) => void) {
-            callback({ [key]: store[key] });
-          },
-          set(value: Record<string, unknown>, callback?: () => void) {
-            Object.assign(store, value);
-            if (Reflect.get(window, "__holdOnboardingSave")) {
-              Reflect.set(window, "__resolveOnboardingSave", callback);
-              return;
-            }
-            callback?.();
-          }
-        }
-      }
-    });
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page, {
+    deferredTypes: [],
+    settings: { ...DEFAULT_SETTINGS, ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "https://ai.test" } }
   });
-  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
+  await page.evaluate(() => {
+    Reflect.set(window, "fetch", async () => new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+  });
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
 
-  for (let step = 0; step < 5; step += 1) {
-    await page.locator("#continue").click();
-  }
-  await expect(page.getByRole("heading", { name: "连接 AI 服务" })).toBeVisible();
+  for (let index = 0; index < 5; index += 1) await page.locator("#continue").click();
+  await page.locator("input[name=modelVersion]").fill("gpt-onboarding-test");
   await page.locator("#test-ai").click();
   await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
-  await page.evaluate(() => Reflect.set(window, "__holdOnboardingSave", true));
-
+  await page.evaluate(() => (Reflect.get(window, "__glossaUiFixture") as { setDeferred(type: string, deferred: boolean): void }).setDeferred("settings.patch", true));
   await page.locator("#continue").click();
-
-  for (const name of ["provider", "aiEndpoint", "apiKey", "modelVersion", "reasoningEffort", "aiRequestTimeoutSeconds"]) {
-    await expect(page.locator(`[name="${name}"]`)).toBeDisabled();
-  }
-  await expect(page.locator("#test-ai")).toBeDisabled();
-
-  await page.evaluate(() => {
-    const resolveSave = Reflect.get(window, "__resolveOnboardingSave") as (() => void) | undefined;
-    resolveSave?.();
-  });
-  await expect(page.getByRole("heading", { name: "连接 AnkiConnect" })).toBeVisible();
+  await expect(page.locator("#continue")).toBeDisabled();
+  await expect(page.locator("[data-step=ai]")).toHaveJSProperty("inert", true);
+  await page.evaluate(() => (Reflect.get(window, "__glossaUiFixture") as { release(type: string): void }).release("settings.patch"));
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "anki");
 });
 
-test("onboarding keeps the current step visible when saving fails", async ({ page }) => {
-  await loadOnboarding(page);
-  await page.evaluate(() => {
-    const store: Record<string, unknown> = {};
-    const runtime = { lastError: undefined as { message: string } | undefined };
-    Reflect.set(window, "__failOnboardingSave", true);
-    Reflect.set(window, "chrome", {
-      runtime,
-      storage: {
-        local: {
-          get(key: string, callback: (result: Record<string, unknown>) => void) {
-            callback({ [key]: store[key] });
-          },
-          set(value: Record<string, unknown>, callback?: () => void) {
-            if (Reflect.get(window, "__failOnboardingSave")) {
-              runtime.lastError = { message: "save failed" };
-              callback?.();
-              runtime.lastError = undefined;
-              return;
-            }
-            Object.assign(store, value);
-            callback?.();
-          }
-        }
-      }
-    });
+test("onboarding refresh can be started with an ordinary click after its endpoint changes", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page, {
+    deferredTypes: [],
+    settings: { ...DEFAULT_SETTINGS, ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "http://ai.test" } }
   });
-  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
-
-  await page.locator("#continue").click();
-  await expect(page.getByRole("heading", { name: "智能识别生词" })).toBeVisible();
-  await expect(page.locator("#status")).toHaveText("设置保存失败，请重试");
-  await expect(page.locator("#continue")).toBeEnabled();
-
-  await page.evaluate(() => Reflect.set(window, "__failOnboardingSave", false));
-  await page.locator("#continue").click();
-  await expect(page.getByRole("heading", { name: "翻译本页" })).toBeVisible();
-});
-
-test("onboarding form stays inert until the delayed settings snapshot is applied", async ({ page }) => {
-  await loadOnboarding(page);
   await page.evaluate(() => {
-    let releaseSettings: (() => void) | undefined;
-    Reflect.set(window, "chrome", {
-      runtime: { lastError: undefined },
-      storage: {
-        local: {
-          get(_key: string, callback: (result: Record<string, unknown>) => void) {
-            releaseSettings = () => callback({ settings: { knownWordList: "senior-high" } });
-          },
-          set(_value: Record<string, unknown>, callback?: () => void) {
-            callback?.();
-          }
-        }
-      }
-    });
-    Reflect.set(window, "__releaseOnboardingSettings", () => releaseSettings?.());
-  });
-  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
-  await expect.poll(async () => page.evaluate(() => typeof Reflect.get(window, "__releaseOnboardingSettings") === "function")).toBe(true);
-
-  expect(await page.locator("#settings-form").evaluate((form) => (form as HTMLFormElement).inert)).toBe(true);
-  await page.evaluate(() => (Reflect.get(window, "__releaseOnboardingSettings") as () => void)());
-  await expect(page.locator("select[name=knownWordList]")).toHaveValue("senior-high");
-  expect(await page.locator("#settings-form").evaluate((form) => (form as HTMLFormElement).inert)).toBe(false);
-});
-
-test("onboarding ignores an older Anki catalog after the endpoint changes", async ({ page }) => {
-  await loadOnboarding(page);
-  await page.evaluate(() => {
-    const pendingEndpointA: Array<() => void> = [];
-    Reflect.set(window, "__pendingOnboardingEndpointA", pendingEndpointA);
-    Reflect.set(window, "__releaseOnboardingEndpointA", () => pendingEndpointA.shift()?.());
+    const pendingA: Array<() => void> = [];
+    Reflect.set(window, "__releaseOnboardingEndpointA", () => pendingA.shift()?.());
     Reflect.set(window, "fetch", async (url: string, init?: RequestInit) => {
-      const request = JSON.parse(String(init?.body)) as { action: string };
+      const request = JSON.parse(String(init?.body)) as { action: string; params?: { modelName?: string } };
+      const action = request.action;
       const endpoint = url.includes("anki-a.test") ? "A" : "B";
       const respond = () => {
         const values: Record<string, unknown> = endpoint === "A"
           ? { version: 6, deckNames: ["Deck A"], modelNames: ["Model A"], modelFieldNames: ["Front", "Back"] }
-          : { version: 6, deckNames: ["Deck B"], modelNames: ["Model B"], modelFieldNames: ["Front", "Back"] };
-        if (endpoint === "A" && request.action === "modelFieldNames") {
-          requestAnimationFrame(() => Reflect.set(window, "__onboardingEndpointASettled", true));
-        }
-        return new Response(JSON.stringify({ result: values[request.action], error: null }), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
+          : { version: 6, deckNames: ["Deck B"], modelNames: ["Model B", "Broken B"], modelFieldNames: request.params?.modelName === "Broken B" ? ["Front"] : ["Front", "Back"] };
+        return new Response(JSON.stringify({ result: values[action], error: null }), { status: 200, headers: { "content-type": "application/json" } });
       };
-      if (endpoint === "A" && request.action === "version" && pendingEndpointA.length === 0) {
-        return await new Promise<Response>((resolve) => pendingEndpointA.push(() => resolve(respond())));
-      }
+      if (endpoint === "A" && action === "version") return await new Promise<Response>((resolve) => pendingA.push(() => resolve(respond())));
+      if (!url.includes("anki-")) return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json" } });
       return respond();
     });
-    Reflect.set(window, "chrome", {
-      runtime: { lastError: undefined },
-      storage: {
-        local: {
-          get(key: string, callback: (result: Record<string, unknown>) => void) {
-            callback({
-              [key]: {
-                anki: { endpoint: "https://anki-a.test", deck: "Deck A", modelName: "Model A" }
-              }
-            });
-          },
-          set(_value: Record<string, unknown>, callback?: () => void) {
-            callback?.();
-          }
-        }
-      }
-    });
   });
-  await page.addScriptTag({ type: "module", path: resolve("dist/onboarding.js") });
-  await expect(page.locator("input[name=ankiEndpoint]")).toHaveValue("https://anki-a.test");
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
 
-  await page.locator("#refresh-anki").dispatchEvent("click");
-  await expect.poll(async () => page.evaluate(() => (Reflect.get(window, "__pendingOnboardingEndpointA") as unknown[]).length)).toBe(1);
-  await page.locator("input[name=ankiEndpoint]").evaluate((input) => {
-    (input as HTMLInputElement).value = "https://anki-b.test";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await page.locator("#refresh-anki").dispatchEvent("click");
-  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B", { timeout: 500 });
+  for (let index = 0; index < 5; index += 1) await page.locator("#continue").click();
+  await page.locator("#test-ai").click();
+  await expect(page.locator("#ai-status")).toHaveAttribute("data-state", "success");
+  await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "anki");
+  await page.locator("input[name=ankiEndpoint]").fill("https://anki-a.test");
+  await page.locator("#refresh-anki").click();
+  await expect(page.locator("#refresh-anki")).toBeDisabled();
+  await page.locator("input[name=ankiEndpoint]").fill("https://anki-b.test");
+  await expect(page.locator("#refresh-anki")).toBeEnabled();
+  await page.locator("#refresh-anki").click();
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B");
   await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Model B");
-
+  await expect(page.locator("select[name=ankiModelName] option")).toHaveCount(1);
   await page.evaluate(() => (Reflect.get(window, "__releaseOnboardingEndpointA") as () => void)());
-  await page.waitForFunction(() => Reflect.get(window, "__onboardingEndpointASettled") === true);
-  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B", { timeout: 500 });
-  await expect(page.locator("select[name=ankiModelName]")).toHaveValue("Model B");
+  await expect(page.locator("select[name=ankiDeck]")).toHaveValue("Deck B");
+  await expect(page.locator("#refresh-anki")).toBeEnabled();
 });

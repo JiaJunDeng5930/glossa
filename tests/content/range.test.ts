@@ -50,7 +50,6 @@ function tokenFromText(textNode: Text, surface: string, scanVersion: number): Sc
     nodeStartOffset,
     nodeEndOffset,
     sentenceText: text,
-    sourceText: surface,
     sourceFingerprint: createSourceFingerprint(text, nodeStartOffset, nodeEndOffset),
     scanVersion
   };

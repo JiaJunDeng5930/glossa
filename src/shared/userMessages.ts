@@ -56,7 +56,7 @@ function ankiMessage(error: ErrorPayload | undefined): string {
     return "Anki 服务返回格式错误";
   }
   if (error.reason === "service-error") {
-    return ankiServiceMessage(error.message);
+    return ankiServiceMessage(error.code);
   }
   return "Anki 操作失败，请检查当前牌组和卡片模板";
 }
@@ -68,17 +68,17 @@ function runtimeMessage(error: ErrorPayload | undefined): string {
   return "扩展运行时错误";
 }
 
-function ankiServiceMessage(message: string): string {
-  if (/model.*not found|Anki model was not found/i.test(message)) {
+function ankiServiceMessage(code: ErrorPayload["code"]): string {
+  if (code === "anki-model-not-found") {
     return "Anki 卡片模板不存在";
   }
-  if (/deck.*not found|Anki deck was not found/i.test(message)) {
+  if (code === "anki-deck-not-found") {
     return "Anki 牌组不存在";
   }
-  if (/No compatible Anki model was found/i.test(message)) {
+  if (code === "anki-no-compatible-model") {
     return "Anki 没有可用的卡片模板";
   }
-  if (/empty/i.test(message)) {
+  if (code === "anki-empty-card") {
     return "Anki 卡片内容为空";
   }
   return "Anki 操作失败，请检查当前牌组和卡片模板";

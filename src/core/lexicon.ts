@@ -1,43 +1,6 @@
-import { KNOWN_WORD_LIST_IDS, type KnownWordListId } from "../shared/types";
+import { KNOWN_WORD_LISTS, type KnownWordListId } from "../shared/knownWordLists";
+export { KNOWN_WORD_LISTS } from "../shared/knownWordLists";
 import { normalizeLemma } from "./state";
-
-export const KNOWN_WORD_LISTS = [
-  {
-    id: KNOWN_WORD_LIST_IDS[0],
-    label: "初中课标词汇",
-    file: "assets/known-wordlists/junior-high.txt"
-  },
-  {
-    id: KNOWN_WORD_LIST_IDS[1],
-    label: "高中课标词汇",
-    file: "assets/known-wordlists/senior-high.txt"
-  },
-  {
-    id: KNOWN_WORD_LIST_IDS[2],
-    label: "四级 4882 词",
-    file: "assets/known-wordlists/cet4.txt"
-  },
-  {
-    id: KNOWN_WORD_LIST_IDS[3],
-    label: "六级 5953 词",
-    file: "assets/known-wordlists/cet6.txt"
-  },
-  {
-    id: KNOWN_WORD_LIST_IDS[4],
-    label: "托福 6586 词",
-    file: "assets/known-wordlists/toefl.txt"
-  },
-  {
-    id: KNOWN_WORD_LIST_IDS[5],
-    label: "GRE 10326 词",
-    file: "assets/known-wordlists/gre.txt"
-  },
-  {
-    id: KNOWN_WORD_LIST_IDS[6],
-    label: "COCA 20000 高频词",
-    file: "assets/known-wordlists/coca-20000.txt"
-  }
-] as const satisfies readonly { id: KnownWordListId; label: string; file: string }[];
 
 const FALLBACK_KNOWN_WORDS = [
   "a",

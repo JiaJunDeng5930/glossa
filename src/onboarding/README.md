@@ -1,7 +1,7 @@
 # Onboarding
 
-The onboarding page is a first-run extension page opened after a fresh install. It teaches one action or setting per step, then writes setup choices through the shared `ExtensionStorage.settings` contract.
+`src/onboarding/onboarding.ts` is the first-run page entry point. It teaches the minimum setup needed to use Glossa and persists each completed choice through the shared settings RPC.
 
-Step order: word familiarity recognition, page translation, Anki click behavior, known-word preset, gloss appearance, AI service, AnkiConnect, and completion.
+The page uses the same form normalization and connection-operation boundaries as the options page. AI verification is required before onboarding completes; Anki remains an optional step. Step identity and navigation rules live in the page source so this note does not duplicate the flow table.
 
-Form normalization, appearance preview, and connection checks come from `src/shared/settingsForm.ts`, matching the options page behavior.
+Use `npm run typecheck` and the onboarding Playwright scenario when changing this page.

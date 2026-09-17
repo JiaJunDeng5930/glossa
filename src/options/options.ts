@@ -1,33 +1,46 @@
-import { createCandidateRecord, markRecordShown, normalizeLemma, vocabularyKey } from "../core/state";
+import { normalizeLemma } from "../core/state";
 import { diagnosticErrorFrom } from "../shared/errors";
-import { createOptionsMessage, messageTimeoutError, validateBackgroundResponse } from "../shared/messages";
-import { defaultEndpointForProvider } from "../shared/settings";
 import {
-  aiConnectionKey,
-  ankiConnectionKey,
+  createRequestMessage,
+  type RequestMessage,
+  type ResponseMessage,
+  type RuntimeRequestType
+} from "../shared/messages";
+import { sendRuntimeRequest } from "../shared/runtimeClient";
+import { aiConnectionKey, ankiConnectionKey, diffSettings, type SettingsPatch } from "../shared/settings";
+import {
+  claimFeedback,
+  createAnkiCatalogController,
+  createConnectionController,
+  createFeedbackChannel,
+  type OperationToken,
+  type OperationState
+} from "../shared/connectionController";
+import {
   applyAppearancePreview,
-  loadAnkiCatalog,
+  applyProviderChange,
+  applyProviderFields,
   pickExistingValue,
   populateKnownWordSelect,
+  populateProviderSelect,
+  populateReasoningEffortSelect,
+  readFormInput,
   readSettingsForm,
-  runSettingsConnectionTest,
+  setFormInput,
   setSelectOptions,
   setTestState,
-  testAiSettings,
-  testAnkiSettings,
   writeSettingsForm
 } from "../shared/settingsForm";
+import { createSettingsDraft, type SettingsDraft } from "../shared/settingsDraft";
 import { formatShortcutFromEvent, normalizeShortcut } from "../shared/shortcut";
-import { DEFAULT_SETTINGS, type AiSettings, type BackgroundResponseMessage, type GlossaSettings, type OptionsToBackgroundMessage, type VocabularyRecord } from "../shared/types";
+import { DEFAULT_SETTINGS, type AiSettings, type AnkiSettings, type GlossaSettings, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
-import { createExtensionStorage } from "../storage/db";
+import { createAnkiClient } from "../shared/services/ankiClient";
+import { createAiClient } from "../shared/services/aiClient";
 import { createKnownWordsOperationLane } from "./knownWordsOperationLane";
-import { removeKnownRecord } from "./knownWordStorage";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 form.inert = true;
-const extensionStorage = createExtensionStorage();
-const knownWordsOperationLane = createKnownWordsOperationLane();
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const saveButton = document.querySelector<HTMLButtonElement>("#save-settings")!;
 const saveLabel = saveButton.querySelector<HTMLElement>(".save-label")!;
@@ -64,282 +77,289 @@ const knownWordInput = document.querySelector<HTMLInputElement>("#known-word-inp
 const addKnownWordButton = document.querySelector<HTMLButtonElement>("#add-known-word")!;
 const knownWordsStatus = document.querySelector<HTMLOutputElement>("#known-words-status")!;
 const knownWordsList = document.querySelector<HTMLElement>("#known-words-list")!;
+const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
+const reasoningSelect = form.elements.namedItem("reasoningEffort") as HTMLSelectElement;
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
+
+let draft: SettingsDraft | undefined;
+let aiController: ReturnType<typeof createConnectionController<GlossaSettings>> | undefined;
+let ankiController: ReturnType<typeof createConnectionController<AnkiSettings>> | undefined;
+let catalogController: ReturnType<typeof createAnkiCatalogController<AnkiSettings, { decks: string[]; modelNames: string[] }>> | undefined;
 let capturingShortcutName: "shortcutKey" | "translateShortcutKey" | undefined;
 let pendingShortcut = "";
-let settingsRevision = 0;
-let testedAiSettings: string | undefined;
-let testedAnkiSettings: string | undefined;
-let aiConnectionTestRevision = 0;
-let ankiConnectionTestRevision = 0;
-let ankiCatalogRevision = 0;
+let providerBeforeInput: AiSettings["provider"] | undefined;
+let formValidationError = false;
+const ankiFeedback = createFeedbackChannel();
+let knownWordsViewRevision = 0;
+const knownWordsOperationLane = createKnownWordsOperationLane();
 
+populateProviderSelect(providerSelect);
+populateReasoningEffortSelect(reasoningSelect);
 populateKnownWordSelect(knownWordListSelect);
 setupSectionNavigation();
 setSaveState("clean");
+installStorageListener();
 void loadSettings().catch(() => setStatus("设置加载失败，请重新打开页面", "error"));
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  void persistSettings();
+  void persistForm();
+});
+
+form.addEventListener("input", () => editDraftFromForm());
+
+providerSelect.addEventListener("input", () => {
+  providerBeforeInput = draft?.value.ai.provider;
+});
+providerSelect.addEventListener("change", () => {
+  const provider = readFormInput(form, "provider") as AiSettings["provider"];
+  const previousProvider = providerBeforeInput ?? draft?.value.ai.provider ?? provider;
+  providerBeforeInput = undefined;
+  applyProviderChange(form, previousProvider, provider);
+  editDraftFromForm();
 });
 
 testAiButton.addEventListener("click", () => {
-  const nextSettings = readSettingsForm(form);
-  const connectionKey = aiConnectionKey(nextSettings);
-  const revision = ++aiConnectionTestRevision;
-  testedAiSettings = connectionKey;
-  void runSettingsConnectionTest(
-    testAiButton,
-    () => testAiSettings(nextSettings),
-    "ai",
-    setAiStatus,
-    "AI 连接可用",
-    () => revision === aiConnectionTestRevision
-  ).then(() => {
-    if (revision === aiConnectionTestRevision) {
-      invalidateConnectionTests(readSettingsForm(form));
-    }
-  });
+  if (canRunSettingsOperation()) aiController?.test();
 });
-
 testAnkiButton.addEventListener("click", () => {
-  const nextSettings = readSettingsForm(form);
-  const connectionKey = ankiConnectionKey(nextSettings);
-  const revision = ++ankiConnectionTestRevision;
-  testedAnkiSettings = connectionKey;
-  void runSettingsConnectionTest(
-    testAnkiButton,
-    () => testAnkiSettings(nextSettings),
-    "anki",
-    setAnkiStatus,
-    "Anki 连接可用",
-    () => revision === ankiConnectionTestRevision
-  ).then(() => {
-    if (revision === ankiConnectionTestRevision) {
-      invalidateConnectionTests(readSettingsForm(form));
-    }
-  });
+  if (canRunSettingsOperation()) ankiController?.test();
 });
-
 refreshAnkiButton.addEventListener("click", () => {
-  void refreshAnkiOptions(readSettingsForm(form), { reportStatus: true });
+  if (canRunSettingsOperation()) catalogController?.refresh();
 });
+ankiDeckSelect.addEventListener("change", editDraftFromForm);
+ankiModelNameSelect.addEventListener("change", editDraftFromForm);
 
-resetCardHistoryButton.addEventListener("click", () => {
-  void resetCardHistory();
-});
-
+resetCardHistoryButton.addEventListener("click", () => void resetCardHistory());
 resetGlossPromptButton.addEventListener("click", () => {
-  setInput("glossPrompt", DEFAULT_SETTINGS.prompts.gloss);
-  updatePreview(readSettingsForm(form));
-  markSettingsDirty();
+  setFormInput(form, "glossPrompt", DEFAULT_SETTINGS.prompts.gloss);
+  editDraftFromForm();
 });
-
 resetAnkiPromptButton.addEventListener("click", () => {
-  setInput("ankiPrompt", DEFAULT_SETTINGS.prompts.ankiCard);
-  markSettingsDirty();
+  setFormInput(form, "ankiPrompt", DEFAULT_SETTINGS.prompts.ankiCard);
+  editDraftFromForm();
 });
-
-clearGlossCacheButton.addEventListener("click", () => {
-  void clearGlossCache();
-});
+clearGlossCacheButton.addEventListener("click", () => void clearGlossCache());
 
 openKnownWordsButton.addEventListener("click", () => {
   knownWordsDialog.showModal();
-  void knownWordsOperationLane.run(() => refreshKnownWords());
+  const viewRevision = ++knownWordsViewRevision;
+  void knownWordsOperationLane.run(() => refreshKnownWords("", viewRevision));
 });
-
 closeKnownWordsButton.addEventListener("click", () => {
+  knownWordsViewRevision += 1;
   knownWordsDialog.close();
 });
-
 knownWordForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  void knownWordsOperationLane.run(() => addKnownWord());
+  void knownWordsOperationLane.run(() => addKnownWord(knownWordsViewRevision));
 });
-
 clearKnownWordsButton.addEventListener("click", () => {
-  void knownWordsOperationLane.run(() => clearKnownWords());
+  void knownWordsOperationLane.run(() => clearKnownWords(knownWordsViewRevision));
 });
-
 knownWordsNav.addEventListener("click", (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>("button[data-letter]");
-  if (!button?.dataset.letter) {
-    return;
+  if (button?.dataset.letter) {
+    document.querySelector<HTMLElement>(`#known-words-${button.dataset.letter}`)?.scrollIntoView({ block: "start" });
   }
-  document.querySelector<HTMLElement>(`#known-words-${button.dataset.letter}`)?.scrollIntoView({ block: "start" });
 });
 
-const providerSelect = form.elements.namedItem("provider") as HTMLSelectElement;
-const apiKeyField = document.querySelector<HTMLElement>("[data-ai-field='api-key']")!;
-const reasoningField = document.querySelector<HTMLElement>("[data-ai-field='reasoning']")!;
-let currentProvider = providerSelect.value as AiSettings["provider"];
-providerSelect.addEventListener("change", () => {
-  const provider = readInput("provider") as AiSettings["provider"];
-  const endpoint = readInput("aiEndpoint").trim();
-  if (!endpoint || endpoint === defaultEndpointForProvider(currentProvider)) {
-    setInput("aiEndpoint", defaultEndpointForProvider(provider));
-  }
-  currentProvider = provider;
-  updateProviderFields(provider);
-});
-
-shortcutCapture.addEventListener("click", () => {
-  startShortcutCapture("shortcutKey", shortcutCapture);
-});
-
-translateShortcutCapture.addEventListener("click", () => {
-  startShortcutCapture("translateShortcutKey", translateShortcutCapture);
-});
-
+shortcutCapture.addEventListener("click", () => startShortcutCapture("shortcutKey", shortcutCapture));
+translateShortcutCapture.addEventListener("click", () => startShortcutCapture("translateShortcutKey", translateShortcutCapture));
 document.addEventListener("keydown", (event) => {
-  if (!capturingShortcutName) {
-    return;
-  }
+  if (!capturingShortcutName) return;
   event.preventDefault();
   event.stopPropagation();
   pendingShortcut = formatShortcutFromEvent(event);
   shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
-  if (!isModifierKey(event.key)) {
-    finishShortcutCapture();
-  }
+  if (!isModifierKey(event.key)) finishShortcutCapture();
 });
-
 document.addEventListener("keyup", (event) => {
-  if (!capturingShortcutName || !pendingShortcut) {
-    return;
-  }
+  if (!capturingShortcutName || !pendingShortcut) return;
   event.preventDefault();
   event.stopPropagation();
-  if (isModifierKey(event.key)) {
-    finishShortcutCapture();
-  }
+  if (isModifierKey(event.key)) finishShortcutCapture();
 });
 
-form.addEventListener("input", () => {
-  const nextSettings = readSettingsForm(form);
-  updatePreview(nextSettings);
-  invalidateConnectionTests(nextSettings);
-  // Settings use an explicit save commit so users can adjust several related fields as one change.
-  markSettingsDirty();
-});
-
-function invalidateConnectionTests(nextSettings: GlossaSettings): void {
-  if (testedAiSettings && aiConnectionKey(nextSettings) !== testedAiSettings) {
-    testedAiSettings = undefined;
-    aiConnectionTestRevision += 1;
-    setTestState(testAiButton, "idle");
-    setAiStatus("");
-  }
-  if (testedAnkiSettings && ankiConnectionKey(nextSettings) !== testedAnkiSettings) {
-    testedAnkiSettings = undefined;
-    ankiConnectionTestRevision += 1;
-    setTestState(testAnkiButton, "idle");
-    setAnkiStatus("");
-  }
+function editDraftFromForm(): void {
+  syncDraftFromForm();
 }
 
-function readInput(name: string): string {
-  return (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value;
-}
-
-function setInput(name: string, value: string): void {
-  (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value = value;
-}
-
-type StatusState = "dirty" | "pending" | "success" | "error" | "";
-type SettingsSaveState = "clean" | "dirty" | "saving" | "error";
-
-function setStatus(value: string, state: StatusState = value ? "error" : ""): void {
-  statusOutput.value = value;
-  statusOutput.dataset.state = state;
-}
-
-function setSaveState(state: SettingsSaveState): void {
-  const labels: Record<SettingsSaveState, string> = {
-    clean: "保存",
-    dirty: "保存更改",
-    saving: "保存中…",
-    error: "重试保存"
-  };
-  saveButton.dataset.state = state;
-  saveButton.disabled = state === "saving";
-  saveLabel.textContent = labels[state];
-}
-
-function markSettingsDirty(message = "有未保存的更改"): void {
-  settingsRevision += 1;
-  if (saveButton.dataset.state === "saving") {
-    return;
-  }
-  setSaveState("dirty");
-  setStatus(message, "dirty");
-}
-
-async function persistSettings(): Promise<void> {
-  const submittedRevision = settingsRevision;
-  setSaveState("saving");
-  setStatus("正在保存…", "pending");
+function syncDraftFromForm(): GlossaSettings | undefined {
+  if (!draft) return undefined;
+  let next: GlossaSettings;
   try {
-    await saveSettings(readSettingsForm(form));
-    if (settingsRevision === submittedRevision) {
-      setSaveState("clean");
-      setStatus("已保存", "success");
-      return;
-    }
-    setSaveState("dirty");
-    setStatus("保存完成，仍有未保存的更改", "dirty");
+    next = readSettingsForm(form, draft.value);
   } catch {
-    setSaveState("error");
-    setStatus("设置保存失败，请重试", "error");
+    markFormInvalid();
+    return undefined;
+  }
+  const wasInvalid = formValidationError;
+  formValidationError = false;
+  const patch = diffSettings(draft.value, next);
+  if (Object.keys(patch).length > 0) draft.edit(patch);
+  updatePreview(draft.value);
+  updateControllers(draft.value);
+  if (wasInvalid) {
+    setStatus("", "");
+    setSaveState(draft.saving ? "saving" : draft.dirty ? "dirty" : "clean");
+  }
+  return draft.value;
+}
+
+function markFormInvalid(): void {
+  formValidationError = true;
+  aiController?.invalidate();
+  ankiController?.invalidate();
+  catalogController?.invalidate();
+  setSaveState("error");
+  setStatus("设置格式无效，请修正后再保存", "error");
+}
+
+function canRunSettingsOperation(): boolean {
+  if (!formValidationError) return true;
+  setStatus("设置格式无效，请修正后再保存", "error");
+  return false;
+}
+
+function installStorageListener(): void {
+  chrome.storage?.onChanged?.addListener((changes, areaName) => {
+    if (areaName === "local" && "settings" in changes) void refreshSettingsFromWorker();
+  });
+}
+
+async function refreshSettingsFromWorker(): Promise<void> {
+  try {
+    const settings = await getSettings();
+    draft?.acceptExternal(settings);
+    if (!draft) return;
+    if (!formValidationError) writeSettingsForm(form, draft.value);
+    applyProviderFields(form, draft.value.ai.provider);
+    updatePreview(draft.value);
+    updateControllers(draft.value);
+  } catch {
+    setStatus("设置刷新失败，请重试", "error");
   }
 }
 
-function setupSectionNavigation(): void {
-  const entries = Array.from(document.querySelectorAll<HTMLAnchorElement>(".section-nav a[href^='#']")).flatMap((link) => {
-    const section = document.getElementById(link.hash.slice(1));
-    return section ? [{ link, section }] : [];
-  });
-  if (entries.length === 0) {
+async function loadSettings(): Promise<void> {
+  const settings = await getSettings();
+  draft = createSettingsDraft({ initial: settings, persist: persistSettings });
+  formValidationError = false;
+  draft.subscribe((next) => setSaveState(next.saving ? "saving" : next.dirty ? "dirty" : "clean"));
+  writeSettingsForm(form, settings);
+  shortcutCapture.textContent = settings.shortcutKey;
+  translateShortcutCapture.textContent = settings.translateShortcutKey;
+  applyProviderFields(form, settings.ai.provider);
+  setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
+  setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
+  setAnkiSelectsEnabled(false);
+  updatePreview(settings);
+  createControllers(settings);
+  form.inert = false;
+  void knownWordsOperationLane.run(() => refreshKnownWords());
+}
+
+function createControllers(settings: GlossaSettings): void {
+  const aiClient = createAiClient();
+  const ankiClient = createAnkiClient();
+  aiController = createConnectionController<GlossaSettings>({
+    identity: aiConnectionKey,
+    run: (value, signal) => aiClient.probe(value, signal),
+    errorFallback: { reason: "service-error", message: "AI 连接检测失败", service: "ai" }
+  }, settings);
+  ankiController = createConnectionController<AnkiSettings>({
+    identity: (value) => ankiConnectionKey({ ...settings, anki: value }),
+    run: (value, signal) => ankiClient.probe(value, signal),
+    errorFallback: { reason: "service-error", message: "Anki 连接检测失败", service: "anki" }
+  }, settings.anki);
+  catalogController = createAnkiCatalogController<AnkiSettings, { decks: string[]; modelNames: string[] }>({
+    identity: (value) => JSON.stringify([value.endpoint, value.requestTimeoutMs]),
+    run: (value, signal) => ankiClient.loadCatalog(value, signal),
+    errorFallback: { reason: "service-error", message: "Anki 选项读取失败", service: "anki" }
+  }, settings.anki);
+  aiController.subscribe(renderAiState);
+  ankiController.subscribe(renderAnkiState);
+  catalogController.subscribe(renderCatalogState);
+}
+
+function updateControllers(settings: GlossaSettings): void {
+  aiController?.updateSettings(settings);
+  ankiController?.updateSettings(settings.anki);
+  catalogController?.updateSettings(settings.anki);
+}
+
+function renderAiState(state: OperationState<void>): void {
+  if (state.phase === "pending") {
+    setTestState(testAiButton, "loading");
+    setAiStatus("正在测试 AI 连接…", "pending");
+  } else if (state.phase === "success") {
+    setTestState(testAiButton, "success");
+    setAiStatus("AI 连接可用", "success");
+  } else if (state.phase === "error") {
+    setTestState(testAiButton, "error");
+    setAiStatus(userMessageForError(state.error, "ai"), "error");
+  } else {
+    setTestState(testAiButton, "idle");
+    setAiStatus("", "");
+  }
+}
+
+function renderAnkiState(state: OperationState<void>, token: OperationToken | undefined): void {
+  const ownsOutput = claimFeedback(ankiFeedback, state, token);
+  if (state.phase === "pending") {
+    setTestState(testAnkiButton, "loading");
+    if (ownsOutput) setAnkiStatus("正在测试 Anki 连接…", "pending");
+  } else if (state.phase === "success") {
+    setTestState(testAnkiButton, "success");
+    if (ownsOutput) setAnkiStatus("Anki 连接可用", "success");
+  } else if (state.phase === "error") {
+    setTestState(testAnkiButton, "error");
+    if (ownsOutput) setAnkiStatus(userMessageForError(state.error, "anki"), "error");
+  } else {
+    setTestState(testAnkiButton, "idle");
+    if (ownsOutput) setAnkiStatus("", "");
+  }
+}
+
+function renderCatalogState(state: OperationState<{ decks: string[]; modelNames: string[] }>, token: OperationToken | undefined): void {
+  const ownsOutput = claimFeedback(ankiFeedback, state, token);
+  if (!draft) return;
+  if (state.phase === "pending") {
+    setTestState(refreshAnkiButton, "loading");
+    setAnkiSelectsEnabled(false);
+    setCatalogPlaceholders(draft.value.anki);
+    if (ownsOutput) setAnkiStatus("正在读取 Anki 选项…", "pending");
     return;
   }
-  let animationFrame: number | undefined;
-  const render = (): void => {
-    animationFrame = undefined;
-    const atDocumentEnd = window.scrollY > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
-    let activeEntry = atDocumentEnd ? entries.at(-1)! : entries[0]!;
-    if (!atDocumentEnd) {
-      const readingMarker = Math.min(window.innerHeight * 0.32, 240);
-      let activeTop = Number.NEGATIVE_INFINITY;
-      for (const entry of entries) {
-        const sectionTop = entry.section.getBoundingClientRect().top;
-        if (sectionTop > readingMarker) {
-          break;
-        }
-        if (sectionTop > activeTop) {
-          activeEntry = entry;
-          activeTop = sectionTop;
-        }
-      }
+  if (state.phase === "success") {
+    setTestState(refreshAnkiButton, "success");
+    const deck = pickExistingValue(draft.value.anki.deck, state.value.decks);
+    const modelName = pickExistingValue(draft.value.anki.modelName, state.value.modelNames);
+    setSelectOptions(ankiDeckSelect, state.value.decks, deck);
+    setSelectOptions(ankiModelNameSelect, state.value.modelNames, modelName);
+    setAnkiSelectsEnabled(state.value.decks.length > 0 && state.value.modelNames.length > 0);
+    const patch: SettingsPatch = { anki: {} };
+    if (deck !== draft.value.anki.deck) patch.anki!.deck = deck;
+    if (modelName !== draft.value.anki.modelName) patch.anki!.modelName = modelName;
+    if (Object.keys(patch.anki!).length > 0) {
+      draft.edit(patch);
+      updateControllers(draft.value);
     }
-    for (const entry of entries) {
-      if (entry === activeEntry) {
-        entry.link.setAttribute("aria-current", "location");
-      } else {
-        entry.link.removeAttribute("aria-current");
-      }
-    }
-  };
-  const scheduleRender = (): void => {
-    if (animationFrame === undefined) {
-      animationFrame = window.requestAnimationFrame(render);
-    }
-  };
-  window.addEventListener("scroll", scheduleRender, { passive: true });
-  window.addEventListener("resize", scheduleRender, { passive: true });
-  window.addEventListener("hashchange", scheduleRender);
-  render();
+    if (ownsOutput) setAnkiStatus(state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "Anki 选项已更新" : "Anki 没有可用的牌组或兼容模板", state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "success" : "error");
+    return;
+  }
+  setTestState(refreshAnkiButton, state.phase === "error" ? "error" : "idle");
+  setAnkiSelectsEnabled(false);
+  setCatalogPlaceholders(draft.value.anki);
+  if (state.phase === "error" && ownsOutput) setAnkiStatus(userMessageForError(state.error, "anki"), "error");
+  if (state.phase === "idle" && ownsOutput) setAnkiStatus("", "");
+}
+
+function setCatalogPlaceholders(settings: AnkiSettings): void {
+  setSelectOptions(ankiDeckSelect, [settings.deck], settings.deck);
+  setSelectOptions(ankiModelNameSelect, [settings.modelName], settings.modelName);
 }
 
 function setAnkiSelectsEnabled(enabled: boolean): void {
@@ -347,43 +367,129 @@ function setAnkiSelectsEnabled(enabled: boolean): void {
   ankiModelNameSelect.disabled = !enabled;
 }
 
-async function refreshKnownWords(successStatus = ""): Promise<void> {
+async function persistSettings(patch: SettingsPatch): Promise<GlossaSettings> {
+  const response = await request(createRequestMessage("options", "settings.patch", { patch }));
+  return expectResponse(response, "settings.response").payload.settings;
+}
+
+async function getSettings(): Promise<GlossaSettings> {
+  const response = await request(createRequestMessage("options", "settings.get", {}));
+  return expectResponse(response, "settings.response").payload.settings;
+}
+
+function request<T extends RuntimeRequestType>(message: RequestMessage<T>): Promise<ResponseMessage<T>> {
+  return sendRuntimeRequest(message) as Promise<ResponseMessage<T>>;
+}
+
+function expectResponse<T extends RuntimeRequestType, R extends ResponseMessage<T>["type"]>(response: ResponseMessage<T>, type: R): Extract<ResponseMessage<T>, { type: R }> {
+  if (response.type === "error") {
+    throw diagnosticErrorFrom(response.payload, { reason: "runtime", message: "后台请求失败", service: "runtime" });
+  }
+  if (response.type !== type) throw new Error(`Unexpected response type: ${response.type}`);
+  return response as Extract<ResponseMessage<T>, { type: R }>;
+}
+
+async function persistForm(): Promise<void> {
+  if (!draft || draft.saving) return;
+  if (!syncDraftFromForm() || formValidationError) return;
+  setSaveState("saving");
+  setStatus("正在保存…", "pending");
   try {
-    const records = await extensionStorage.lexicon.listByState("known");
+    await draft.save();
+    if (!syncDraftFromForm() || formValidationError) return;
+    writeSettingsForm(form, draft.value);
+    shortcutCapture.textContent = draft.value.shortcutKey;
+    translateShortcutCapture.textContent = draft.value.translateShortcutKey;
+    applyProviderFields(form, draft.value.ai.provider);
+    updatePreview(draft.value);
+    updateControllers(draft.value);
+    setSaveState(draft.dirty ? "dirty" : "clean");
+    setStatus(draft.dirty ? "保存完成，仍有未保存的更改" : "已保存", draft.dirty ? "dirty" : "success");
+  } catch {
+    if (formValidationError) {
+      setSaveState("error");
+      setStatus("设置格式无效，请修正后再保存", "error");
+    } else {
+      setSaveState("error");
+      setStatus("设置保存失败，请重试", "error");
+    }
+  }
+}
+
+function setStatus(value: string, state: "dirty" | "pending" | "success" | "error" | "" = value ? "error" : ""): void {
+  statusOutput.value = value;
+  statusOutput.dataset.state = state;
+}
+
+type SettingsSaveState = "clean" | "dirty" | "saving" | "error";
+function setSaveState(state: SettingsSaveState): void {
+  const labels: Record<SettingsSaveState, string> = { clean: "保存", dirty: "保存更改", saving: "保存中…", error: "重试保存" };
+  saveButton.dataset.state = state;
+  saveButton.disabled = state === "saving";
+  saveLabel.textContent = labels[state];
+}
+
+function updatePreview(settings: GlossaSettings): void {
+  applyAppearancePreview({ preview: glossPreview, labels: glossPreviewLabels, successLabels: glossPreviewSuccessLabels, errorLabels: glossPreviewErrorLabels }, settings.appearance);
+  const opacityPercent = `${Math.round(settings.appearance.backgroundOpacity * 100)}%`;
+  glossBackgroundOpacityValue.value = opacityPercent;
+  glossBackgroundOpacityInput.setAttribute("aria-valuetext", opacityPercent);
+}
+
+async function resetCardHistory(): Promise<void> {
+  if (!window.confirm("重置制卡记录？Glossa 的卡片缓存与重复提醒记录会被清空，Anki 中已有卡片会保留。")) return;
+  const owner = ankiFeedback.claimExternal();
+  resetCardHistoryButton.disabled = true;
+  setAnkiStatus("正在重置制卡记录…", "pending");
+  try {
+    const response = await request(createRequestMessage("options", "card.history.reset", {}));
+    expectResponse(response, "card.history.reset.ok");
+    if (ankiFeedback.owns(owner)) setAnkiStatus("制卡记录已重置，Anki 中已有卡片保持不变", "success");
+  } catch (error) {
+    if (ankiFeedback.owns(owner)) setAnkiStatus(userMessageForError(diagnosticErrorFrom(error, { reason: "runtime", message: "制卡记录重置失败", service: "runtime" }).payload, "runtime"), "error");
+  } finally {
+    resetCardHistoryButton.disabled = false;
+  }
+}
+
+async function clearGlossCache(): Promise<void> {
+  setStatus("", "");
+  try {
+    const response = await request(createRequestMessage("options", "gloss.cache.clear", {}));
+    expectResponse(response, "gloss.cache.cleared");
+    setStatus("翻译缓存已清空", "success");
+  } catch (error) {
+    setStatus(userMessageForError(diagnosticErrorFrom(error, { reason: "runtime", message: "翻译缓存清空失败", service: "runtime" }).payload, "runtime"), "error");
+  }
+}
+
+async function refreshKnownWords(successStatus = "", viewRevision = knownWordsViewRevision): Promise<void> {
+  try {
+    const response = await request(createRequestMessage("options", "known.words.list", {}));
+    const records = expectResponse(response, "known.words.list.result").payload.records;
+    if (viewRevision !== knownWordsViewRevision) return;
     renderKnownWords(records);
     setKnownWordsStatus(successStatus, successStatus ? "success" : "");
   } catch {
+    if (viewRevision !== knownWordsViewRevision) return;
     knownWordsSummary.textContent = "词汇读取失败。";
     setKnownWordsStatus("词汇读取失败，请重试", "error");
   }
 }
 
-async function addKnownWord(): Promise<void> {
+async function addKnownWord(viewRevision: number): Promise<void> {
   const lemma = normalizeLemma(knownWordInput.value);
   if (!/^[a-z]+(?:['-][a-z]+)*$/i.test(lemma)) {
     setKnownWordsStatus("请输入一个英文单词，可包含连字符或撇号", "error");
     return;
   }
-  setKnownWordsStatus("");
   addKnownWordButton.disabled = true;
   setKnownWordsStatus("正在添加…", "pending");
   try {
-    const now = Date.now();
-    const key = vocabularyKey("en", lemma);
-    const updated = await extensionStorage.lexicon.update(key, (existing) => {
-      const shown = markRecordShown(existing ?? createCandidateRecord(lemma, lemma, "en", now), now);
-      return { ...shown, state: "known", ankiNoteIds: existing?.ankiNoteIds ?? shown.ankiNoteIds };
-    });
-    if ((updated?.ankiNoteIds.length ?? 0) > 0) {
-      await extensionStorage.cardedWords.put(key, {
-        key,
-        lang: updated?.lang ?? "en",
-        lemma,
-        createdAt: updated?.lastClickedAt ?? updated?.lastShownAt ?? now
-      });
-    }
+    const response = await request(createRequestMessage("options", "known.words.add", { lemma }));
+    expectResponse(response, "known.words.changed");
     knownWordInput.value = "";
-    await refreshKnownWords("已添加");
+    await refreshKnownWords("已添加", viewRevision);
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
   } finally {
@@ -414,24 +520,6 @@ function renderKnownWords(records: VocabularyRecord[]): void {
   knownWordsList.replaceChildren(...letters.map((letter) => renderKnownWordsSection(letter, groups.get(letter)!)));
 }
 
-function setLocalStatus(output: HTMLOutputElement, value: string, state: "pending" | "success" | "error" | "" = value ? "error" : ""): void {
-  output.value = value;
-  output.dataset.state = state;
-}
-
-function setAiStatus(value: string, state?: "pending" | "success" | "error" | ""): void {
-  setLocalStatus(aiStatus, value, state);
-}
-
-function setAnkiStatus(value: string, state?: "pending" | "success" | "error" | ""): void {
-  setLocalStatus(ankiStatus, value, state);
-}
-
-function setKnownWordsStatus(value: string, state: "pending" | "success" | "error" | "" = value ? "error" : ""): void {
-  knownWordsStatus.value = value;
-  knownWordsStatus.dataset.state = state;
-}
-
 function renderKnownWordsSection(letter: string, records: VocabularyRecord[]): HTMLElement {
   const section = document.createElement("section");
   section.id = `known-words-${letter}`;
@@ -448,89 +536,36 @@ function renderKnownWordsSection(letter: string, records: VocabularyRecord[]): H
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "移除";
-    remove.addEventListener("click", () => {
-      void knownWordsOperationLane.run(() => removeKnownWord(record));
-    });
+    remove.addEventListener("click", () => void knownWordsOperationLane.run(() => removeKnownWord(record.lemma, knownWordsViewRevision)));
     row.append(word, remove);
     return row;
   }));
   return section;
 }
 
-async function removeKnownWord(record: VocabularyRecord): Promise<void> {
+async function removeKnownWord(lemma: string, viewRevision: number): Promise<void> {
   setKnownWordsStatus("正在移除…", "pending");
   try {
-    await removeKnownRecord(extensionStorage, record);
-    await refreshKnownWords("已移除");
+    const response = await request(createRequestMessage("options", "known.words.remove", { lemma }));
+    expectResponse(response, "known.words.changed");
+    await refreshKnownWords("已移除", viewRevision);
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
   }
 }
 
-async function clearKnownWords(): Promise<void> {
-  if (!window.confirm("清空所有已掌握词汇？这些词之后会重新出现在页面释义中。Anki 卡片和制卡记录会保留。")) {
-    return;
-  }
+async function clearKnownWords(viewRevision: number): Promise<void> {
+  if (!window.confirm("清空所有已掌握词汇？这些词之后会重新出现在页面释义中。Anki 卡片和制卡记录会保留。")) return;
   clearKnownWordsButton.disabled = true;
   setKnownWordsStatus("正在清空…", "pending");
   try {
-    const records = await extensionStorage.lexicon.listByState("known");
-    await Promise.all(records.map((record) => removeKnownRecord(extensionStorage, record)));
-    await refreshKnownWords("已清空");
+    const response = await request(createRequestMessage("options", "known.words.clear", {}));
+    expectResponse(response, "known.words.changed");
+    await refreshKnownWords("已清空", viewRevision);
   } catch {
     setKnownWordsStatus("词汇操作失败，请重试", "error");
     clearKnownWordsButton.disabled = false;
   }
-}
-
-async function clearGlossCache(): Promise<void> {
-  setStatus("");
-  try {
-    await runtimeMessage(createOptionsMessage("gloss.cache.clear", {}));
-    setStatus("翻译缓存已清空", "success");
-  } catch (error) {
-    setStatus(userMessageForError(diagnosticErrorFrom(error, {
-      reason: "runtime",
-      message: "Gloss cache clear failed",
-      service: "runtime"
-    }).payload, "runtime"));
-  }
-}
-
-function runtimeMessage(message: OptionsToBackgroundMessage, timeoutMs: number | null = 5_000): Promise<BackgroundResponseMessage> {
-  return new Promise((resolve, reject) => {
-    if (!globalThis.chrome?.runtime?.sendMessage) {
-      reject(new Error("chrome.runtime.sendMessage is unavailable"));
-      return;
-    }
-    const timeout = timeoutMs === null ? undefined : globalThis.setTimeout(() => {
-      reject(messageTimeoutError(message));
-    }, timeoutMs);
-    chrome.runtime.sendMessage(message, (rawResponse: unknown) => {
-      if (timeout !== undefined) {
-        globalThis.clearTimeout(timeout);
-      }
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      try {
-        const response = validateBackgroundResponse(rawResponse, message);
-        if (response.type === "error") {
-          reject(diagnosticErrorFrom(response.payload, {
-            reason: "runtime",
-            message: "Background request failed",
-            service: "runtime"
-          }));
-          return;
-        }
-        resolve(response);
-      } catch (validationError) {
-        reject(validationError);
-      }
-    });
-  });
 }
 
 function populateKnownWordsNav(letters: string[]): void {
@@ -544,112 +579,19 @@ function populateKnownWordsNav(letters: string[]): void {
   }));
 }
 
-async function refreshAnkiOptions(settings: GlossaSettings, options: { reportStatus: boolean }): Promise<void> {
-  const revision = ++ankiCatalogRevision;
-  const previousDeck = ankiDeckSelect.value;
-  const previousModelName = ankiModelNameSelect.value;
-  setTestState(refreshAnkiButton, "loading");
-  setAnkiSelectsEnabled(false);
-  if (options.reportStatus) {
-    setAnkiStatus("正在读取 Anki 选项…", "pending");
-  }
-  try {
-    const catalog = await loadAnkiCatalog(settings.anki.endpoint, settings.anki.requestTimeoutMs);
-    if (revision !== ankiCatalogRevision || readInput("ankiEndpoint").trim() !== settings.anki.endpoint) {
-      return;
-    }
-    const deck = pickExistingValue(settings.anki.deck, catalog.decks);
-    const modelName = pickExistingValue(settings.anki.modelName, catalog.modelNames);
-    setSelectOptions(ankiDeckSelect, catalog.decks, deck);
-    setSelectOptions(ankiModelNameSelect, catalog.modelNames, modelName);
-    setAnkiSelectsEnabled(true);
-    setTestState(refreshAnkiButton, "idle");
-    invalidateConnectionTests(readSettingsForm(form));
-    if (ankiDeckSelect.value !== previousDeck || ankiModelNameSelect.value !== previousModelName) {
-      markSettingsDirty("Anki 选项已更新，等待保存");
-      setAnkiStatus("Anki 选项已更新", "success");
-    } else if (options.reportStatus) {
-      setAnkiStatus("Anki 选项已更新", "success");
-    }
-  } catch (error) {
-    if (revision !== ankiCatalogRevision || readInput("ankiEndpoint").trim() !== settings.anki.endpoint) {
-      return;
-    }
-    setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
-    setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
-    setAnkiSelectsEnabled(true);
-    setTestState(refreshAnkiButton, "error");
-    if (options.reportStatus) {
-      setAnkiStatus(userMessageForError(diagnosticErrorFrom(error, {
-        reason: "service-error",
-        message: "Connection test failed",
-        service: "anki"
-      }).payload, "anki"), "error");
-    }
-  }
+function setAiStatus(value: string, state: "pending" | "success" | "error" | "" = value ? "error" : ""): void {
+  aiStatus.value = value;
+  aiStatus.dataset.state = state;
 }
 
-function finishShortcutCapture(): void {
-  if (!capturingShortcutName) {
-    return;
-  }
-  const otherName = capturingShortcutName === "shortcutKey" ? "translateShortcutKey" : "shortcutKey";
-  if (normalizeShortcut(pendingShortcut) === normalizeShortcut(readInput(otherName))) {
-    shortcutButtonFor(capturingShortcutName).textContent = "按下快捷键";
-    shortcutErrorFor(capturingShortcutName).textContent = capturingShortcutName === "shortcutKey"
-      ? "与翻译快捷键冲突，请按其他组合键。"
-      : "与选词快捷键冲突，请按其他组合键。";
-    pendingShortcut = "";
-    return;
-  }
-  setInput(capturingShortcutName, pendingShortcut);
-  shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
-  shortcutErrorFor(capturingShortcutName).textContent = "";
-  capturingShortcutName = undefined;
-  pendingShortcut = "";
-  markSettingsDirty("快捷键已记录，等待保存");
+function setAnkiStatus(value: string, state: "pending" | "success" | "error" | "" = value ? "error" : ""): void {
+  ankiStatus.value = value;
+  ankiStatus.dataset.state = state;
 }
 
-function isModifierKey(key: string): boolean {
-  return key === "Control" || key === "Alt" || key === "Shift" || key === "Meta";
-}
-
-function updatePreview(settings: GlossaSettings): void {
-  applyAppearancePreview({
-    preview: glossPreview,
-    labels: glossPreviewLabels,
-    successLabels: glossPreviewSuccessLabels,
-    errorLabels: glossPreviewErrorLabels
-  }, settings.appearance);
-  const opacityPercent = `${Math.round(settings.appearance.backgroundOpacity * 100)}%`;
-  glossBackgroundOpacityValue.value = opacityPercent;
-  glossBackgroundOpacityInput.setAttribute("aria-valuetext", opacityPercent);
-}
-
-async function resetCardHistory(): Promise<void> {
-  if (!window.confirm("重置制卡记录？Glossa 的卡片缓存与重复提醒记录会被清空，Anki 中已有卡片会保留。")) {
-    return;
-  }
-  resetCardHistoryButton.disabled = true;
-  setAnkiStatus("正在重置制卡记录…", "pending");
-  try {
-    // @behavior glossa.card_creation.history_reset.options_request The reset control delegates history mutation to the service worker so it can coordinate active card creation.
-    await runtimeMessage(createOptionsMessage("card.history.reset", {}), null);
-    setAnkiStatus("制卡记录已重置，Anki 中已有卡片保持不变", "success");
-  } catch (error) {
-    setAnkiStatus(userMessageForError(diagnosticErrorFrom(error, {
-      reason: "runtime",
-      message: "Card history reset failed",
-      service: "runtime"
-    }).payload, "runtime"), "error");
-  } finally {
-    resetCardHistoryButton.disabled = false;
-  }
-}
-
-function updateProviderFields(provider: AiSettings["provider"]): void {
-  apiKeyField.hidden = provider === "glossa-backend";
-  reasoningField.hidden = provider === "openai-completions";
+function setKnownWordsStatus(value: string, state: "pending" | "success" | "error" | "" = value ? "error" : ""): void {
+  knownWordsStatus.value = value;
+  knownWordsStatus.dataset.state = state;
 }
 
 function startShortcutCapture(name: "shortcutKey" | "translateShortcutKey", button: HTMLButtonElement): void {
@@ -660,29 +602,68 @@ function startShortcutCapture(name: "shortcutKey" | "translateShortcutKey", butt
   button.focus();
 }
 
-function shortcutButtonFor(name: "shortcutKey" | "translateShortcutKey"): HTMLButtonElement {
-  return name === "shortcutKey" ? shortcutCapture : translateShortcutCapture;
+function finishShortcutCapture(): void {
+  if (!capturingShortcutName) return;
+  const otherName = capturingShortcutName === "shortcutKey" ? "translateShortcutKey" : "shortcutKey";
+  if (normalizeShortcut(pendingShortcut) === normalizeShortcut(readFormInput(form, otherName))) {
+    shortcutButtonFor(capturingShortcutName).textContent = "按下快捷键";
+    shortcutErrorFor(capturingShortcutName).textContent = capturingShortcutName === "shortcutKey" ? "与翻译快捷键冲突，请按其他组合键。" : "与选词快捷键冲突，请按其他组合键。";
+    pendingShortcut = "";
+    return;
+  }
+  setFormInput(form, capturingShortcutName, pendingShortcut);
+  shortcutButtonFor(capturingShortcutName).textContent = pendingShortcut;
+  shortcutErrorFor(capturingShortcutName).textContent = "";
+  capturingShortcutName = undefined;
+  pendingShortcut = "";
+  editDraftFromForm();
 }
 
-async function loadSettings(): Promise<void> {
-  const settings = await extensionStorage.settings.get();
-  writeSettingsForm(form, settings);
-  shortcutCapture.textContent = settings.shortcutKey;
-  translateShortcutCapture.textContent = settings.translateShortcutKey;
-  currentProvider = settings.ai.provider;
-  updateProviderFields(settings.ai.provider);
-  setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
-  setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
-  setAnkiSelectsEnabled(true);
-  updatePreview(settings);
-  void knownWordsOperationLane.run(() => refreshKnownWords());
-  form.inert = false;
+function isModifierKey(key: string): boolean {
+  return key === "Control" || key === "Alt" || key === "Shift" || key === "Meta";
+}
+
+function shortcutButtonFor(name: "shortcutKey" | "translateShortcutKey"): HTMLButtonElement {
+  return name === "shortcutKey" ? shortcutCapture : translateShortcutCapture;
 }
 
 function shortcutErrorFor(name: "shortcutKey" | "translateShortcutKey"): HTMLElement {
   return name === "shortcutKey" ? shortcutCaptureError : translateShortcutCaptureError;
 }
 
-async function saveSettings(settings: GlossaSettings): Promise<void> {
-  await extensionStorage.settings.set(settings);
+function setupSectionNavigation(): void {
+  const entries = Array.from(document.querySelectorAll<HTMLAnchorElement>(".section-nav a[href^='#']")).flatMap((link) => {
+    const section = document.getElementById(link.hash.slice(1));
+    return section ? [{ link, section }] : [];
+  });
+  if (entries.length === 0) return;
+  let animationFrame: number | undefined;
+  const render = (): void => {
+    animationFrame = undefined;
+    const atDocumentEnd = window.scrollY > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+    let activeEntry = atDocumentEnd ? entries.at(-1)! : entries[0]!;
+    if (!atDocumentEnd) {
+      const readingMarker = Math.min(window.innerHeight * 0.32, 240);
+      let activeTop = Number.NEGATIVE_INFINITY;
+      for (const entry of entries) {
+        const sectionTop = entry.section.getBoundingClientRect().top;
+        if (sectionTop > readingMarker) break;
+        if (sectionTop > activeTop) {
+          activeEntry = entry;
+          activeTop = sectionTop;
+        }
+      }
+    }
+    for (const entry of entries) {
+      if (entry === activeEntry) entry.link.setAttribute("aria-current", "location");
+      else entry.link.removeAttribute("aria-current");
+    }
+  };
+  const scheduleRender = (): void => {
+    if (animationFrame === undefined) animationFrame = window.requestAnimationFrame(render);
+  };
+  window.addEventListener("scroll", scheduleRender, { passive: true });
+  window.addEventListener("resize", scheduleRender);
+  window.addEventListener("hashchange", scheduleRender);
+  render();
 }

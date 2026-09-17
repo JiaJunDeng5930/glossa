@@ -1,3 +1,4 @@
+import { renderWord } from "./fixtures";
 import { describe, expect, it } from "vitest";
 
 import { scanDocumentTextInChunks, type ScanChunk, type ScanChunkOptions, type ScanStats } from "../../src/content/scanner";
@@ -51,14 +52,8 @@ describe("content scanner", () => {
   });
 
   it("keeps rendered source words in sentence context during rescans", async () => {
-    document.body.innerHTML = `
-      <main>
-        <p>A <span data-glossa-token="patient" data-glossa-owned="1" class="notranslate" translate="no">
-          <span data-glossa-token-label="patient" data-glossa-owned="1">耐心</span>
-          <span data-glossa-token-surface="patient" data-glossa-owned="1" translate="no">patient</span>
-        </span> reader notices subtle patterns.</p>
-      </main>
-    `;
+    document.body.innerHTML = `<p>A patient reader notices subtle patterns.</p>`;
+    renderWord(document.querySelector("p")!.firstChild as Text, "patient");
 
     const result = await scanDocumentText(document, new Set());
     const subtle = result.tokens.find((token) => token.surface === "subtle");
@@ -136,7 +131,7 @@ describe("content scanner", () => {
 
     expect(token).toMatchObject({
       scanVersion: 7,
-      sourceText: "Submit",
+      surface: "Submit",
       nodeStartOffset: 0,
       nodeEndOffset: 6
     });
@@ -329,3 +324,14 @@ async function scanDocumentText(
   });
   return { sentences, tokens, stats };
 }
+
+it('yields and can cancel while discovering a tree with no word candidates', async () => {
+  document.body.innerHTML = `<main>${'<span>1234</span>'.repeat(3000)}</main>`;
+  let keepGoing = true;
+  let timerRan = false;
+  setTimeout(() => { timerRan = true; keepGoing = false; }, 0);
+  const stats = await scanDocumentTextInChunks(document, new Set(), { shouldContinue: () => keepGoing }, () => {});
+  expect(timerRan).toBe(true);
+  expect(stats.candidateWords).toBe(0);
+  expect(stats.rejectedByText).toBeLessThan(3000);
+});

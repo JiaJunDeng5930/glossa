@@ -2,7 +2,9 @@ import { DEFAULT_SETTINGS, type AppearanceSettings, type GlossTokenPayload } fro
 import GLOSSA_THEME from "../shared/theme.json";
 import { userMessageForError } from "../shared/userMessages";
 import type { ScannedToken } from "./scanner";
+import { occurrencesFor } from "./occurrence";
 import { validateTokenForRender } from "./range";
+import { glossRefreshKey } from "./scanner";
 
 export interface GlossOverlay {
   applyTokenOutcome(token: ScannedToken | undefined, outcome: GlossTokenPayload, scanVersion: number): RenderSummary;
@@ -14,6 +16,7 @@ export interface GlossOverlay {
   clear(): void;
   pruneDisconnected(): number;
   ownsMutation(mutation: MutationRecord): boolean;
+  refreshKeys(): Set<string>;
 }
 
 export interface RenderSummary {
@@ -30,29 +33,13 @@ export interface CardFeedbackInput {
   message?: string;
 }
 
-type BadgeDisplayKind = "gloss" | "feedback";
-
-interface RenderCandidate {
-  display: string;
-  status: GlossTokenPayload["status"];
-  token: ScannedToken;
-  feedback?: CardFeedback;
-  displayKind?: BadgeDisplayKind;
-  userMessage?: string;
-}
-
-interface TextSegment {
-  node: Text;
-  startOffset: number;
-  endOffset: number;
-  originalText: string;
-}
-
+type GlossState = { status: "none" | "pending" | "hidden" } | { status: "ready"; display: string } | { status: "error"; message: string };
+type FeedbackState = { status: "none" } | { status: Exclude<CardFeedback, "card-cancelled">; message?: string };
+interface RenderedOccurrence { token: ScannedToken; wrapper: HTMLElement; surface: HTMLElement; label: HTMLElement; width: HTMLElement; gloss: GlossState; feedback: FeedbackState }
 const STYLE_ID = "glossa-inline-style";
-const FINGERPRINT_CONTEXT_CHARS = 16;
 const INLINE_LABEL_FONT_WEIGHT = 750;
-
 export function createGlossOverlay(doc: Document, appearance: AppearanceSettings = DEFAULT_SETTINGS.appearance): GlossOverlay {
+  const registry = occurrencesFor(doc);
   const host = doc.createElement("div");
   host.id = "glossa-overlay";
   host.dataset.glossaOwned = "1";
@@ -120,27 +107,9 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
   selectionNote.className = "selection-note";
   selectionNote.dataset.glossaOwned = "1";
   selectionNote.textContent = "选择单词来制卡";
-  const layer = doc.createElement("div");
-  layer.part.add("layer");
-  shadow.append(style, veil, selectionNote, layer);
+  shadow.append(style, veil, selectionNote);
   doc.documentElement.append(host);
-  const renderedNodes = new Set<HTMLElement>();
-  const originalTextNodesByToken = new Map<string, Text>();
-  let textSegments = new WeakMap<Text, TextSegment[]>();
-  let ignoredMutationTargets = new WeakSet<Node>();
-  let ignoreResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
-
-  const rememberMutationTarget = (target: Node): void => {
-    ignoredMutationTargets.add(target);
-    if (ignoreResetTimer) {
-      globalThis.clearTimeout(ignoreResetTimer);
-    }
-    ignoreResetTimer = globalThis.setTimeout(() => {
-      ignoredMutationTargets = new WeakSet<Node>();
-      ignoreResetTimer = undefined;
-    }, 0);
-  };
-
+  const rendered = new Map<string, RenderedOccurrence>();
   const installStyle = (root: Document | ShadowRoot): void => {
     const existing = root instanceof Document
       ? root.getElementById(STYLE_ID)
@@ -292,588 +261,123 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     if (root instanceof Document) {
       const parent = root.head ?? root.documentElement;
       parent.append(inlineStyle);
-      rememberMutationTarget(parent);
+
     } else {
       root.append(inlineStyle);
-      rememberMutationTarget(root);
+
     }
   };
 
-  const clearRenderedNodes = (): void => {
-    for (const node of Array.from(renderedNodes)) {
-      const parent = node.parentNode;
-      if (!parent) {
-        renderedNodes.delete(node);
-        continue;
-      }
-      const surface = node.dataset.glossaSurface ?? "";
-      rememberMutationTarget(parent);
-      parent.replaceChild(doc.createTextNode(surface), node);
-      renderedNodes.delete(node);
-      if (node.dataset.glossaToken) {
-        originalTextNodesByToken.delete(node.dataset.glossaToken);
-      }
-    }
-    originalTextNodesByToken.clear();
-    textSegments = new WeakMap<Text, TextSegment[]>();
-  };
 
-  const pruneDisconnectedNodes = (): number => {
-    let pruned = 0;
-    for (const node of Array.from(renderedNodes)) {
-      if (node.isConnected) {
-        continue;
-      }
-      renderedNodes.delete(node);
-      if (node.dataset.glossaToken) {
-        originalTextNodesByToken.delete(node.dataset.glossaToken);
-      }
-      pruned += 1;
-    }
-    return pruned;
-  };
-
-  return {
-    applyTokenOutcome(token, outcome, scanVersion) {
-      pruneDisconnectedNodes();
-      const existing = findRenderedToken(outcome.tokenId);
-      if (outcome.status === "hidden") {
-        if (existing) {
-          if (readFeedback(existing)) {
-            existing.dataset.glossaStatus = "hidden";
-            rememberMutationTarget(existing);
-            return { result: "preserved" };
-          }
-          unwrapRenderedNode(existing);
-        }
-        return { result: "hidden" };
-      }
-      if (!token) {
-        return { result: "skipped", reason: "missing-token" };
-      }
-      if (outcome.status === "error") {
-        const userMessage = userMessageForError(outcome.error, "ai");
-        if (existing) {
-          updateRenderedNode(existing, "×", "error", "card-error", "feedback", userMessage);
-          return { result: "updated" };
-        }
-        return renderToken({ token, display: "×", status: "error", feedback: "card-error", displayKind: "feedback", userMessage }, scanVersion);
-      }
-      const display = outcome.status === "ready" ? outcome.item?.display : "...";
-      if (!display) {
-        return { result: "skipped", reason: "missing-token" };
-      }
-      if (existing) {
-        if (existing.dataset.glossaDisplay === display && existing.dataset.glossaStatus === outcome.status) {
-          return { result: "preserved" };
-        }
-        updateRenderedNode(existing, display, outcome.status);
-        return { result: "updated" };
-      }
-      return renderToken({ token, display, status: outcome.status }, scanVersion);
-    },
-    applyStalePendingOutcome(outcome) {
-      pruneDisconnectedNodes();
-      const existing = findRenderedToken(outcome.tokenId);
-      if (!existing || !isPendingNodeCurrent(existing)) {
-        return { result: "skipped", reason: "missing-token" };
-      }
-      if (outcome.status === "hidden") {
-        if (readFeedback(existing)) {
-          existing.dataset.glossaStatus = "hidden";
-          rememberMutationTarget(existing);
-          return { result: "preserved" };
-        }
-        unwrapRenderedNode(existing);
-        return { result: "hidden" };
-      }
-      if (outcome.status === "error") {
-        updateRenderedNode(existing, "×", "error", "card-error", "feedback", userMessageForError(outcome.error, "ai"));
-        return { result: "updated" };
-      }
-      if (outcome.status === "pending") {
-        return { result: "preserved" };
-      }
-      const display = outcome.item?.display;
-      if (!display) {
-        return { result: "skipped", reason: "missing-token" };
-      }
-      updateRenderedNode(existing, display, "ready");
-      return { result: "updated" };
-    },
-    applyCardFeedback(input) {
-      pruneDisconnectedNodes();
-      const existing = findRenderedToken(input.tokenId);
-      if (existing) {
-        if (input.feedback === "card-cancelled") {
-          clearCardFeedback(existing);
-          return { result: "updated" };
-        }
-        const status = readTokenStatus(existing);
-        const badge = badgeForFeedback(existing, input.feedback);
-        updateRenderedNode(existing, badge.display, status, input.feedback, badge.displayKind, input.message);
-        return { result: "updated" };
-      }
-      if (!input.token) {
-        return { result: "skipped", reason: "missing-token" };
-      }
-      if (input.feedback === "card-cancelled") {
-        return { result: "skipped", reason: "missing-token" };
-      }
-      return renderToken({
-        token: input.token,
-        display: feedbackFallback(input.feedback),
-        status: "ready",
-        feedback: input.feedback,
-        displayKind: "feedback",
-        ...(input.message ? { userMessage: input.message } : {})
-      }, input.token.scanVersion);
-    },
-    setSelectionMode(active) {
-      if (active) {
-        host.dataset.glossaSelecting = "true";
-      } else {
-        delete host.dataset.glossaSelecting;
-      }
-    },
-    setAppearance(nextAppearance) {
-      appearance = nextAppearance;
-      applyAppearance(host, nextAppearance);
-      for (const node of renderedNodes) {
-        applyAppearance(node, nextAppearance);
-      }
-    },
-    markStalePendingAsError(tokenIds, message) {
-      for (const tokenId of tokenIds) {
-        const existing = findRenderedToken(tokenId);
-        if (existing && isPendingNodeCurrent(existing)) {
-          updateRenderedNode(existing, "×", "error", "card-error", "feedback", message);
-        }
-      }
-    },
-    clear() {
-      clearRenderedNodes();
-    },
-    pruneDisconnected() {
-      return pruneDisconnectedNodes();
-    },
-    ownsMutation(mutation) {
-      return ignoredMutationTargets.has(mutation.target);
-    }
-  };
-
-  function findRenderedToken(tokenId: string): HTMLElement | undefined {
-    for (const node of Array.from(renderedNodes)) {
-      if (!node.isConnected) {
-        renderedNodes.delete(node);
-        continue;
-      }
-      if (node.dataset.glossaToken === tokenId) {
-        return node;
-      }
-    }
-    return undefined;
+  function prune(): number {
+    let count = 0;
+    for (const [id, record] of rendered) if (!record.wrapper.isConnected || !registry.valid(record.token)) { rendered.delete(id); registry.unwrap(id); count++; }
+    return count;
   }
-
-  function unwrapRenderedNode(node: HTMLElement): void {
-    const parent = node.parentNode;
-    if (!parent) {
-      renderedNodes.delete(node);
-      return;
-    }
-    const surface = node.dataset.glossaSurface ?? "";
-    const originalTextNode = findOriginalTextNode(node);
-    rememberMutationTarget(parent);
-    const restored = doc.createTextNode(surface);
-    parent.replaceChild(restored, node);
-    if (originalTextNode) {
-      insertRestoredSegment(originalTextNode, node, restored);
-    }
-    renderedNodes.delete(node);
-    if (node.dataset.glossaToken) {
-      originalTextNodesByToken.delete(node.dataset.glossaToken);
-    }
-  }
-
-  function renderToken(candidate: RenderCandidate, scanVersion: number): RenderSummary {
-    if (candidate.token.scanVersion !== scanVersion) {
-      return { result: "skipped", reason: "stale-token" };
-    }
-    const location = locateTokenSegment(candidate.token, scanVersion);
-    if (!location.ok) {
-      return location.reason ? { result: "skipped", reason: location.reason } : { result: "skipped" };
-    }
-    const { segment, localStart, localEnd } = location;
-    const parent = segment.node.parentNode;
-    if (!parent) {
-      return { result: "skipped", reason: "detached-node" };
-    }
-    const root = segment.node.getRootNode();
-    if (root instanceof Document || root instanceof ShadowRoot) {
-      installStyle(root);
-    }
-    const text = segment.node.nodeValue ?? "";
-    const fragment = doc.createDocumentFragment();
-    const beforeText = text.slice(0, localStart);
-    const afterText = text.slice(localEnd);
-    const nextSegments: TextSegment[] = [];
-    if (beforeText.length > 0) {
-      const before = doc.createTextNode(beforeText);
-      fragment.append(before);
-      nextSegments.push({
-        node: before,
-        startOffset: segment.startOffset,
-        endOffset: candidate.token.nodeStartOffset,
-        originalText: segment.originalText
-      });
-    }
-    const wrapper = createTokenWrapper(candidate);
-    fragment.append(wrapper);
-    if (afterText.length > 0) {
-      const after = doc.createTextNode(afterText);
-      fragment.append(after);
-      nextSegments.push({
-        node: after,
-        startOffset: candidate.token.nodeEndOffset,
-        endOffset: segment.endOffset,
-        originalText: segment.originalText
-      });
-    }
-    replaceSegment(candidate.token.textNode, segment, nextSegments);
-    rememberMutationTarget(parent);
-    parent.replaceChild(fragment, segment.node);
-    renderedNodes.add(wrapper);
-    return { result: "rendered" };
-  }
-
-  function createTokenWrapper(candidate: RenderCandidate): HTMLElement {
+  function ensure(token: ScannedToken): RenderedOccurrence | undefined {
+    const existing = rendered.get(token.id);
+    if (existing) return existing;
+    if (!registry.token(token.id)) registry.register(token);
+    if (!registry.valid(token)) return undefined;
+    const location = registry.locate(token);
+    if (!location) return undefined;
+    const validation = validateTokenForRender(token, token.scanVersion);
+    validation.range?.detach();
+    if (!validation.ok) return undefined;
+    const root = location.node.getRootNode();
+    if (root instanceof Document || root instanceof ShadowRoot) { registry.observe(root); registry.mutate(() => installStyle(root)); }
     const wrapper = doc.createElement("span");
+    wrapper.dataset.glossaToken = token.id;
     wrapper.dataset.glossaOwned = "1";
-    wrapper.dataset.glossaToken = candidate.token.id;
-    wrapper.dataset.glossaSurface = candidate.token.sourceText;
-    wrapper.dataset.glossaDisplay = candidate.display;
-    wrapper.dataset.glossaDisplayKind = candidate.displayKind ?? "gloss";
-    if (candidate.status === "ready" && !candidate.feedback) {
-      wrapper.dataset.glossaGlossDisplay = candidate.display;
-    }
-    wrapper.dataset.glossaStatus = candidate.status;
-    if (candidate.feedback) {
-      wrapper.dataset.glossaFeedback = candidate.feedback;
-    }
-    wrapper.dataset.glossaFingerprint = candidate.token.sourceFingerprint;
-    wrapper.dataset.glossaLemma = candidate.token.lemma;
-    wrapper.dataset.glossaOriginalStart = String(candidate.token.nodeStartOffset);
-    wrapper.dataset.glossaOriginalEnd = String(candidate.token.nodeEndOffset);
-    wrapper.dataset.glossaSentence = candidate.token.sentenceText;
-    wrapper.dataset.glossaSentenceStart = String(candidate.token.startOffset);
-    wrapper.dataset.glossaSentenceEnd = String(candidate.token.endOffset);
-    const text = candidate.token.textNode.nodeValue ?? "";
-    wrapper.dataset.glossaContextBefore = text.slice(
-      Math.max(0, candidate.token.nodeStartOffset - FINGERPRINT_CONTEXT_CHARS),
-      candidate.token.nodeStartOffset
-    );
-    wrapper.dataset.glossaContextAfter = text.slice(
-      candidate.token.nodeEndOffset,
-      Math.min(text.length, candidate.token.nodeEndOffset + FINGERPRINT_CONTEXT_CHARS)
-    );
+    wrapper.dataset.glossaSurface = token.surface;
     wrapper.className = "notranslate";
     wrapper.setAttribute("translate", "no");
-    applyAccessibleStatus(wrapper, candidate.status, candidate.display, candidate.feedback, candidate.userMessage);
     applyAppearance(wrapper, appearance);
-
-    const label = doc.createElement("span");
-    label.dataset.glossaOwned = "1";
-    label.dataset.glossaTokenLabel = candidate.token.id;
-    label.dataset.glossaLabel = candidate.token.id;
-    label.dataset.glossaVisual = candidate.display;
-    label.setAttribute("translate", "no");
-
-    const width = doc.createElement("span");
-    width.dataset.glossaOwned = "1";
-    width.dataset.glossaTokenWidth = candidate.token.id;
-    width.dataset.glossaVisual = candidate.display;
-    width.setAttribute("translate", "no");
-
-    const surface = doc.createElement("span");
-    surface.dataset.glossaOwned = "1";
-    surface.dataset.glossaTokenSurface = candidate.token.id;
-    surface.setAttribute("translate", "no");
-    surface.textContent = candidate.token.sourceText;
-
+    const label = doc.createElement("span"), width = doc.createElement("span"), surface = doc.createElement("span");
+    label.dataset.glossaTokenLabel = token.id;
+    label.dataset.glossaLabel = token.id;
+    width.dataset.glossaTokenWidth = token.id;
+    surface.dataset.glossaTokenSurface = token.id;
+    for (const node of [label, width, surface]) { node.dataset.glossaOwned = "1"; node.setAttribute("translate", "no"); }
     wrapper.append(width, label, surface);
-    originalTextNodesByToken.set(candidate.token.id, candidate.token.textNode);
-    return wrapper;
+    if (!registry.wrap(token, { wrapper, surface })) return undefined;
+    const record: RenderedOccurrence = { token, wrapper, surface, label, width, gloss: { status: "none" }, feedback: { status: "none" } };
+    rendered.set(token.id, record);
+    return record;
   }
-
-  function updateRenderedNode(
-    node: HTMLElement,
-    display: string,
-    status: GlossTokenPayload["status"],
-    feedback?: Exclude<CardFeedback, "card-cancelled">,
-    displayKind: BadgeDisplayKind = "gloss",
-    userMessage?: string
-  ): void {
-    const nextFeedback = feedback ?? readFeedback(node);
-    const nextKind = visibleDisplayKind(displayKind, nextFeedback);
-    const nextDisplay = visibleDisplay(display, displayKind, nextFeedback);
-    if (
-      node.dataset.glossaDisplay === nextDisplay
-      && node.dataset.glossaDisplayKind === nextKind
-      && node.dataset.glossaStatus === status
-      && node.dataset.glossaFeedback === nextFeedback
-      && node.dataset.glossaUserMessage === userMessage
-    ) {
-      return;
+  function commit(record: RenderedOccurrence, gloss: GlossState, feedback: FeedbackState): RenderSummary {
+    record.gloss = gloss; record.feedback = feedback;
+    if (feedback.status === "none" && (gloss.status === "none" || gloss.status === "hidden")) {
+      registry.unwrap(record.token.id); rendered.delete(record.token.id); return { result: "hidden" };
     }
-    if (displayKind === "gloss" && status === "ready") {
-      node.dataset.glossaGlossDisplay = display;
-    }
-    const label = node.querySelector<HTMLElement>("[data-glossa-token-label]");
-    const width = node.querySelector<HTMLElement>("[data-glossa-token-width]");
-    if (label) {
-      label.dataset.glossaVisual = nextDisplay;
-    }
-    if (width) {
-      width.dataset.glossaVisual = nextDisplay;
-    }
-    node.dataset.glossaDisplay = nextDisplay;
-    node.dataset.glossaDisplayKind = nextKind;
-    node.dataset.glossaStatus = status;
-    if (nextFeedback) {
-      node.dataset.glossaFeedback = nextFeedback;
-    } else {
-      delete node.dataset.glossaFeedback;
-    }
-    applyAccessibleStatus(node, status, nextDisplay, nextFeedback, userMessage);
-    rememberMutationTarget(node);
+    const kind = feedback.status !== "card-pending" && gloss.status === "ready" ? "gloss" : "feedback";
+    const display = feedback.status === "card-pending" ? "..."
+      : gloss.status === "ready" ? gloss.display
+      : feedback.status !== "none" ? feedbackFallback(feedback.status)
+      : gloss.status === "pending" ? "..." : "×";
+    const message = feedback.status !== "none" && feedback.message ? feedback.message
+      : feedback.status === "card-pending" ? `${record.token.surface}：正在制卡`
+      : feedback.status === "card-success" ? `${record.token.surface}：制卡完成`
+      : feedback.status === "card-error" ? `${record.token.surface}：制卡失败`
+      : feedback.status === "card-unknown" ? `${record.token.surface}：制卡结果未知`
+      : gloss.status === "error" ? gloss.message
+      : gloss.status === "pending" ? `${record.token.surface}：正在生成释义` : `${record.token.surface}：${display}`;
+    registry.mutate(() => {
+      record.label.dataset.glossaVisual = display; record.width.dataset.glossaVisual = display;
+      record.wrapper.dataset.glossaDisplay = display;
+      record.wrapper.dataset.glossaDisplayKind = kind;
+      record.wrapper.dataset.glossaStatus = gloss.status;
+      if (feedback.status === "none") delete record.wrapper.dataset.glossaFeedback;
+      else record.wrapper.dataset.glossaFeedback = feedback.status;
+      record.wrapper.title = message; record.wrapper.setAttribute("aria-label", message);
+    });
+    return { result: "updated" };
   }
-
-  function applyAccessibleStatus(
-    node: HTMLElement,
-    status: GlossTokenPayload["status"],
-    display: string,
-    feedback: CardFeedback | undefined,
-    message: string | undefined
-  ): void {
-    if (message) {
-      node.dataset.glossaUserMessage = message;
-    } else {
-      delete node.dataset.glossaUserMessage;
-    }
-    const surface = node.dataset.glossaSurface ?? "单词";
-    const description = message
-      ?? (feedback === "card-pending"
-        ? `${surface}：正在制卡`
-        : feedback === "card-success"
-          ? `${surface}：制卡完成`
-          : feedback === "card-error"
-            ? `${surface}：制卡失败`
-            : feedback === "card-unknown"
-              ? `${surface}：制卡结果未知`
-            : status === "pending"
-              ? `${surface}：正在生成释义`
-              : `${surface}：${display}`);
-    node.title = description;
-    node.setAttribute("aria-label", description);
+  function glossFor(outcome: GlossTokenPayload): GlossState {
+    if (outcome.status === "ready") return { status: "ready", display: outcome.item!.display };
+    if (outcome.status === "error") return { status: "error", message: userMessageForError(outcome.error, "ai") };
+    return { status: outcome.status };
   }
-
-  function readTokenStatus(node: HTMLElement): GlossTokenPayload["status"] {
-    const status = node.dataset.glossaStatus;
-    return status === "pending" || status === "hidden" || status === "error" || status === "ready" ? status : "ready";
-  }
-
-  function readFeedback(node: HTMLElement): CardFeedback | undefined {
-    const feedback = node.dataset.glossaFeedback;
-    return feedback === "card-pending" || feedback === "card-success" || feedback === "card-error" || feedback === "card-unknown" ? feedback : undefined;
-  }
-
-  function badgeForFeedback(node: HTMLElement, feedback: Exclude<CardFeedback, "card-cancelled">): { display: string; displayKind: BadgeDisplayKind } {
-    if (feedback === "card-pending") {
-      return { display: feedbackFallback(feedback), displayKind: "feedback" };
-    }
-    const glossDisplay = node.dataset.glossaGlossDisplay;
-    if (glossDisplay) {
-      return { display: glossDisplay, displayKind: "gloss" };
-    }
-    const display = node.dataset.glossaDisplay;
-    if (node.dataset.glossaStatus === "ready" && node.dataset.glossaDisplayKind === "gloss" && display) {
-      return { display, displayKind: "gloss" };
-    }
-    return { display: feedbackFallback(feedback), displayKind: "feedback" };
-  }
-
-  function clearCardFeedback(node: HTMLElement): void {
-    if (readTokenStatus(node) === "hidden") {
-      unwrapRenderedNode(node);
-      return;
-    }
-    const glossDisplay = node.dataset.glossaGlossDisplay;
-    if (glossDisplay) {
-      const label = node.querySelector<HTMLElement>("[data-glossa-token-label]");
-      const width = node.querySelector<HTMLElement>("[data-glossa-token-width]");
-      if (label) {
-        label.dataset.glossaVisual = glossDisplay;
-      }
-      if (width) {
-        width.dataset.glossaVisual = glossDisplay;
-      }
-      node.dataset.glossaDisplay = glossDisplay;
-      node.dataset.glossaDisplayKind = "gloss";
-      node.dataset.glossaStatus = readTokenStatus(node);
-      delete node.dataset.glossaFeedback;
-      applyAccessibleStatus(node, readTokenStatus(node), glossDisplay, undefined, undefined);
-      rememberMutationTarget(node);
-      return;
-    }
-    unwrapRenderedNode(node);
-  }
-
-  function visibleDisplay(display: string, displayKind: BadgeDisplayKind, feedback?: CardFeedback): string {
-    if (displayKind === "gloss" && feedback === "card-pending") {
-      return feedbackFallback(feedback);
-    }
-    return display;
-  }
-
-  function visibleDisplayKind(displayKind: BadgeDisplayKind, feedback?: CardFeedback): BadgeDisplayKind {
-    if (displayKind === "gloss" && feedback === "card-pending") {
-      return "feedback";
-    }
-    return displayKind;
-  }
-
-  function isPendingNodeCurrent(node: HTMLElement): boolean {
-    if (!node.isConnected || node.dataset.glossaStatus !== "pending") {
-      return false;
-    }
-    const parent = node.parentNode;
-    if (!parent) {
-      return false;
-    }
-    const contextBefore = node.dataset.glossaContextBefore ?? "";
-    const contextAfter = node.dataset.glossaContextAfter ?? "";
-    const context = textContextAroundNode(parent, node);
-    return context.before.endsWith(contextBefore) && context.after.startsWith(contextAfter);
-  }
-
-  function textContextAroundNode(parent: Node, target: HTMLElement): { before: string; after: string } {
-    let before = "";
-    let after = "";
-    let seenTarget = false;
-    for (const child of Array.from(parent.childNodes)) {
-      if (child === target) {
-        seenTarget = true;
-        continue;
-      }
-      const text = sourceTextForNode(child);
-      if (seenTarget) {
-        after += text;
-      } else {
-        before += text;
-      }
-    }
-    return { before, after };
-  }
-
-  function sourceTextForNode(node: Node): string {
-    if (node.nodeType === Node.TEXT_NODE) {
-      return node.nodeValue ?? "";
-    }
-    if (node instanceof HTMLElement && node.dataset.glossaToken) {
-      return node.dataset.glossaSurface ?? "";
-    }
-    return node.textContent ?? "";
-  }
-
-  function locateTokenSegment(
-    token: ScannedToken,
-    scanVersion: number
-  ): { ok: true; segment: TextSegment; localStart: number; localEnd: number } | { ok: false; reason: RenderSummary["reason"] } {
-    if (token.textNode.isConnected) {
-      const validation = validateTokenForRender(token, scanVersion);
-      if (!validation.ok) {
-        return { ok: false, reason: validation.reason };
-      }
-      validation.range?.detach();
-      const text = token.textNode.nodeValue ?? "";
-      const segment = ensureInitialSegment(token.textNode, text);
-      return {
-        ok: true,
-        segment,
-        localStart: token.nodeStartOffset,
-        localEnd: token.nodeEndOffset
-      };
-    }
-    const segment = (textSegments.get(token.textNode) ?? [])
-      .find((candidate) => candidate.node.isConnected
-        && token.nodeStartOffset >= candidate.startOffset
-        && token.nodeEndOffset <= candidate.endOffset);
-    if (!segment) {
-      return { ok: false, reason: "detached-node" };
-    }
-    if (token.scanVersion !== scanVersion) {
-      return { ok: false, reason: "stale-token" };
-    }
-    if (segment.originalText.slice(token.nodeStartOffset, token.nodeEndOffset) !== token.sourceText) {
-      return { ok: false, reason: "changed-text" };
-    }
-    const localStart = token.nodeStartOffset - segment.startOffset;
-    const localEnd = token.nodeEndOffset - segment.startOffset;
-    const currentText = segment.node.nodeValue ?? "";
-    if (currentText.slice(localStart, localEnd) !== token.sourceText) {
-      return { ok: false, reason: "changed-text" };
-    }
-    const range = doc.createRange();
-    try {
-      range.setStart(segment.node, localStart);
-      range.setEnd(segment.node, localEnd);
-      if (!Array.from(range.getClientRects()).some((rect) => rect.width > 0 && rect.height > 0)) {
-        return { ok: false, reason: "invisible-range" };
-      }
-    } finally {
-      range.detach();
-    }
-    return { ok: true, segment, localStart, localEnd };
-  }
-
-  function ensureInitialSegment(textNode: Text, text: string): TextSegment {
-    const existing = textSegments.get(textNode);
-    if (existing?.length === 1 && existing[0]?.node === textNode) {
-      return existing[0];
-    }
-    const segment: TextSegment = {
-      node: textNode,
-      startOffset: 0,
-      endOffset: text.length,
-      originalText: text
-    };
-    textSegments.set(textNode, [segment]);
-    return segment;
-  }
-
-  function replaceSegment(originalTextNode: Text, oldSegment: TextSegment, nextSegments: TextSegment[]): void {
-    const current = textSegments.get(originalTextNode) ?? [];
-    const next = current.flatMap((segment) => segment === oldSegment ? nextSegments : [segment]);
-    textSegments.set(originalTextNode, next);
-  }
-
-  function findOriginalTextNode(node: HTMLElement): Text | undefined {
-    const tokenId = node.dataset.glossaToken;
-    return tokenId ? originalTextNodesByToken.get(tokenId) : undefined;
-  }
-
-  function insertRestoredSegment(originalTextNode: Text, wrapper: HTMLElement, restored: Text): void {
-    const start = Number(wrapper.dataset.glossaOriginalStart);
-    const end = Number(wrapper.dataset.glossaOriginalEnd);
-    const current = textSegments.get(originalTextNode);
-    if (!current || !Number.isFinite(start) || !Number.isFinite(end)) {
-      return;
-    }
-    const originalText = current[0]?.originalText ?? restored.nodeValue ?? "";
-    current.push({ node: restored, startOffset: start, endOffset: end, originalText });
-    current.sort((left, right) => left.startOffset - right.startOffset);
-  }
-
+  return {
+    applyTokenOutcome(token, outcome, version) {
+      if (!token) return { result: "skipped", reason: "missing-token" };
+      if (token.scanVersion !== version) return { result: "skipped", reason: "stale-scan" };
+      if (!registry.token(token.id)) registry.register(token);
+      if (!registry.valid(token)) return { result: "skipped", reason: "changed-text" };
+      const existing = rendered.get(token.id);
+      if (!existing && outcome.status === "hidden") return { result: "hidden" };
+      const record = existing ?? ensure(token);
+      if (!record) return { result: "skipped", reason: "invisible-range" };
+      const result = commit(record, glossFor(outcome), record.feedback);
+      return !existing && result.result === "updated" ? { result: "rendered" } : result;
+    },
+    applyStalePendingOutcome(outcome) {
+      const record = rendered.get(outcome.tokenId);
+      if (!record || record.gloss.status !== "pending") return { result: "skipped", reason: "missing-token" };
+      if (!registry.valid(record.token)) return { result: "skipped", reason: "changed-text" };
+      if (outcome.status === "pending") return { result: "preserved" };
+      return commit(record, glossFor(outcome), record.feedback);
+    },
+    applyCardFeedback(input) {
+      const existing = rendered.get(input.tokenId);
+      if (input.feedback === "card-cancelled") return existing ? commit(existing, existing.gloss, { status: "none" }) : { result: "skipped", reason: "missing-token" };
+      const token = input.token ?? registry.token(input.tokenId);
+      if (!token) return { result: "skipped", reason: "missing-token" };
+      if (!registry.token(token.id)) registry.register(token);
+      if (!registry.valid(token)) return { result: "skipped", reason: "changed-text" };
+      const record = existing ?? ensure(token);
+      if (!record) return { result: "skipped", reason: "invisible-range" };
+      const result = commit(record, record.gloss, { status: input.feedback, ...(input.message ? { message: input.message } : {}) });
+      return !existing && result.result === "updated" ? { result: "rendered" } : result;
+    },
+    setSelectionMode(active) { registry.mutate(() => { if (active) host.dataset.glossaSelecting = "true"; else delete host.dataset.glossaSelecting; }); },
+    setAppearance(next) { appearance = next; registry.mutate(() => { applyAppearance(host, next); for (const record of rendered.values()) applyAppearance(record.wrapper, next); }); },
+    markStalePendingAsError(ids, message) { for (const id of ids) { const record = rendered.get(id); if (record?.gloss.status === "pending" && registry.valid(record.token)) commit(record, { status: "error", message }, record.feedback); } },
+    clear() { for (const id of rendered.keys()) registry.unwrap(id); rendered.clear(); },
+    pruneDisconnected: prune,
+    ownsMutation(record) { return registry.ownsMutation(record); },
+    refreshKeys() { return new Set(Array.from(rendered.values()).filter(record => record.gloss.status === "ready" && registry.valid(record.token)).map(record => glossRefreshKey(record.token))); }
+  };
 }
 
 function applyAppearance(host: HTMLElement, appearance: AppearanceSettings): void {

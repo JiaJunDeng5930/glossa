@@ -1,4 +1,5 @@
-import type { AnkiCardOutput, CardedWordRecord, GlossaSettings, GlossCacheEntry, VocabularyRecord, VocabularyState } from "../shared/types";
+import { createCandidateRecord, markRecordClicked, normalizeLemma, vocabularyKey } from "../core/state";
+import type { AnkiCard, CardedWordRecord, GlossaSettings, GlossCacheEntry, VocabularyRecord, VocabularyState } from "../shared/types";
 import { mergeStoredSettings, settingsOverrides, type StoredGlossaSettings } from "../shared/settings";
 
 export interface KeyValueStore<T> {
@@ -10,7 +11,6 @@ export interface KeyValueStore<T> {
 }
 
 export interface GlossCacheStore extends KeyValueStore<GlossCacheEntry> {
-  getFresh(key: string, now: number, ttlMs: number): Promise<GlossCacheEntry | undefined>;
   getFreshMany(keys: string[], now: number, ttlMs: number): Promise<Map<string, GlossCacheEntry>>;
 }
 
@@ -24,6 +24,9 @@ export interface LexiconStore {
   ): Promise<VocabularyRecord | undefined>;
   put(record: VocabularyRecord): Promise<void>;
   delete(key: string): Promise<void>;
+  addKnown(lemma: string, now: number): Promise<void>;
+  removeKnown(lemma: string): Promise<void>;
+  clearKnown(): Promise<void>;
 }
 
 export interface SettingsStore {
@@ -35,8 +38,9 @@ export interface ExtensionStorage {
   settings: SettingsStore;
   glossCache: GlossCacheStore;
   lexicon: LexiconStore;
-  cardCache: KeyValueStore<AnkiCardOutput>;
+  cardCache: KeyValueStore<AnkiCard>;
   cardedWords: KeyValueStore<CardedWordRecord>;
+  recordCardCreated(input: { lang: "en"; lemma: string; surface: string; createdAt: number; learningWindowDays: number }): Promise<void>;
   resetCardHistory(): Promise<void>;
 }
 
@@ -47,37 +51,36 @@ export function createExtensionStorage(): ExtensionStorage {
     settings: createChromeSettingsStore(),
     lexicon: createLexiconStore(),
     glossCache: createGlossCacheStore(),
-    cardCache: createIndexedStore<AnkiCardOutput>("cardCache"),
+    cardCache: createIndexedStore<AnkiCard>("cardCache"),
     cardedWords: createIndexedStore<CardedWordRecord>("cardedWords"),
+    recordCardCreated,
     resetCardHistory
   };
 }
 
-// @behavior glossa.card_creation.history_reset.storage_transaction Card caches, duplicate markers, and lexicon note ids are cleared in one IndexedDB transaction.
+async function recordCardCreated(input: { lang: "en"; lemma: string; surface: string; createdAt: number; learningWindowDays: number }): Promise<void> {
+  const db = await openDatabase();
+  const tx = db.transaction(["lexicon", "cardedWords"], "readwrite");
+  const done = transactionDone(tx);
+  const store = tx.objectStore("lexicon");
+  const key = vocabularyKey(input.lang, input.lemma);
+  const request = store.get(key);
+  request.onsuccess = () => {
+    const current = request.result as VocabularyRecord | undefined;
+    const candidate = current ?? createCandidateRecord(input.lemma, input.surface, input.lang, input.createdAt);
+    store.put(markRecordClicked(candidate, input.createdAt, input.learningWindowDays), key);
+    tx.objectStore("cardedWords").put({key,lang:input.lang,lemma:normalizeLemma(input.lemma),createdAt:input.createdAt} satisfies CardedWordRecord,key);
+  };
+  await done;
+}
+
 async function resetCardHistory(): Promise<void> {
   const db = await openDatabase();
-  const tx = db.transaction(["cardCache", "cardedWords", "lexicon"], "readwrite");
+  const tx = db.transaction(["cardCache", "cardedWords"], "readwrite");
   const done = transactionDone(tx);
   tx.objectStore("cardCache").clear();
   tx.objectStore("cardedWords").clear();
-  const lexicon = tx.objectStore("lexicon");
-  const cursorRequest = lexicon.openCursor();
-  const cursorDone = new Promise<void>((resolve, reject) => {
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result;
-      if (!cursor) {
-        resolve();
-        return;
-      }
-      const record = cursor.value as VocabularyRecord;
-      if (record.ankiNoteIds.length > 0) {
-        cursor.update({ ...record, ankiNoteIds: [] });
-      }
-      cursor.continue();
-    };
-    cursorRequest.onerror = () => reject(cursorRequest.error);
-  });
-  await Promise.all([cursorDone, done]);
+  await done;
 }
 
 function createChromeSettingsStore(): SettingsStore {
@@ -173,13 +176,6 @@ function createGlossCacheStore(): GlossCacheStore {
   const store = createIndexedStore<GlossCacheEntry>("glossCache");
   return {
     ...store,
-    async getFresh(key, now, ttlMs) {
-      const value = await store.get(key);
-      if (!value || !isFreshGlossCacheEntry(value, now, ttlMs)) {
-        return undefined;
-      }
-      return value;
-    },
     async getFreshMany(keys, now, ttlMs) {
       const values = await store.getMany(keys);
       const result = new Map<string, GlossCacheEntry>();
@@ -199,7 +195,43 @@ function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: numb
 
 function createLexiconStore(): LexiconStore {
   const store = createIndexedStore<VocabularyRecord>("lexicon");
+  const update: LexiconStore["update"] = async (key, transition) => {
+    const db = await openDatabase();
+    const tx = db.transaction("lexicon", "readwrite");
+    const done = transactionDone(tx);
+    const objectStore = tx.objectStore("lexicon");
+    let next: VocabularyRecord | undefined;
+    const request = objectStore.get(key);
+    request.onsuccess = () => {
+      try {
+        next = transition(request.result as VocabularyRecord | undefined);
+        if (next === undefined) objectStore.delete(key); else objectStore.put(next,key);
+      } catch { tx.abort(); }
+    };
+    await done;
+    return next;
+  };
   return {
+    update,
+    async addKnown(lemma, now) {
+      const normalized = normalizeLemma(lemma);
+      if (!normalized) throw new Error("Known word must not be empty");
+      await update(vocabularyKey("en", normalized), current => {
+        const { expiresAt: _expiresAt, ...record } = current ?? createCandidateRecord(normalized, normalized, "en", now);
+        return { ...record, state: "known" };
+      });
+    },
+    async removeKnown(lemma) {
+      await update(vocabularyKey("en", lemma), current => current?.state === "known" ? undefined : current);
+    },
+    async clearKnown() {
+      const db = await openDatabase();
+      const tx = db.transaction("lexicon", "readwrite");
+      const done = transactionDone(tx);
+      const request = tx.objectStore("lexicon").openCursor();
+      request.onsuccess = () => { const cursor = request.result; if (!cursor) return; if ((cursor.value as VocabularyRecord).state === "known") cursor.delete(); cursor.continue(); };
+      await done;
+    },
     get: store.get,
     getMany: store.getMany,
     async listByState(state) {
@@ -210,20 +242,6 @@ function createLexiconStore(): LexiconStore {
       return values
         .filter((record) => record.state === state)
         .sort((left, right) => left.lemma.localeCompare(right.lemma));
-    },
-    async update(key, transition) {
-      const db = await openDatabase();
-      const tx = db.transaction("lexicon", "readwrite");
-      const objectStore = tx.objectStore("lexicon");
-      const current = await requestToPromise<VocabularyRecord | undefined>(objectStore.get(key));
-      const next = transition(current);
-      if (next === undefined) {
-        objectStore.delete(key);
-      } else {
-        objectStore.put(next, key);
-      }
-      await transactionDone(tx);
-      return next;
     },
     put(record) {
       return store.put(record.key, record);
@@ -238,17 +256,43 @@ let databasePromise: Promise<IDBDatabase> | undefined;
 
 function openDatabase(): Promise<IDBDatabase> {
   databasePromise ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open("glossa", 2);
-    request.onupgradeneeded = () => {
+    const request = indexedDB.open("glossa", 3);
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       for (const store of ["lexicon", "glossCache", "cardCache", "cardedWords"] satisfies StoreName[]) {
         if (!db.objectStoreNames.contains(store)) {
           db.createObjectStore(store);
         }
       }
+      if (event.oldVersion < 3) {
+        const tx = request.transaction!;
+        // Preserve legacy card facts once, then remove fields that no longer own domain behavior.
+        const lexicon = tx.objectStore("lexicon");
+        const cursorRequest = lexicon.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const { shownCount: _shown, clickCount: _clicked, ankiNoteIds, ...record } = cursor.value as VocabularyRecord & { shownCount?:number; clickCount?:number; ankiNoteIds?:unknown[] };
+          if (Array.isArray(ankiNoteIds) && ankiNoteIds.length > 0) {
+            const markers = tx.objectStore("cardedWords");
+            const existing = markers.get(record.key);
+            existing.onsuccess = () => { if (!existing.result) markers.put({key:record.key,lang:record.lang,lemma:record.lemma,createdAt:record.lastClickedAt ?? 0} satisfies CardedWordRecord,record.key); };
+          }
+          cursor.update(record);
+          cursor.continue();
+        };
+        // Generated data is disposable; old array/card and phrase/gloss formats cannot leak into live reads.
+        tx.objectStore("cardCache").clear();
+        tx.objectStore("glossCache").clear();
+      }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => { db.close(); databasePromise = undefined; };
+      db.onclose = () => { databasePromise = undefined; };
+      resolve(db);
+    };
+    request.onerror = () => { databasePromise = undefined; reject(request.error); };
   });
   return databasePromise;
 }

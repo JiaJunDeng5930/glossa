@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createAnkiClient } from "../../src/background/anki";
-import { DEFAULT_SETTINGS } from "../../src/shared/types";
+import { createAnkiClient } from "../../../src/shared/services/ankiClient";
+import { DEFAULT_SETTINGS } from "../../../src/shared/types";
 
 describe("AnkiConnect adapter diagnostics", () => {
   it("uses the configured Anki model when creating notes", async () => {
@@ -123,8 +123,7 @@ describe("AnkiConnect adapter diagnostics", () => {
 function noteInput(): Parameters<ReturnType<typeof createAnkiClient>["createNote"]>[0] {
   return {
     settings: DEFAULT_SETTINGS,
-    card: { front: "<b>Submit</b> the form.", back: "提交" },
-    token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
+    card: { front: "<b>Submit</b> the form.", back: "提交" }
   };
 }
 
@@ -134,3 +133,20 @@ function jsonResponse(value: unknown, status = 200): Response {
     headers: { "content-type": "application/json" }
   });
 }
+
+describe("Anki note success boundary", () => {
+  it.each([null, [], {}, {result:undefined}, {result:"42"}, {result:{}}, {result:0}, {result:-1}, {result:1.5}, {result:NaN}, {result:Infinity}, {result:42,error:{}}, {result:42,error:7}].map(envelope=>({envelope})))("rejects malformed note success $envelope without retrying", async ({envelope}) => {
+    const fetchImpl=vi.fn(async()=>jsonResponse(envelope));
+    await expect(createAnkiClient(fetchImpl as never).createNote(noteInput())).rejects.toMatchObject({payload:{reason:"invalid-response",service:"anki"}});
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it("classifies external service wording into a stable domain code", async()=> {
+    const fetchImpl=vi.fn(async()=>jsonResponse({result:null,error:"deck was not found: Study"}));
+    await expect(createAnkiClient(fetchImpl as never).createNote(noteInput())).rejects.toMatchObject({payload:{code:"anki-deck-not-found"}});
+  });
+  it("uses the same fields for catalog compatibility and note creation",async()=> {
+    const replies=[6,["Glossa"],["Wrong","Basic"],["Question","Answer"],["Front","Back"]];
+    const fetchImpl=vi.fn(async()=>jsonResponse({result:replies.shift(),error:null}));
+    await expect(createAnkiClient(fetchImpl as never).loadCatalog(DEFAULT_SETTINGS.anki)).resolves.toEqual({decks:["Glossa"],modelNames:["Basic"]});
+  });
+});

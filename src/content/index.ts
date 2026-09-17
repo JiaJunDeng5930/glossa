@@ -2,24 +2,24 @@ import { loadKnownWords } from "../core/lexicon";
 import { glossScanConfigHash } from "../core/cache";
 import { trace } from "../shared/diagnostics";
 import { diagnosticPayloadFrom } from "../shared/errors";
-import { createContentMessage, createGlossPortMessage, messageTimeoutError, validateBackgroundResponse, validateGlossPortOutbound } from "../shared/messages";
+import { createContentMessage, createGlossPortMessage, validateGlossPortOutbound } from "../shared/messages";
 import { glossOutputSettingsChanged, mergeStoredSettings } from "../shared/settings";
 import { cardOperationTimeoutMs } from "../shared/cardTimeout";
-import GLOSSA_THEME from "../shared/theme.json";
+import { promptDuplicateCardCreation, cancelDuplicateCardPrompt } from "./duplicateCardPrompt";
 import type { BackgroundResponseMessage, ContentToBackgroundMessage, ErrorPayload, GlossaSettings, GlossPortOutboundMessage, GlossTokenPayload } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
-import { createGlossOverlay, type CardFeedback } from "./overlay";
+import { createGlossOverlay } from "./overlay";
 import { glossRefreshKey, scanDocumentTextInChunks, toSerializableSentence, type ScanChunk, type ScannedToken } from "./scanner";
 import { createSelectionController } from "./selection";
 import { createTranslationShortcutHandler } from "./translationShortcut";
+import { sendRuntimeRequest } from "../shared/runtimeClient";
+import { createCardOperations } from "./cardOperations";
 
 const SCAN_CHUNK_MAX_TOKENS = 64;
 const SCAN_CHUNK_MAX_MS = 16;
 const MAX_UNACKED_SCAN_CHUNKS = 4;
-const duplicatePromptResolvers = new WeakMap<Document, (confirmed: boolean) => void>();
 
 interface ChunkAck {
-  chunkId: string;
   sentAt: number;
   promise: Promise<void>;
   resolve(): void;
@@ -29,26 +29,11 @@ interface GlossSession {
   scanId: string;
   pageUrl: string;
   version: number;
-  reason: string;
   tokenMap: Map<string, ScannedToken>;
   pendingTokenIds: Set<string>;
   pendingChunkAcks: Map<string, ChunkAck>;
-  queuedOutcomes: GlossTokenPayload[];
-  doneAfterQueuedOutcomes: boolean;
-  terminalError?: ErrorPayload;
-  collecting: boolean;
   aborted: boolean;
   port: chrome.runtime.Port;
-}
-
-interface ActiveCardOperation {
-  key: string;
-  tokenId: string;
-  sourceParent: Node | null;
-  initialToken?: ScannedToken;
-  feedback: Exclude<CardFeedback, "card-cancelled">;
-  message?: string;
-  terminal: boolean;
 }
 
 type RuntimeMessageListener = Parameters<typeof chrome.runtime.onMessage.addListener>[0];
@@ -117,15 +102,21 @@ async function boot(): Promise<void> {
   let currentGlossSession: GlossSession | undefined;
   const glossSessions = new Set<GlossSession>();
   const pendingGenerationRefreshKeys = new Set<string>();
-  const activeCardOperations = new Set<ActiveCardOperation>();
+  const cardOperations = createCardOperations({
+    document, overlay,
+    request: (request) => runtimeMessage(request, wordClickTimeout),
+    prompt: (input) => promptDuplicateCardCreation(document, input),
+    cancelPrompt: () => cancelDuplicateCardPrompt(document),
+    onError: (error) => handleRuntimeError("word.clicked", error),
+    errorMessage: runtimeFailureMessage
+  });
 
   const stopContentScript = (reason: string): void => {
     if (stopped) {
       return;
     }
     stopped = true;
-    activeCardOperations.clear();
-    cancelDuplicateCardPrompt(document);
+    cardOperations.cancelAll();
     if (scanTimer) {
       globalThis.clearTimeout(scanTimer);
       scanTimer = undefined;
@@ -190,67 +181,12 @@ async function boot(): Promise<void> {
     pageUrl = routeUrl;
     scanVersion += 1;
     closeAllGlossSessions();
-    cancelDuplicateCardPrompt(document);
-    activeCardOperations.clear();
+    cardOperations.cancelAll();
     overlay.clear();
     pendingGenerationRefreshKeys.clear();
     // Manual activation belongs to one route; navigation restores the configured automatic default.
     translationEnabled = manualActivation || autoTranslateEnabled;
     return true;
-  };
-
-  const bindCardOperationsToToken = (token: ScannedToken): void => {
-    const key = glossRefreshKey(token);
-    for (const operation of activeCardOperations) {
-      // Match the page occurrence while its text node is attached; rendering then carries the operation by token id.
-      if (operation.key === key && operation.sourceParent === token.textNode.parentNode) {
-        operation.tokenId = token.id;
-      }
-    }
-  };
-
-  const applyCardOperationFeedback = (operation: ActiveCardOperation, token?: ScannedToken): void => {
-    if (!activeCardOperations.has(operation)) {
-      return;
-    }
-    const renderToken = token ?? operation.initialToken;
-    const result = overlay.applyCardFeedback({
-      tokenId: operation.tokenId,
-      ...(renderToken ? { token: renderToken } : {}),
-      feedback: operation.feedback,
-      ...(operation.message ? { message: operation.message } : {})
-    });
-    if (operation.terminal && result.result !== "skipped") {
-      activeCardOperations.delete(operation);
-    }
-  };
-
-  const replayCardOperations = (token: ScannedToken): void => {
-    for (const operation of activeCardOperations) {
-      if (operation.tokenId !== token.id) {
-        continue;
-      }
-      applyCardOperationFeedback(operation, token);
-    }
-  };
-
-  const finishCardOperation = (operation: ActiveCardOperation, feedback: Exclude<CardFeedback, "card-pending">, message?: string): void => {
-    if (!activeCardOperations.has(operation)) {
-      return;
-    }
-    if (feedback === "card-cancelled") {
-      overlay.applyCardFeedback({ tokenId: operation.tokenId, feedback });
-      activeCardOperations.delete(operation);
-      return;
-    }
-    operation.feedback = feedback;
-    if (message) {
-      operation.message = message;
-    } else {
-      delete operation.message;
-    }
-    operation.terminal = true;
-    applyCardOperationFeedback(operation);
   };
 
   const scanAndRender = async (reason: string, options: { manualActivation?: boolean } = {}) => {
@@ -273,13 +209,13 @@ async function boot(): Promise<void> {
     const startedAt = nowMs();
 
     overlay.pruneDisconnected();
-    const stats = await (async () => {
-      try {
-        return await scanDocumentTextInChunks(document, scanKnownWords, {
+    const stats = await scanDocumentTextInChunks(document, scanKnownWords, {
           scanVersion: version,
           requireRenderableRange: true,
           requireViewportRange: true,
           forceRefreshKeys: pendingGenerationRefreshKeys,
+          shouldContinue: () => !stopped && version === scanVersion && session?.aborted !== true,
+          onShadowRoot: observeShadowRoot,
           maxTokensPerChunk: SCAN_CHUNK_MAX_TOKENS,
           maxChunkDelayMs: SCAN_CHUNK_MAX_MS
         }, async (chunk) => {
@@ -299,7 +235,6 @@ async function boot(): Promise<void> {
             }
           }
           for (const token of chunk.tokens) {
-            bindCardOperationsToToken(token);
             tokenMap.set(token.id, token);
           }
           const sent = await sendGlossChunk(session, chunk, () => version === scanVersion);
@@ -308,14 +243,7 @@ async function boot(): Promise<void> {
             tokens += chunk.tokens.length;
           }
           return sent;
-        });
-      } finally {
-        if (session) {
-          session.collecting = false;
-          flushQueuedGlossOutcomes(session);
-        }
-      }
-    })().catch((error) => {
+        }).catch((error) => {
       if (session && !session.aborted) {
         failGlossSession(session, diagnosticPayloadFrom(error, {
           reason: "runtime",
@@ -362,9 +290,6 @@ async function boot(): Promise<void> {
     if (currentGlossSession === session) {
       currentGlossSession = undefined;
     }
-    session.queuedOutcomes = [];
-    session.doneAfterQueuedOutcomes = false;
-    delete session.terminalError;
     session.aborted = true;
     resolvePendingChunkAcks(session);
     try {
@@ -403,13 +328,9 @@ async function boot(): Promise<void> {
       scanId,
       pageUrl: sessionInput.pageUrl,
       version: sessionInput.version,
-      reason: sessionInput.reason,
       tokenMap: sessionInput.tokenMap,
       pendingTokenIds: new Set(),
       pendingChunkAcks: new Map(),
-      queuedOutcomes: [],
-      doneAfterQueuedOutcomes: false,
-      collecting: true,
       aborted: false,
       port
     };
@@ -474,38 +395,11 @@ async function boot(): Promise<void> {
       return;
     }
     if (message.type === "gloss.token") {
-      if (session.collecting) {
-        session.queuedOutcomes.push(message.payload);
-        trace({
-          component: "content-script",
-          operation: "content.token.queue",
-          result: "ok",
-          url: location.href,
-          details: {
-            reason,
-            scanId: session.scanId,
-            tokenId: message.payload.tokenId,
-            status: message.payload.status,
-            queued: session.queuedOutcomes.length
-          }
-        });
-        return;
-      }
       applyGlossOutcome(session, message.payload, reason, false);
       return;
     }
     if (message.type === "gloss.done") {
-      if (session.collecting && session.queuedOutcomes.length > 0) {
-        session.doneAfterQueuedOutcomes = true;
-        return;
-      }
       completeGlossSession(session, reason);
-      return;
-    }
-    if (session.collecting) {
-      session.terminalError = message.payload;
-      session.aborted = true;
-      resolvePendingChunkAcks(session);
       return;
     }
     failGlossSession(session, message.payload);
@@ -519,7 +413,7 @@ async function boot(): Promise<void> {
       : overlay.applyStalePendingOutcome(outcome);
     updatePendingTokenState(session, outcome, render);
     if (current && token && outcome.status !== "hidden") {
-      replayCardOperations(token);
+      cardOperations.replay(token);
     }
     if (current && token?.forceRefresh && (outcome.status === "ready" || outcome.status === "hidden")) {
       pendingGenerationRefreshKeys.delete(glossRefreshKey(token));
@@ -540,22 +434,6 @@ async function boot(): Promise<void> {
         queued
       }
     });
-  };
-
-  const flushQueuedGlossOutcomes = (session: GlossSession): void => {
-    while (session.queuedOutcomes.length > 0) {
-      applyGlossOutcome(session, session.queuedOutcomes.shift()!, session.reason, true);
-    }
-    if (session.terminalError) {
-      const error = session.terminalError;
-      delete session.terminalError;
-      failGlossSession(session, error);
-      return;
-    }
-    if (session.doneAfterQueuedOutcomes) {
-      session.doneAfterQueuedOutcomes = false;
-      completeGlossSession(session, session.reason);
-    }
   };
 
   const completeGlossSession = (session: GlossSession, reason: string): void => {
@@ -581,7 +459,7 @@ async function boot(): Promise<void> {
       return false;
     }
     const chunkId = `${session.scanId}:${chunk.chunkIndex}`;
-    const ack = createChunkAck(chunkId);
+    const ack = createChunkAck();
     session.pendingChunkAcks.set(chunkId, ack);
     try {
       session.port.postMessage(createGlossPortMessage("gloss.scan.chunk", {
@@ -648,13 +526,12 @@ async function boot(): Promise<void> {
     }
   }
 
-  function createChunkAck(chunkId: string): ChunkAck {
+  function createChunkAck(): ChunkAck {
     let resolveAck: () => void = () => undefined;
     const promise = new Promise<void>((resolve) => {
       resolveAck = resolve;
     });
     return {
-      chunkId,
       sentAt: nowMs(),
       promise,
       resolve: resolveAck
@@ -698,14 +575,13 @@ async function boot(): Promise<void> {
       return;
     }
     translationEnabled = false;
-    activeCardOperations.clear();
+    cardOperations.cancelAll();
     if (scanTimer) {
       globalThis.clearTimeout(scanTimer);
       scanTimer = undefined;
     }
     scanVersion += 1;
     closeAllGlossSessions();
-    cancelDuplicateCardPrompt(document);
     overlay.clear();
     trace({
       component: "content-script",
@@ -747,7 +623,7 @@ async function boot(): Promise<void> {
     const knownWordListChanged = nextSettings.knownWordList !== previousSettings.knownWordList;
     const generationSettingsChanged = glossOutputSettingsChanged(previousSettings, nextSettings);
     if (generationSettingsChanged) {
-      for (const key of renderedGlossRefreshKeys(document)) {
+      for (const key of overlay.refreshKeys()) {
         pendingGenerationRefreshKeys.add(key);
       }
     }
@@ -821,6 +697,31 @@ async function boot(): Promise<void> {
   };
   translationControlOwner.bind(handleRuntimeControlMessage);
 
+  observer = new MutationObserver((mutations) => {
+    if (stopped) {
+      return;
+    }
+    if (mutations.map((mutation) => overlay.ownsMutation(mutation) || isTransientUiMutation(mutation)).every(Boolean)) {
+      return;
+    }
+    scanVersion += 1;
+    overlay.pruneDisconnected();
+    scheduleScan("mutation");
+  });
+  const onScroll = (): void => scheduleScan("scroll");
+  const scrollObservedShadowRoots = new WeakSet<ShadowRoot>();
+  addLifecycleEventListener(document, "scroll", onScroll, { passive: true, capture: true });
+  addLifecycleEventListener(window, "scroll", onScroll, { passive: true });
+  registerLifecycleCleanup(() => observer?.disconnect());
+  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+
+  function observeShadowRoot(root: ShadowRoot): void {
+    if (stopped || scrollObservedShadowRoots.has(root)) return;
+    scrollObservedShadowRoots.add(root);
+    addLifecycleEventListener(root, "scroll", onScroll, { passive: true, capture: true });
+    observer?.observe(root, { childList: true, characterData: true, subtree: true });
+  }
+
   // @behavior glossa.extension_contracts.frame_state_sync.child_apply A child frame adopts frame zero's live state before its first viewport scan.
   if (window.top !== window) {
     try {
@@ -848,67 +749,7 @@ async function boot(): Promise<void> {
   selectionController = createSelectionController({
     document,
     shortcutKey: settings?.shortcutKey ?? "Alt",
-    onWordSelected(selection) {
-      const operationKey = glossRefreshKey({
-        sentenceText: selection.sentence,
-        lemma: selection.token.lemma,
-        startOffset: selection.token.startOffset,
-        endOffset: selection.token.endOffset
-      });
-      const pendingOperation = Array.from(activeCardOperations).find((operation) => (
-        !operation.terminal
-        && operation.key === operationKey
-        && operation.sourceParent === selection.sourceParent
-      ));
-      if (pendingOperation) {
-        applyCardOperationFeedback(pendingOperation, selection.renderToken);
-        return;
-      }
-      const operation: ActiveCardOperation = {
-        key: operationKey,
-        tokenId: selection.token.id,
-        sourceParent: selection.sourceParent,
-        ...(selection.renderToken ? { initialToken: selection.renderToken } : {}),
-        feedback: "card-pending",
-        terminal: false
-      };
-      activeCardOperations.add(operation);
-      applyCardOperationFeedback(operation);
-      return runtimeMessage(createContentMessage("word.clicked", {
-        pageUrl: location.href,
-        sentence: selection.sentence,
-        token: selection.token
-      }), wordClickTimeout).then((response) => {
-        if (response.type === "word.card.duplicate") {
-          return promptDuplicateCardCreation(document, {
-            surface: response.payload.surface,
-            timeoutMs: response.payload.promptMs
-          }).then((confirmed) => {
-            if (!confirmed) {
-              finishCardOperation(operation, "card-cancelled");
-              return undefined;
-            }
-            return runtimeMessage(createContentMessage("word.clicked", {
-              pageUrl: location.href,
-              sentence: selection.sentence,
-              token: selection.token,
-              allowDuplicateCard: true
-            }), wordClickTimeout).then((confirmedResponse) => {
-              applyCardResponse(operation, confirmedResponse);
-            });
-          });
-        }
-        applyCardResponse(operation, response);
-      }).catch((error) => {
-        if (isExtensionContextInvalidated(error)) {
-          activeCardOperations.delete(operation);
-          handleRuntimeError("word.clicked", error);
-          return;
-        }
-        finishCardOperation(operation, "card-error", runtimeFailureMessage(error));
-        handleRuntimeError("word.clicked", error);
-      });
-    },
+    onWordSelected(selection) { return cardOperations.start(selection, location.href); },
     onSelectionModeChange(active) {
       overlay.setSelectionMode(active);
     },
@@ -917,57 +758,9 @@ async function boot(): Promise<void> {
     }
   });
 
-  function applyCardResponse(operation: ActiveCardOperation, response: BackgroundResponseMessage): void {
-    const created = response.type === "word.clicked.ok" && typeof response.payload.noteId === "number";
-    const failureMessage = response.type === "error" ? userMessageForError(response.payload, "anki") : undefined;
-    const feedback = created
-      ? "card-success"
-      : response.type === "error" && response.payload.reason === "outcome-unknown"
-        ? "card-unknown"
-        : "card-error";
-    finishCardOperation(operation, feedback, failureMessage);
-    if (!created && response.type === "error") {
-      reportError("word.clicked", response.payload, response.requestId);
-    }
-  }
   selectionController.attach();
   registerLifecycleCleanup(() => selectionController?.detach());
 
-  observer = new MutationObserver((mutations) => {
-    if (stopped) {
-      return;
-    }
-    if (mutations.every((mutation) => overlay.ownsMutation(mutation) || isGlossaOwnedMutation(mutation))) {
-      return;
-    }
-    scanVersion += 1;
-    overlay.pruneDisconnected();
-    observeOpenShadowRoots(document.body);
-    scheduleScan("mutation");
-  });
-  const onScroll = (): void => scheduleScan("scroll");
-  const scrollObservedShadowRoots = new WeakSet<ShadowRoot>();
-  addLifecycleEventListener(document, "scroll", onScroll, { passive: true, capture: true });
-  addLifecycleEventListener(window, "scroll", onScroll, { passive: true });
-  registerLifecycleCleanup(() => observer?.disconnect());
-  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
-  observeOpenShadowRoots(document.body);
-
-  function observeOpenShadowRoots(root: ParentNode): void {
-    if (stopped) {
-      return;
-    }
-    for (const element of Array.from(root.querySelectorAll("*"))) {
-      if (element.shadowRoot) {
-        if (!scrollObservedShadowRoots.has(element.shadowRoot)) {
-          scrollObservedShadowRoots.add(element.shadowRoot);
-          addLifecycleEventListener(element.shadowRoot, "scroll", onScroll, { passive: true, capture: true });
-        }
-        observer?.observe(element.shadowRoot, { childList: true, characterData: true, subtree: true });
-        observeOpenShadowRoots(element.shadowRoot);
-      }
-    }
-  }
   bootFailureCleanup = undefined;
 
   function updatePendingTokenState(session: GlossSession, outcome: GlossTokenPayload, render: { result: string }): void {
@@ -981,258 +774,8 @@ async function boot(): Promise<void> {
   }
 }
 
-function renderedGlossRefreshKeys(doc: Document): Set<string> {
-  const keys = new Set<string>();
-  const roots: ParentNode[] = [doc];
-  while (roots.length > 0) {
-    const root = roots.pop();
-    if (!root) {
-      continue;
-    }
-    for (const element of root.querySelectorAll<HTMLElement>("*")) {
-      if (element.matches("[data-glossa-token]")) {
-        const key = renderedGlossRefreshKey(element);
-        if (key) {
-          keys.add(key);
-        }
-      }
-      if (element.shadowRoot) {
-        roots.push(element.shadowRoot);
-      }
-    }
-  }
-  return keys;
-}
-
-function renderedGlossRefreshKey(node: HTMLElement): string | undefined {
-  const carriesGloss = node.dataset.glossaGlossDisplay !== undefined
-    || (node.dataset.glossaStatus === "ready" && node.dataset.glossaDisplayKind === "gloss");
-  const sentenceText = node.dataset.glossaSentence;
-  const lemma = node.dataset.glossaLemma;
-  const startOffset = Number(node.dataset.glossaSentenceStart);
-  const endOffset = Number(node.dataset.glossaSentenceEnd);
-  if (!carriesGloss || !sentenceText || !lemma || !Number.isFinite(startOffset) || !Number.isFinite(endOffset)) {
-    return undefined;
-  }
-  return glossRefreshKey({ sentenceText, lemma, startOffset, endOffset });
-}
-
 function runtimeMessage(message: ContentToBackgroundMessage, timeoutMs = 5_000): Promise<BackgroundResponseMessage> {
-  return new Promise((resolve, reject) => {
-    const runtime = (globalThis as typeof globalThis & { chrome?: typeof chrome }).chrome?.runtime;
-    if (!runtime?.sendMessage) {
-      reject(new Error("chrome.runtime.sendMessage is unavailable"));
-      return;
-    }
-    const sendMessage = runtime.sendMessage as unknown as (
-      message: ContentToBackgroundMessage,
-      callback: (response: unknown) => void
-    ) => Promise<unknown> | void;
-    let settled = false;
-    const timeout = globalThis.setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      trace({
-        component: "content-script",
-        operation: message.type,
-        requestId: message.requestId,
-        result: "timeout",
-        url: location.href
-      });
-      rejectMessage(messageTimeoutError(message));
-    }, timeoutMs);
-    const finish = (callback: () => void): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      globalThis.clearTimeout(timeout);
-      callback();
-    };
-    const resolveMessage = (value: unknown): void => {
-      finish(() => {
-        try {
-          resolve(validateBackgroundResponse(value, message));
-        } catch (error) {
-          reject(error);
-        }
-      });
-    };
-    const rejectMessage = (error: unknown): void => {
-      finish(() => reject(error));
-    };
-    let maybePromise: Promise<unknown> | void;
-    try {
-      maybePromise = sendMessage(message, (response: unknown) => {
-        if (settled) {
-          return;
-        }
-        let error: chrome.runtime.LastError | undefined;
-        try {
-          error = chrome.runtime.lastError;
-        } catch (lastError) {
-          rejectMessage(lastError);
-          return;
-        }
-        if (error) {
-          rejectMessage(new Error(error.message));
-        } else {
-          resolveMessage(response);
-        }
-      }) as Promise<unknown> | void;
-    } catch (error) {
-      rejectMessage(error);
-      return;
-    }
-    if (maybePromise && typeof maybePromise.then === "function") {
-      maybePromise.then(resolveMessage, rejectMessage);
-    }
-  });
-}
-
-function promptDuplicateCardCreation(doc: Document, input: { surface: string; timeoutMs: number }): Promise<boolean> {
-  cancelDuplicateCardPrompt(doc);
-  return new Promise((resolve) => {
-    const previousFocus = doc.activeElement;
-    const prompt = doc.createElement("div");
-    prompt.dataset.glossaOwned = "1";
-    prompt.dataset.glossaDuplicateCardPrompt = "1";
-    prompt.setAttribute("role", "dialog");
-    prompt.setAttribute("aria-modal", "true");
-    prompt.setAttribute("aria-label", "重复制卡确认");
-    prompt.style.cssText = [
-      "position:fixed",
-      "top:20px",
-      "right:20px",
-      "z-index:2147483647",
-      "display:grid",
-      "grid-template-columns:minmax(0,1fr) auto auto",
-      "align-items:center",
-      "gap:12px",
-      "max-width:min(440px,calc(100vw - 40px))",
-      "padding:15px 16px",
-      "border:1px solid rgba(23,24,20,0.32)",
-      `border-top:2px solid ${GLOSSA_THEME.accent}`,
-      "border-radius:1px",
-      "background:rgba(250,248,241,0.98)",
-      "color:#171814",
-      "font:14px/1.4 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
-      "box-shadow:0 20px 48px rgba(23,24,20,0.18)"
-    ].join(";");
-    const style = doc.createElement("style");
-    style.dataset.glossaOwned = "1";
-    style.textContent = `
-      [data-glossa-duplicate-card-prompt="1"] button:focus-visible {
-        outline: 3px solid rgba(227, 179, 77, 0.72);
-        outline-offset: 2px;
-      }
-      @media (max-width: 360px) {
-        [data-glossa-duplicate-card-prompt="1"] {
-          left: 12px !important;
-          top: 12px !important;
-          right: 12px !important;
-          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          gap: 10px !important;
-          max-width: none !important;
-          padding: 14px !important;
-        }
-        [data-glossa-duplicate-card-prompt="1"] > span {
-          grid-column: 1 / -1;
-        }
-        [data-glossa-duplicate-card-prompt="1"] > button {
-          width: 100%;
-          min-width: 0 !important;
-        }
-      }
-    `;
-    const text = doc.createElement("span");
-    text.id = "glossa-duplicate-card-prompt-description";
-    text.textContent = `${input.surface} 已经制过卡，继续制卡？`;
-    text.style.cssText = "min-width:0;overflow-wrap:anywhere;font-weight:650;letter-spacing:0.005em";
-    prompt.setAttribute("aria-describedby", text.id);
-    const confirm = doc.createElement("button");
-    confirm.type = "button";
-    confirm.textContent = "继续制卡";
-    confirm.setAttribute("aria-label", "继续制卡");
-    const cancel = doc.createElement("button");
-    cancel.type = "button";
-    cancel.textContent = "取消";
-    cancel.setAttribute("aria-label", "取消制卡");
-    confirm.style.cssText = [
-      "min-width:88px",
-      "height:36px",
-      `border:1px solid ${GLOSSA_THEME.accent}`,
-      "border-radius:2px",
-      `background:${GLOSSA_THEME.accent}`,
-      "color:#fffaf2",
-      "font:740 14px/1 ui-sans-serif,system-ui",
-      "box-shadow:0 7px 16px rgba(200,71,36,0.17)",
-      "cursor:pointer"
-    ].join(";");
-    cancel.style.cssText = [
-      "min-width:54px",
-      "height:36px",
-      "border:1px solid rgba(23,24,20,0.32)",
-      "border-radius:2px",
-      "background:transparent",
-      "color:#171814",
-      "font:740 14px/1 ui-sans-serif,system-ui",
-      "cursor:pointer"
-    ].join(";");
-    prompt.append(style, text, confirm, cancel);
-    let settled = false;
-    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
-    const finish = (confirmed: boolean): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timer !== undefined) {
-        globalThis.clearTimeout(timer);
-      }
-      duplicatePromptResolvers.delete(doc);
-      prompt.remove();
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected && previousFocus !== doc.body) {
-        previousFocus.focus({ preventScroll: true });
-      }
-      resolve(confirmed);
-    };
-    // The configured timeout resolves through the same safe cancel path as Escape and the cancel button.
-    timer = globalThis.setTimeout(() => finish(false), input.timeoutMs);
-    duplicatePromptResolvers.set(doc, finish);
-    confirm.addEventListener("click", () => finish(true), { once: true });
-    cancel.addEventListener("click", () => finish(false), { once: true });
-    prompt.addEventListener("keydown", (event) => {
-      if (event.key === "Tab") {
-        const activeElement = doc.activeElement;
-        if (event.shiftKey && activeElement === confirm) {
-          event.preventDefault();
-          cancel.focus();
-        } else if (!event.shiftKey && activeElement === cancel) {
-          event.preventDefault();
-          confirm.focus();
-        }
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        finish(false);
-      }
-    });
-    (doc.body ?? doc.documentElement).append(prompt);
-    confirm.focus({ preventScroll: true });
-  });
-}
-
-function cancelDuplicateCardPrompt(doc: Document): void {
-  const resolver = duplicatePromptResolvers.get(doc);
-  if (resolver) {
-    resolver(false);
-    return;
-  }
-  doc.querySelector("[data-glossa-duplicate-card-prompt]")?.remove();
+  return sendRuntimeRequest(message, { timeoutMs });
 }
 
 function isExtensionContextInvalidated(error: unknown): boolean {
@@ -1308,19 +851,11 @@ function elapsedMs(startedAt: number): number {
   return Math.round(nowMs() - startedAt);
 }
 
-function isGlossaOwnedMutation(mutation: MutationRecord): boolean {
-  if (isGlossaOwnedNode(mutation.target)) {
-    return true;
-  }
-  const changedNodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)];
-  return changedNodes.length > 0 && changedNodes.every(isGlossaOwnedNode);
-}
-
-function isGlossaOwnedNode(node: Node): boolean {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return node.parentElement?.closest("[data-glossa-owned='1']") !== null;
-  }
-  return node instanceof Element && node.closest("[data-glossa-owned='1']") !== null;
+function isTransientUiMutation(mutation: MutationRecord): boolean {
+  const isUi = (node: Node) => { const element = node instanceof Element ? node : node.parentElement; return !!element?.closest("#glossa-overlay, [data-glossa-duplicate-card-prompt], #glossa-duplicate-card-style"); };
+  if (isUi(mutation.target)) return true;
+  const changed = [...mutation.addedNodes, ...mutation.removedNodes];
+  return changed.length > 0 && changed.every(isUi);
 }
 
 function isTranslateActivationMessage(value: unknown): value is { type: "glossa.activateTranslation" } {

@@ -1,13 +1,15 @@
+import { createMemoryStorage } from "../helpers/memoryStorage";
+import { deferred } from "../state-model/asyncHarness";
+import type { GlossFrameBackendInput, GlossBackendOutput } from "../../src/shared/services/aiClient";
 import { describe, expect, it, vi } from "vitest";
 
 import { buildGlossCacheKey, glossGenerationIdentity } from "../../src/core/cache";
 import { createGlossResolver } from "../../src/background/glossResolver";
-import type { ExtensionStorage } from "../../src/storage/db";
-import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type AnkiCardOutput, type CardedWordRecord, type GlossaSettings, type GlossCacheEntry, type GlossTokenPayload, type SentenceCandidate, type TokenCandidate, type VocabularyRecord, type VocabularyState } from "../../src/shared/types";
+import { DEFAULT_SETTINGS, GLOSS_TARGET_LANG, type GlossaSettings, type GlossCacheEntry, type GlossTokenOutcome, type SentenceCandidate, type VocabularyRecord } from "../../src/shared/types";
 
 describe("gloss resolver lookup-first pipeline", () => {
   it("emits hidden, ready, pending and AI ready outcomes in lookup order", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     await storage.lexicon.put(record("known", "known"));
@@ -20,13 +22,11 @@ describe("gloss resolver lookup-first pipeline", () => {
       createdAt: 50
     });
     const ai = {
-      glossFrame: vi.fn(async () => ({
-        items: [{ tokenId: "t-novel", targetText: "novel", display: "新词" }]
-      })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新词")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/page", [{
       id: "s1",
@@ -50,16 +50,16 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).toHaveBeenCalledWith(expect.objectContaining({
       items: [expect.objectContaining({
         sentence: "Known ignored cached novel words.",
-        token: expect.objectContaining({ id: "t-novel" })
+        token: expect.objectContaining({ surface: "novel" })
       })]
     }));
-    expect(await storage.lexicon.get("en:cached")).toMatchObject({ shownCount: 1, lastShownAt: 100 });
-    expect(await storage.lexicon.get("en:novel")).toMatchObject({ state: "known", shownCount: 1 });
+    expect(await storage.lexicon.get("en:cached")).toMatchObject({ lastShownAt: 100 });
+    expect(await storage.lexicon.get("en:novel")).toMatchObject({ state: "known" });
     expect(await storage.glossCache.get(await cacheKey("Known ignored cached novel words.", "novel", 21, 26))).toMatchObject({ createdAt: 100 });
   });
 
   it("uses fresh persisted gloss cache before known and ignored lexicon state and ignores expired cache entries", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = { ...testSettings(), glossCacheTtlMs: 100 };
     await storage.settings.set(settings);
     await storage.lexicon.put(record("fresh", "known"));
@@ -85,7 +85,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     });
     const ai = { glossFrame: vi.fn(), ankiCard: vi.fn() };
     const resolver = createGlossResolver({ storage, ai });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/page", [{
       id: "s1",
@@ -107,7 +107,7 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("treats legacy persisted gloss cache entries without createdAt as expired", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = { ...testSettings(), glossCacheTtlMs: 100 };
     await storage.settings.set(settings);
     await storage.lexicon.put(record("legacy", "known"));
@@ -119,7 +119,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     } as GlossCacheEntry);
     const ai = { glossFrame: vi.fn(), ankiCard: vi.fn() };
     const resolver = createGlossResolver({ storage, ai });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/page", [{
       id: "s1",
@@ -137,20 +137,18 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("replays page memory and fresh cache before shown state hides rescan tokens", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     const ai = {
-      glossFrame: vi.fn(async () => ({
-        items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
-      })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新词")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai });
     const sentence = "A novel archive appears.";
-    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const otherPageEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const firstEvents: Array<GlossTokenOutcome> = [];
+    const secondEvents: Array<GlossTokenOutcome> = [];
+    const otherPageEvents: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/a", [{
       id: "s1",
@@ -179,26 +177,23 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("stops replaying page memory after the resolver cache is cleared", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     const ai = {
-      glossFrame: vi.fn(async () => ({
-        items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
-      })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新词")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai });
     const sentence = "A novel archive appears.";
-    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const secondEvents: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/a", [{
       id: "s1",
       text: sentence,
       tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
     }], settings, 100, { emit: () => undefined });
-    await storage.glossCache.clear();
-    resolver.clearMemory();
+    await resolver.clearCache();
     await resolveScan(resolver, "https://example.test/a", [{
       id: "s2",
       text: sentence,
@@ -210,19 +205,17 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("refreshes a rendered known token while continuing to hide ignored tokens", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     await storage.lexicon.put(record("novel", "known"));
     await storage.lexicon.put(record("ignored", "ignored"));
     const ai = {
-      glossFrame: vi.fn(async (_input: { items: Array<{ token: TokenCandidate }> }) => ({
-        items: [{ tokenId: "t-novel", targetText: "novel", display: "新版" }]
-      })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新版")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/page", [{
       id: "s1",
@@ -239,26 +232,24 @@ describe("gloss resolver lookup-first pipeline", () => {
       { tokenId: "t-ignored", status: "hidden" }
     ]));
     expect(ai.glossFrame).toHaveBeenCalledWith(expect.objectContaining({
-      items: [expect.objectContaining({ token: expect.objectContaining({ id: "t-novel" }) })]
+      items: [expect.objectContaining({ token: expect.objectContaining({ surface: "novel" }) })]
     }));
     expect(ai.glossFrame.mock.calls[0]?.[0].items[0]?.token).not.toHaveProperty("forceRefresh");
   });
 
   it("keeps page memory replay independent from persistent gloss cache TTL", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = { ...testSettings(), glossCacheTtlMs: 50 };
     await storage.settings.set(settings);
     const ai = {
-      glossFrame: vi.fn(async () => ({
-        items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }]
-      })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新词")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai });
     const sentence = "A novel archive appears.";
-    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const samePageEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const otherPageEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const firstEvents: Array<GlossTokenOutcome> = [];
+    const samePageEvents: Array<GlossTokenOutcome> = [];
+    const otherPageEvents: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/a", [{
       id: "s1",
@@ -285,15 +276,14 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("groups cache misses into a size-triggered AI frame", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     const ai = {
-      glossFrame: vi.fn(async (input: { items: Array<{ sentence: string; token: { id: string; surface: string } }> }) => ({
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => ({
         items: input.items.map((item) => ({
-          tokenId: item.token.id,
-          targetText: item.token.surface,
-          display: item.token.surface === "novel" ? "新词" : "晦涩"
+          requestItemId: item.requestItemId,
+          value: { targetText: item.token.surface, display: item.token.surface === "novel" ? "新词" : "晦涩" }
         }))
       })),
       ankiCard: vi.fn()
@@ -305,7 +295,7 @@ describe("gloss resolver lookup-first pipeline", () => {
       aiFrameMaxMs: 1_000,
       dbReadCoalesceMs: 0
     });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     await resolveScan(resolver, "https://example.test/page", [{
       id: "s1",
@@ -319,8 +309,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
     expect(ai.glossFrame).toHaveBeenCalledWith(expect.objectContaining({
       items: expect.arrayContaining([
-        expect.objectContaining({ token: expect.objectContaining({ id: "t-novel" }) }),
-        expect.objectContaining({ token: expect.objectContaining({ id: "t-obscure" }) })
+        expect.objectContaining({ token: expect.objectContaining({ surface: "novel" }) }),
+        expect.objectContaining({ token: expect.objectContaining({ surface: "obscure" }) })
       ])
     }));
     expect(events).toEqual(expect.arrayContaining([
@@ -332,7 +322,7 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("splits AI frames by API key during concurrent scans", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const oldKeySettings: GlossaSettings = {
       ...testSettings(),
       ai: {
@@ -352,11 +342,10 @@ describe("gloss resolver lookup-first pipeline", () => {
     };
     await storage.settings.set(newKeySettings);
     const ai = {
-      glossFrame: vi.fn(async (input: { settings: GlossaSettings; items: Array<{ token: { id: string; surface: string } }> }) => ({
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => ({
         items: input.items.map((item) => ({
-          tokenId: item.token.id,
-          targetText: item.token.surface,
-          display: input.settings.ai.apiKey === "old-key" ? "旧钥" : "新钥"
+          requestItemId: item.requestItemId,
+          value: { targetText: item.token.surface, display: input.settings.ai.apiKey === "old-key" ? "旧钥" : "新钥" }
         }))
       })),
       ankiCard: vi.fn()
@@ -368,8 +357,8 @@ describe("gloss resolver lookup-first pipeline", () => {
       aiFrameMaxMs: 50,
       dbReadCoalesceMs: 0
     });
-    const oldKeyEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const newKeyEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const oldKeyEvents: Array<GlossTokenOutcome> = [];
+    const newKeyEvents: Array<GlossTokenOutcome> = [];
 
     await Promise.all([
       resolveScan(resolver, "https://example.test/old", [{
@@ -397,25 +386,25 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("cancels obsolete AI frames before starting a new generation era", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const oldSettings = { ...testSettings(), modelVersion: "old-model" };
     const newSettings = { ...testSettings(), modelVersion: "new-model" };
     const ai = {
-      glossFrame: vi.fn((input: { settings: GlossaSettings; items: Array<{ token: { id: string; surface: string } }>; signal?: AbortSignal }) => {
+      glossFrame: vi.fn((input: GlossFrameBackendInput) => {
         if (input.settings.modelVersion === "old-model") {
-          return new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((_resolve, reject) => {
+          return new Promise<GlossBackendOutput>((_resolve, reject) => {
             input.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
           });
         }
         return Promise.resolve({
-          items: input.items.map((item) => ({ tokenId: item.token.id, targetText: item.token.surface, display: "新版" }))
+          items: input.items.map((item) => ({ requestItemId: item.requestItemId, value: { targetText: item.token.surface, display: "新版" } }))
         });
       }),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
-    const oldEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const newEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const oldEvents: Array<GlossTokenOutcome> = [];
+    const newEvents: Array<GlossTokenOutcome> = [];
     await resolver.activateGeneration(glossGenerationIdentity(oldSettings));
 
     const oldScan = resolveScan(resolver, "https://example.test/page", [{
@@ -442,19 +431,17 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("drops obsolete lookups that are still waiting for storage", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     let releaseLexiconRead: ((value: Map<string, VocabularyRecord>) => void) | undefined;
     storage.lexicon.getMany = vi.fn(() => new Promise<Map<string, VocabularyRecord>>((resolve) => {
       releaseLexiconRead = resolve;
     }));
     const ai = {
-      glossFrame: vi.fn(async () => ({
-        items: [{ tokenId: "t-old", targetText: "novel", display: "旧版" }]
-      })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "旧版")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
 
     const oldScan = resolveScan(resolver, "https://example.test/page", [{
       id: "s-old",
@@ -463,7 +450,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     }], testSettings(), 100, { emit: (event) => events.push(event) });
     await vi.waitFor(() => expect(storage.lexicon.getMany).toHaveBeenCalledTimes(1));
 
-    resolver.invalidateGeneration();
+    await resolver.activateGeneration("initial");
+    await resolver.activateGeneration("replacement");
     releaseLexiconRead?.(new Map());
     await oldScan;
 
@@ -473,17 +461,17 @@ describe("gloss resolver lookup-first pipeline", () => {
 
   it("keeps a replacement session active when the same generation is activated again", async () => {
     // @verifies glossa.cache_identity.generation_activation
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = { ...testSettings(), modelVersion: "replacement-model" };
-    let resolveFrame!: (value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void;
+    let resolveFrame!: (value: GlossBackendOutput) => void;
     const ai = {
-      glossFrame: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+      glossFrame: vi.fn((_input: GlossFrameBackendInput) => new Promise<GlossBackendOutput>((resolve) => {
         resolveFrame = resolve;
       })),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
     const identity = glossGenerationIdentity(settings);
     await resolver.activateGeneration(identity);
 
@@ -495,7 +483,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
     await resolver.activateGeneration(identity);
-    resolveFrame({ items: [{ tokenId: "t-new", targetText: "novel", display: "新版" }] });
+    resolveFrame(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "新版"));
     await scan;
 
     expect(events).toEqual([
@@ -505,11 +493,11 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("keeps persistent cache across generation changes and clears it only explicitly", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     storage.glossCache.clear = vi.fn(async () => undefined);
     const resolver = createGlossResolver({
       storage,
-      ai: { glossFrame: vi.fn(), ankiCard: vi.fn() }
+      ai: { glossFrame: vi.fn() }
     });
     await resolver.activateGeneration("old");
 
@@ -522,7 +510,7 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("splits in-flight AI reuse by API key for the same cache entry", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const oldKeySettings: GlossaSettings = {
       ...testSettings(),
       ai: {
@@ -540,9 +528,9 @@ describe("gloss resolver lookup-first pipeline", () => {
         apiKey: "new-key"
       }
     };
-    const frameResolvers = new Map<string, (value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void>();
+    const frameResolvers = new Map<string, (value: GlossBackendOutput) => void>();
     const ai = {
-      glossFrame: vi.fn((input: { settings: GlossaSettings }) => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+      glossFrame: vi.fn((input: GlossFrameBackendInput) => new Promise<GlossBackendOutput>((resolve) => {
         frameResolvers.set(input.settings.ai.apiKey ?? "", resolve);
       })),
       ankiCard: vi.fn()
@@ -555,8 +543,8 @@ describe("gloss resolver lookup-first pipeline", () => {
       dbReadCoalesceMs: 0
     });
     const sentence = "A novel archive appears.";
-    const oldKeyEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const newKeyEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const oldKeyEvents: Array<GlossTokenOutcome> = [];
+    const newKeyEvents: Array<GlossTokenOutcome> = [];
 
     const first = resolveScan(resolver, "https://example.test/old", [{
       id: "s-old",
@@ -572,9 +560,9 @@ describe("gloss resolver lookup-first pipeline", () => {
     }], newKeySettings, 100, { emit: (event) => newKeyEvents.push(event) });
     await vi.waitFor(() => expect(newKeyEvents).toEqual([{ tokenId: "t-new", status: "pending" }]));
 
-    frameResolvers.get("old-key")?.({ items: [{ tokenId: "t-old", targetText: "novel", display: "旧钥" }] });
+    frameResolvers.get("old-key")?.(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "旧钥"));
     await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(2));
-    frameResolvers.get("new-key")?.({ items: [{ tokenId: "t-new", targetText: "novel", display: "新钥" }] });
+    frameResolvers.get("new-key")?.(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "新钥"));
     await Promise.all([first, second]);
 
     expect(ai.glossFrame.mock.calls.map(([input]) => input.settings.ai.apiKey)).toEqual(expect.arrayContaining(["old-key", "new-key"]));
@@ -589,7 +577,7 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("splits in-flight AI reuse by timeout for the same cache entry", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const shortTimeoutSettings: GlossaSettings = {
       ...testSettings(),
       ai: {
@@ -607,9 +595,9 @@ describe("gloss resolver lookup-first pipeline", () => {
         requestTimeoutMs: 30_000
       }
     };
-    const frameResolvers = new Map<number, (value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void>();
+    const frameResolvers = new Map<number, (value: GlossBackendOutput) => void>();
     const ai = {
-      glossFrame: vi.fn((input: { settings: GlossaSettings }) => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+      glossFrame: vi.fn((input: GlossFrameBackendInput) => new Promise<GlossBackendOutput>((resolve) => {
         frameResolvers.set(input.settings.ai.requestTimeoutMs, resolve);
       })),
       ankiCard: vi.fn()
@@ -622,8 +610,8 @@ describe("gloss resolver lookup-first pipeline", () => {
       dbReadCoalesceMs: 0
     });
     const sentence = "A novel archive appears.";
-    const shortTimeoutEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const longTimeoutEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const shortTimeoutEvents: Array<GlossTokenOutcome> = [];
+    const longTimeoutEvents: Array<GlossTokenOutcome> = [];
 
     const first = resolveScan(resolver, "https://example.test/short", [{
       id: "s-short",
@@ -639,9 +627,9 @@ describe("gloss resolver lookup-first pipeline", () => {
     }], longTimeoutSettings, 100, { emit: (event) => longTimeoutEvents.push(event) });
     await vi.waitFor(() => expect(longTimeoutEvents).toEqual([{ tokenId: "t-long", status: "pending" }]));
 
-    frameResolvers.get(2_500)?.({ items: [{ tokenId: "t-short", targetText: "novel", display: "短时" }] });
+    frameResolvers.get(2_500)?.(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "短时"));
     await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(2));
-    frameResolvers.get(30_000)?.({ items: [{ tokenId: "t-long", targetText: "novel", display: "长时" }] });
+    frameResolvers.get(30_000)?.(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "长时"));
     await Promise.all([first, second]);
 
     expect(ai.glossFrame.mock.calls.map(([input]) => input.settings.ai.requestTimeoutMs)).toEqual(expect.arrayContaining([2_500, 30_000]));
@@ -655,49 +643,33 @@ describe("gloss resolver lookup-first pipeline", () => {
     ]);
   });
 
-  it("resolves duplicate token ids inside one AI frame independently", async () => {
-    const storage = createMemoryStorage();
-    const settings = testSettings();
-    await storage.settings.set(settings);
-    const ai = {
-      glossFrame: vi.fn(async (input: { items: Array<{ token: { id: string; surface: string } }> }) => ({
-        items: input.items.map((item) => ({
-          tokenId: item.token.id,
-          targetText: item.token.surface,
-          display: item.token.surface.toUpperCase()
-        }))
-      })),
-      ankiCard: vi.fn()
-    };
-    const resolver = createGlossResolver({
-      storage,
-      ai,
-      aiFrameMaxItems: 2,
-      aiFrameMaxMs: 1_000,
-      dbReadCoalesceMs: 0
-    });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
-
-    await resolveScan(resolver, "https://example.test/page", [{
-      id: "s1",
-      text: "A novel obscure archive appears.",
-      tokens: [
-        { id: "t-shared", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 },
-        { id: "t-shared", sentenceId: "s1", surface: "obscure", lemma: "obscure", startOffset: 8, endOffset: 15 }
-      ]
-    }], settings, 100, { emit: (event) => events.push(event) });
-
-    expect(events).toEqual(expect.arrayContaining([
-      { tokenId: "t-shared", status: "pending" },
-      { tokenId: "t-shared", status: "ready", item: { tokenId: "t-shared", targetText: "novel", display: "NOVEL" } },
-      { tokenId: "t-shared", status: "ready", item: { tokenId: "t-shared", targetText: "obscure", display: "OBSCURE" } }
+  it("correlates reversed frame results for two sessions with the same token id", async () => {
+    const { storage, glossCache } = createMemoryStorage(testSettings());
+    const ai = { glossFrame: vi.fn(async (input: GlossFrameBackendInput) => ({
+      items: input.items.map(({ requestItemId, token }) => ({
+        requestItemId, value: { targetText: token.surface, display: token.surface.toUpperCase() }
+      })).reverse()
+    })) };
+    const resolver = createGlossResolver({ storage, ai, aiFrameMaxItems: 2, dbReadCoalesceMs: 0 });
+    const first = startSession(resolver, "same-id", "novel");
+    const second = startSession(resolver, "same-id", "obscure");
+    await Promise.all([first.done, second.done]);
+    expect(first.events).toEqual([
+      { tokenId: "same-id", status: "pending" },
+      { tokenId: "same-id", status: "ready", item: { tokenId: "same-id", targetText: "novel", display: "NOVEL" } }
+    ]);
+    expect(second.events).toEqual([
+      { tokenId: "same-id", status: "pending" },
+      { tokenId: "same-id", status: "ready", item: { tokenId: "same-id", targetText: "obscure", display: "OBSCURE" } }
+    ]);
+    expect([...glossCache.values()]).toEqual(expect.arrayContaining([
+      expect.objectContaining({targetText:"novel",display:"NOVEL"}),
+      expect.objectContaining({targetText:"obscure",display:"OBSCURE"})
     ]));
-    expect(events.filter((event) => event.status === "pending")).toHaveLength(2);
-    expect(events.filter((event) => event.status === "ready")).toHaveLength(2);
   });
 
   it("stops before AI enqueue when the sink closes during async reads", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     const ai = {
@@ -710,7 +682,7 @@ describe("gloss resolver lookup-first pipeline", () => {
       dbReadCoalesceMs: 50,
       aiFrameMaxMs: 1
     });
-    const events: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const events: Array<GlossTokenOutcome> = [];
     let active = true;
 
     const done = resolveScan(resolver, "https://example.test/page", [{
@@ -728,8 +700,45 @@ describe("gloss resolver lookup-first pipeline", () => {
     expect(ai.glossFrame).not.toHaveBeenCalled();
   });
 
+  it("does not mark a memory-cached word shown when the session closes during cache-key hashing", async () => {
+    const { storage, lexicon } = createMemoryStorage(testSettings());
+    const ai = { glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新词")) };
+    const resolver = createGlossResolver({ storage, ai, dbReadCoalesceMs: 0, aiFrameMaxMs: 0 });
+    const sentences: SentenceCandidate[] = [{
+      id: "sentence", text: "A novel appears.",
+      tokens: [{ id: "token", sentenceId: "sentence", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
+    }];
+    const pageUrl = "https://example.test/page";
+    await resolveScan(resolver, pageUrl, sentences, testSettings(), 100, { emit: () => undefined });
+    await storage.lexicon.clearKnown();
+    const hashingStarted = deferred();
+    const releaseHash = deferred();
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    const digestSpy = vi.spyOn(crypto.subtle, "digest").mockImplementation(async (...args) => {
+      hashingStarted.resolve();
+      await releaseHash.promise;
+      return digest(...args);
+    });
+    const events: GlossTokenOutcome[] = [];
+    const session = resolver.createSession(pageUrl, testSettings(), 200, { emit: (event) => events.push(event) });
+    try {
+      const chunk = session.acceptChunk("chunk", 0, sentences);
+      await hashingStarted.promise;
+      session.close();
+      releaseHash.resolve();
+      await chunk;
+      await session.finish();
+      expect(events).toEqual([]);
+      expect(lexicon.get("en:novel")).toBeUndefined();
+      expect(ai.glossFrame).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseHash.resolve();
+      digestSpy.mockRestore();
+    }
+  });
+
   it("resolves chunk acceptance after lookup work leaves the concurrency gate", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     let releaseLexiconRead: ((value: Map<string, VocabularyRecord>) => void) | undefined;
@@ -737,9 +746,7 @@ describe("gloss resolver lookup-first pipeline", () => {
       releaseLexiconRead = resolve;
     }));
     const ai = {
-      glossFrame: vi.fn(async () => ({
-        items: [{ tokenId: "t-novel", targetText: "novel", display: "新词" }]
-      })),
+      glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新词")),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({
@@ -772,20 +779,20 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("reuses in-flight AI lookups for the same cache key", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
-    let resolveAi: ((value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void) | undefined;
+    let resolveAi: ((value: GlossBackendOutput) => void) | undefined;
     const ai = {
-      glossFrame: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+      glossFrame: vi.fn((_input: GlossFrameBackendInput) => new Promise<GlossBackendOutput>((resolve) => {
         resolveAi = resolve;
       })),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai });
     const sentence = "A novel archive appears.";
-    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const firstEvents: Array<GlossTokenOutcome> = [];
+    const secondEvents: Array<GlossTokenOutcome> = [];
 
     const first = resolveScan(resolver, "https://example.test/a", [{
       id: "s1",
@@ -801,7 +808,7 @@ describe("gloss resolver lookup-first pipeline", () => {
     }], settings, 200, { emit: (event) => secondEvents.push(event) });
     await vi.waitFor(() => expect(secondEvents).toEqual([{ tokenId: "t-second", status: "pending" }]));
 
-    resolveAi?.({ items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }] });
+    resolveAi?.(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "新词"));
     await Promise.all([first, second]);
 
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
@@ -816,7 +823,7 @@ describe("gloss resolver lookup-first pipeline", () => {
   });
 
   it("shares in-flight AI failures with duplicate lookups", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
     let rejectAi: ((error: Error) => void) | undefined;
@@ -828,8 +835,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     };
     const resolver = createGlossResolver({ storage, ai });
     const sentence = "A novel archive appears.";
-    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
+    const firstEvents: Array<GlossTokenOutcome> = [];
+    const secondEvents: Array<GlossTokenOutcome> = [];
 
     const first = resolveScan(resolver, "https://example.test/a", [{
       id: "s1",
@@ -854,7 +861,6 @@ describe("gloss resolver lookup-first pipeline", () => {
       {
         tokenId: "t-first",
         status: "error",
-        message: "backend unavailable",
         error: { reason: "service-error", message: "backend unavailable", service: "ai" }
       }
     ]);
@@ -863,37 +869,32 @@ describe("gloss resolver lookup-first pipeline", () => {
       {
         tokenId: "t-second",
         status: "error",
-        message: "backend unavailable",
         error: { reason: "service-error", message: "backend unavailable", service: "ai" }
       }
     ]);
   });
 
   it("finishes an in-flight lookup for active duplicate subscribers after the owner disconnects", async () => {
-    const storage = createMemoryStorage();
+    const { storage } = createMemoryStorage();
     const settings = testSettings();
     await storage.settings.set(settings);
-    let resolveAi: ((value: { items: Array<{ tokenId: string; targetText: string; display: string }> }) => void) | undefined;
+    let resolveAi: ((value: GlossBackendOutput) => void) | undefined;
     const ai = {
-      glossFrame: vi.fn(() => new Promise<{ items: Array<{ tokenId: string; targetText: string; display: string }> }>((resolve) => {
+      glossFrame: vi.fn((_input: GlossFrameBackendInput) => new Promise<GlossBackendOutput>((resolve) => {
         resolveAi = resolve;
       })),
       ankiCard: vi.fn()
     };
     const resolver = createGlossResolver({ storage, ai });
     const sentence = "A novel archive appears.";
-    const firstEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    const secondEvents: Array<Omit<GlossTokenPayload, "scanId">> = [];
-    let firstActive = true;
-
-    const first = resolveScan(resolver, "https://example.test/a", [{
+    const firstEvents: Array<GlossTokenOutcome> = [];
+    const secondEvents: Array<GlossTokenOutcome> = [];
+    const firstSession = resolver.createSession("https://example.test/a", settings, 100, { emit: (event) => firstEvents.push(event) });
+    const first = firstSession.acceptChunk("first", 0, [{
       id: "s1",
       text: sentence,
       tokens: [{ id: "t-first", sentenceId: "s1", surface: "novel", lemma: "novel", startOffset: 2, endOffset: 7 }]
-    }], settings, 100, {
-      emit: (event) => firstEvents.push(event),
-      isActive: () => firstActive
-    });
+    }]).then(() => firstSession.finish());
     await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
 
     const second = resolveScan(resolver, "https://example.test/a", [{
@@ -903,8 +904,8 @@ describe("gloss resolver lookup-first pipeline", () => {
     }], settings, 200, { emit: (event) => secondEvents.push(event) });
     await vi.waitFor(() => expect(secondEvents).toEqual([{ tokenId: "t-second", status: "pending" }]));
 
-    firstActive = false;
-    resolveAi?.({ items: [{ tokenId: "t-first", targetText: "novel", display: "新词" }] });
+    firstSession.close();
+    resolveAi?.(frameReply(ai.glossFrame.mock.calls.at(-1)![0], "新词"));
     await Promise.all([first, second]);
 
     expect(ai.glossFrame).toHaveBeenCalledTimes(1);
@@ -914,6 +915,78 @@ describe("gloss resolver lookup-first pipeline", () => {
       { tokenId: "t-second", status: "ready", item: { tokenId: "t-second", targetText: "novel", display: "新词" } }
     ]);
   });
+  it.each(["duplicate", "unknown", "missing"] as const)("validates %s frame result identities before committing", async (kind) => {
+    const { storage, glossCache } = createMemoryStorage(testSettings());
+    const ai = { glossFrame: vi.fn(async (input: GlossFrameBackendInput) => {
+      const reply = frameReply(input, "译文");
+      if (kind === "duplicate") reply.items.push(reply.items[0]!);
+      if (kind === "unknown") reply.items.push({ requestItemId: "unknown", value: { targetText: "word", display: "错误" } });
+      if (kind === "missing") reply.items.pop();
+      return reply;
+    }) };
+    const resolver = createGlossResolver({ storage, ai, dbReadCoalesceMs: 0, aiFrameMaxItems: 2 });
+    const left = startSession(resolver, "same-id", "novel");
+    const right = startSession(resolver, "same-id", "obscure");
+    await Promise.all([left.done, right.done]);
+    const outcomes = [...left.events, ...right.events];
+    expect(outcomes.filter((item) => item.status === "error")).toHaveLength(kind === "missing" ? 1 : 2);
+    expect(outcomes.filter((item) => item.status === "ready")).toHaveLength(kind === "missing" ? 1 : 0);
+    expect(glossCache.size).toBe(kind === "missing" ? 1 : 0);
+  });
+
+  it("removes queued jobs when their final subscriber closes", async () => {
+    const { storage, glossCache } = createMemoryStorage(testSettings());
+    const ai = { glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "译文")) };
+    const resolver = createGlossResolver({ storage, ai, dbReadCoalesceMs: 0, aiFrameMaxMs: 60_000 });
+    const scan = startSession(resolver, "token", "novel");
+    await vi.waitFor(() => expect(scan.events).toHaveLength(1));
+    scan.session.close();
+    await scan.done;
+    expect(ai.glossFrame).not.toHaveBeenCalled();
+    expect(glossCache.size).toBe(0);
+  });
+
+  it("keeps demanded jobs in a dispatched mixed frame and aborts only after the last subscriber leaves", async () => {
+    const { storage, glossCache } = createMemoryStorage(testSettings());
+    const response = deferred<GlossBackendOutput>();
+    const ai = { glossFrame: vi.fn((_input: GlossFrameBackendInput) => response.promise) };
+    const resolver = createGlossResolver({ storage, ai, dbReadCoalesceMs: 0, aiFrameMaxItems: 2 });
+    const left = startSession(resolver, "same-id", "novel");
+    const right = startSession(resolver, "same-id", "obscure");
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+    const input = ai.glossFrame.mock.calls[0]![0];
+    expect(new Set(input.items.map((item) => item.requestItemId)).size).toBe(2);
+    left.session.close();
+    expect(input.signal?.aborted).toBe(false);
+    response.resolve({ items: frameReply(input, "译文").items.reverse() });
+    await Promise.all([left.done, right.done]);
+    expect(left.events.map((item) => item.status)).toEqual(["pending"]);
+    expect(right.events.map((item) => item.status)).toEqual(["pending", "ready"]);
+    expect(glossCache.size).toBe(1);
+  });
+
+  it("aborts an unneeded frame and keeps a replacement job when the canceled request settles late", async () => {
+    const { storage, glossCache } = createMemoryStorage(testSettings());
+    const oldResponse = deferred<GlossBackendOutput>();
+    const newResponse = deferred<GlossBackendOutput>();
+    const ai = { glossFrame: vi.fn((_input: GlossFrameBackendInput) => ai.glossFrame.mock.calls.length === 1 ? oldResponse.promise : newResponse.promise) };
+    const resolver = createGlossResolver({ storage, ai, dbReadCoalesceMs: 0, aiFrameMaxItems: 1 });
+    const obsolete = startSession(resolver, "old", "novel");
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(1));
+    obsolete.session.close();
+    expect(ai.glossFrame.mock.calls[0]![0].signal?.aborted).toBe(true);
+    const replacement = startSession(resolver, "new", "novel");
+    await vi.waitFor(() => expect(replacement.events).toHaveLength(1));
+    oldResponse.resolve(frameReply(ai.glossFrame.mock.calls[0]![0], "旧译"));
+    await vi.waitFor(() => expect(ai.glossFrame).toHaveBeenCalledTimes(2));
+    const duplicate = startSession(resolver, "duplicate", "novel");
+    await vi.waitFor(() => expect(duplicate.events).toHaveLength(1));
+    newResponse.resolve(frameReply(ai.glossFrame.mock.calls[1]![0], "新译"));
+    await Promise.all([obsolete.done, replacement.done, duplicate.done]);
+    expect(ai.glossFrame).toHaveBeenCalledTimes(2);
+    expect([...glossCache.values()].map((item) => item.display)).toEqual(["新译"]);
+  });
+
 });
 
 function testSettings(): GlossaSettings {
@@ -953,141 +1026,16 @@ function record(lemma: string, state: "known" | "ignored" | "learning_active") {
     surface: lemma,
     lang: "en",
     state,
-    shownCount: 0,
-    clickCount: 0,
-    ankiNoteIds: []
   };
 }
 
-function createMemoryStorage(): ExtensionStorage {
-  const settings = { value: undefined as unknown };
-  const lexicon = new Map<string, unknown>();
-  const glossCache = new Map<string, unknown>();
-  const cardCache = new Map<string, unknown>();
-  const cardedWords = new Map<string, unknown>();
-
-  return {
-    settings: {
-      async get() {
-        return settings.value as never;
-      },
-      async set(value) {
-        settings.value = value;
-      }
-    },
-    lexicon: {
-      async get(key) {
-        return lexicon.get(key) as never;
-      },
-      async getMany(keys) {
-        return readMany<VocabularyRecord>(lexicon, keys);
-      },
-      async listByState(state: VocabularyState) {
-        return Array.from(lexicon.values())
-          .filter((record): record is VocabularyRecord => (record as VocabularyRecord).state === state)
-          .sort((left, right) => left.lemma.localeCompare(right.lemma));
-      },
-      async update(key, transition) {
-        const next = transition(lexicon.get(key) as VocabularyRecord | undefined);
-        if (next) lexicon.set(key, next); else lexicon.delete(key);
-        return next;
-      },
-      async put(value) {
-        lexicon.set(value.key, value);
-      },
-      async delete(key) {
-        lexicon.delete(key);
-      }
-    },
-    glossCache: {
-      async get(key) {
-        return glossCache.get(key) as never;
-      },
-      async getMany(keys) {
-        return readMany<GlossCacheEntry>(glossCache, keys);
-      },
-      async getFresh(key, now, ttlMs) {
-        const value = glossCache.get(key) as GlossCacheEntry | undefined;
-        return value && isFreshGlossCacheEntry(value, now, ttlMs) ? value : undefined;
-      },
-      async getFreshMany(keys, now, ttlMs) {
-        return freshMany(readMany<GlossCacheEntry>(glossCache, keys), now, ttlMs);
-      },
-      async put(key, value) {
-        glossCache.set(key, value);
-      },
-      async delete(key) {
-        glossCache.delete(key);
-      },
-      async clear() {
-        glossCache.clear();
-      }
-    },
-    cardCache: {
-      async get(key) {
-        return cardCache.get(key) as never;
-      },
-      async getMany(keys) {
-        return readMany<AnkiCardOutput>(cardCache, keys);
-      },
-      async put(key, value) {
-        cardCache.set(key, value);
-      },
-      async delete(key) {
-        cardCache.delete(key);
-      },
-      async clear() {
-        cardCache.clear();
-      }
-    },
-    cardedWords: {
-      async get(key) {
-        return cardedWords.get(key) as never;
-      },
-      async getMany(keys) {
-        return readMany<CardedWordRecord>(cardedWords, keys);
-      },
-      async put(key, value) {
-        cardedWords.set(key, value);
-      },
-      async delete(key) {
-        cardedWords.delete(key);
-      },
-      async clear() {
-        cardedWords.clear();
-      }
-    },
-    async resetCardHistory() {
-      cardCache.clear();
-      cardedWords.clear();
-      for (const [key, value] of lexicon) {
-        const record = value as VocabularyRecord;
-        lexicon.set(key, { ...record, ankiNoteIds: [] });
-      }
-    }
-  };
+function frameReply(input: GlossFrameBackendInput, display: string): GlossBackendOutput {
+  return { items: input.items.map(({requestItemId, token}) => ({requestItemId, value: {targetText: token.surface, display}})) };
 }
 
-function readMany<T>(store: Map<string, unknown>, keys: string[]): Map<string, T> {
-  const result = new Map<string, T>();
-  for (const key of keys) {
-    if (store.has(key)) {
-      result.set(key, store.get(key) as T);
-    }
-  }
-  return result;
-}
-
-function freshMany(values: Map<string, GlossCacheEntry>, now: number, ttlMs: number): Map<string, GlossCacheEntry> {
-  const result = new Map<string, GlossCacheEntry>();
-  for (const [key, value] of values) {
-    if (isFreshGlossCacheEntry(value, now, ttlMs)) {
-      result.set(key, value);
-    }
-  }
-  return result;
-}
-
-function isFreshGlossCacheEntry(value: GlossCacheEntry, now: number, ttlMs: number): boolean {
-  return Number.isFinite(value.createdAt) && now < value.createdAt + ttlMs;
+function startSession(resolver: ReturnType<typeof createGlossResolver>, tokenId: string, word: string) {
+  const events: GlossTokenOutcome[] = [];
+  const session = resolver.createSession("https://example.test/" + tokenId, testSettings(), 100, { emit: (event) => events.push(event) });
+  const done = session.acceptChunk(tokenId, 0, [{ id: tokenId, text: word, tokens: [{id:tokenId,sentenceId:tokenId,surface:word,lemma:word,startOffset:0,endOffset:word.length}] }]).then(() => session.finish());
+  return { session, events, done };
 }

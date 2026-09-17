@@ -1,14 +1,16 @@
 import { isKnownLemma } from "../core/lexicon";
 import { normalizeLemma } from "../core/state";
 import type { SentenceCandidate, TokenCandidate } from "../shared/types";
-import { createSentenceContextResolver, type SentenceContext } from "./context";
+import { createAsyncSentenceContextResolver, type SentenceContext } from "./context";
+import { fingerprint, occurrencesFor } from "./occurrence";
+import { WORD_PATTERN, isReadableElement, yieldToPage, type ReadingPolicy } from "./readability";
 
 export interface ScannedToken extends TokenCandidate {
+  readingPolicy?: ReadingPolicy;
   textNode: Text;
   nodeStartOffset: number;
   nodeEndOffset: number;
   sentenceText: string;
-  sourceText: string;
   sourceFingerprint: string;
   scanVersion: number;
 }
@@ -47,39 +49,9 @@ export interface ScanOptions {
 export interface ScanChunkOptions extends ScanOptions {
   maxTokensPerChunk?: number;
   maxChunkDelayMs?: number;
+  shouldContinue?: () => boolean;
+  onShadowRoot?: (root: ShadowRoot) => void;
 }
-
-const WORD_RE = /[A-Za-z]+(?:['-][A-Za-z]+)*/g;
-const SKIPPED_TAGS = new Set([
-  "SCRIPT",
-  "STYLE",
-  "NOSCRIPT",
-  "TEMPLATE",
-  "SVG",
-  "CANVAS",
-  "MATH",
-  "TEXTAREA",
-  "INPUT",
-  "SELECT",
-  "OPTION",
-  "PRE",
-  "CODE",
-  "KBD",
-  "SAMP",
-  "VAR",
-  "BUTTON"
-]);
-const SKIPPED_SELECTOR = [
-  "[contenteditable='true']",
-  "[contenteditable='']",
-  "[aria-hidden='true']",
-  "[translate='no']",
-  ".notranslate",
-  ".imt-notranslate",
-  "[data-glossa-owned='1']",
-  "[data-glossa-label]",
-  "#glossa-overlay"
-].join(",");
 
 export async function scanDocumentTextInChunks(
   doc: Document,
@@ -88,9 +60,12 @@ export async function scanDocumentTextInChunks(
   onChunk: (chunk: ScanChunk) => Promise<boolean | void> | boolean | void
 ): Promise<ScanStats> {
   const stats = createScanStats();
-  const textNodes = doc.body ? collectTextNodes(doc.body, stats) : [];
+  const registry = occurrencesFor(doc);
+  const textNodes = doc.body ? discoverTextNodes(doc.body, stats, options.onShadowRoot) : [];
+  const shouldContinue = options.shouldContinue ?? (() => true);
+  let sliceStarted = nowMs();
   const lemmaCounts = new Map<string, number>();
-  const resolveSentenceContext = createSentenceContextResolver();
+  const resolveSentenceContext = createAsyncSentenceContextResolver(shouldContinue);
   const sentenceIds = new WeakMap<Node, Map<number, string>>();
   let sentenceIndex = 0;
   let chunkIndex = 0;
@@ -108,6 +83,7 @@ export async function scanDocumentTextInChunks(
   const forceRefreshKeys = options.forceRefreshKeys ? new Set(options.forceRefreshKeys) : undefined;
 
   const flushChunk = async (): Promise<boolean> => {
+    if (!shouldContinue()) return false;
     if (chunkTokens.length === 0) {
       chunkStartedAt = nowMs();
       return true;
@@ -149,9 +125,15 @@ export async function scanDocumentTextInChunks(
   };
 
   for (const textNode of textNodes) {
+    if (!shouldContinue()) return stats;
+    if (chunkTokens.length > 0 && nowMs() - chunkStartedAt >= maxChunkDelayMs && !await flushChunk()) return stats;
+    if (nowMs() - sliceStarted >= 8) { await yieldToPage(); sliceStarted = nowMs(); }
+    if (!textNode) continue;
     stats.scannedTextNodes += 1;
     const text = textNode.nodeValue ?? "";
-    for (const wordMatch of text.matchAll(WORD_RE)) {
+    for (const wordMatch of text.matchAll(WORD_PATTERN)) {
+      if (!shouldContinue()) return stats;
+      if (nowMs() - sliceStarted >= 8) { await yieldToPage(); sliceStarted = nowMs(); }
       const surface = wordMatch[0];
       if (!isEligibleSurface(surface, minWordLength)) {
         stats.rejectedByShape += 1;
@@ -164,7 +146,7 @@ export async function scanDocumentTextInChunks(
       }
       const nodeStartOffset = wordMatch.index ?? 0;
       const nodeEndOffset = nodeStartOffset + surface.length;
-      const context = resolveSentenceContext(textNode, nodeStartOffset, nodeEndOffset);
+      const context = await resolveSentenceContext(textNode, nodeStartOffset, nodeEndOffset);
       if (!context || context.text.length < minContextChars) {
         stats.rejectedByText += 1;
         continue;
@@ -180,14 +162,15 @@ export async function scanDocumentTextInChunks(
         stats.rejectedByFrequency += 1;
         continue;
       }
-      if (options.requireRenderableRange && !hasRenderableRange(textNode, nodeStartOffset, nodeEndOffset, options.requireViewportRange === true)) {
+      const currentLocation = registry.locate({ textNode, nodeStartOffset, nodeEndOffset, surface } as ScannedToken);
+      if (options.requireRenderableRange && (!currentLocation || !hasRenderableRange(currentLocation.node, currentLocation.start, currentLocation.end, options.requireViewportRange === true))) {
         stats.rejectedByVisibility += 1;
         continue;
       }
       const sentenceId = sentenceIdFor(context);
       const sourceFingerprint = createSourceFingerprint(text, nodeStartOffset, nodeEndOffset);
       const token: ScannedToken = {
-        id: createTokenId(textNode, surface, lemma, context.sentenceStart, sourceFingerprint),
+        id: registry.identify(textNode, nodeStartOffset, nodeEndOffset, surface),
         sentenceId,
         surface,
         lemma,
@@ -197,11 +180,11 @@ export async function scanDocumentTextInChunks(
         nodeStartOffset,
         nodeEndOffset,
         sentenceText: context.text,
-        sourceText: surface,
         sourceFingerprint,
         scanVersion,
         ...(forceRefresh ? { forceRefresh: true } : {})
       };
+      registry.register(token);
       appendToken(token);
       chunkTokens.push(token);
       lemmaCounts.set(lemma, count + 1);
@@ -237,73 +220,17 @@ export function glossRefreshKey(input: { sentenceText: string; lemma: string; st
   return JSON.stringify([input.sentenceText, input.lemma, input.startOffset, input.endOffset]);
 }
 
-function createTokenId(
-  textNode: Text,
-  surface: string,
-  lemma: string,
-  sentenceStart: number,
-  sourceFingerprint: string
-): string {
-  const root = textNode.getRootNode();
-  const rootKind = root instanceof ShadowRoot ? "shadow" : "document";
-  const parentPath = textNode.parentElement ? elementPath(textNode.parentElement) : "text";
-  return [
-    "t",
-    rootKind,
-    hashSmall(parentPath),
-    hashSmall(`${sentenceStart}:${surface}:${lemma}`),
-    sourceFingerprint
-  ].join(":");
-}
-
-function elementPath(element: Element): string {
-  const parts: string[] = [];
-  let current: Element | null = element;
-  while (current && parts.length < 8) {
-    const parent: Element | null = current.parentElement;
-    const siblingIndex = parent
-      ? Array.from<Element>(parent.children)
-        .filter((sibling) => !sibling.matches("[data-glossa-owned='1']"))
-        .indexOf(current)
-      : 0;
-    parts.push(`${current.tagName.toLowerCase()}:${Math.max(0, siblingIndex)}`);
-    current = parent;
+function* discoverTextNodes(root: HTMLElement, stats: ScanStats, onShadowRoot?: (root: ShadowRoot) => void): Generator<Text | undefined> {
+  const stack: Node[] = [root];
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (node !== root && node.nextSibling) stack.push(node.nextSibling);
+    if (node instanceof Element && !isReadableElement(node)) { stats.rejectedBySubtree++; yield undefined; continue; }
+    if (node instanceof Text) { if (hasMeaningfulText(node.data)) yield node; else { stats.rejectedByText++; yield undefined; } continue; }
+    if (node.firstChild) stack.push(node.firstChild);
+    if (node instanceof Element && node.shadowRoot) { occurrencesFor(node.ownerDocument).observe(node.shadowRoot); onShadowRoot?.(node.shadowRoot); if (node.shadowRoot.firstChild) stack.push(node.shadowRoot.firstChild); }
+    yield undefined;
   }
-  return parts.reverse().join("/");
-}
-
-function collectTextNodes(root: HTMLElement, stats: ScanStats): Text[] {
-  const nodes: Text[] = [];
-  const visit = (node: Node) => {
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      const element = node as Element;
-      if (isExcludedElement(element)) {
-        stats.rejectedBySubtree += 1;
-        return;
-      }
-      if (!isVisibleElement(element)) {
-        stats.rejectedByVisibility += 1;
-        return;
-      }
-    }
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node as Text;
-      if (text.parentElement && hasMeaningfulText(text.nodeValue)) {
-        nodes.push(text);
-      } else {
-        stats.rejectedByText += 1;
-      }
-      return;
-    }
-    if (node instanceof Element && node.shadowRoot) {
-      visit(node.shadowRoot);
-    }
-    for (const child of Array.from(node.childNodes)) {
-      visit(child);
-    }
-  };
-  visit(root);
-  return nodes;
 }
 
 function nowMs(): number {
@@ -321,31 +248,6 @@ function createScanStats(): ScanStats {
     rejectedByFrequency: 0,
     candidateWords: 0
   };
-}
-
-function isExcludedElement(element: Element): boolean {
-  if (SKIPPED_TAGS.has(element.tagName)) {
-    return true;
-  }
-  if (element.matches(SKIPPED_SELECTOR)) {
-    return true;
-  }
-  return element.closest(SKIPPED_SELECTOR) !== null;
-}
-
-function isVisibleElement(element: Element): boolean {
-  if (!element.isConnected) {
-    return false;
-  }
-  const view = element.ownerDocument.defaultView;
-  if (!view?.getComputedStyle) {
-    return true;
-  }
-  const style = view.getComputedStyle(element);
-  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
-    return false;
-  }
-  return style.contentVisibility !== "hidden";
 }
 
 function isEligibleSurface(surface: string, minWordLength: number): boolean {
@@ -450,21 +352,7 @@ function hasPositiveArea(left: number, right: number, top: number, bottom: numbe
   return right > left && bottom > top;
 }
 
-export function createSourceFingerprint(text: string, startOffset: number, endOffset: number): string {
-  const before = text.slice(Math.max(0, startOffset - 16), startOffset);
-  const target = text.slice(startOffset, endOffset);
-  const after = text.slice(endOffset, Math.min(text.length, endOffset + 16));
-  return `${startOffset}:${endOffset}:${hashSmall(`${before}|${target}|${after}`)}`;
-}
-
-function hashSmall(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-}
+export const createSourceFingerprint = fingerprint;
 
 export function toSerializableSentence(sentence: ScannedSentence): SentenceCandidate {
   return {

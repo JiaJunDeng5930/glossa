@@ -1,15 +1,9 @@
 # Glossa Website Notes
 
-The landing page is a static Cloudflare Pages site served directly from `website/public`.
+The landing page is a static Cloudflare Pages site served from `website/public`. Keep the release CTA pointed at `releases/latest` and keep marketing copy independent from extension implementation details.
 
-The page uses an editorial reading-room visual system: warm paper, ink typography, vermilion annotations, and product UI rendered with HTML and CSS. Keep the release CTA pointed at `releases/latest`.
+For implementation review, use `npm run preview:ui`. It builds the extension and serves the translation, settings, and popup pages from production bundles and styles. The translation preview entry calls the production content scanner and overlay; use that preview for overlay checks instead of maintaining a hand-copied sample or a second renderer.
 
-Desktop uses one pinned reading stage. Three copy chapters crossfade in place while the article reveals glosses, the Alt-click gesture, and the Anki card through CSS variables written by the inline story controller. Mobile and reduced-motion modes keep every chapter and the completed demo in normal document flow.
+Styles and marketing assets live under `website/public`. Reuse existing raster assets or generated bitmap images for image moments; do not add hand-drawn SVG illustration assets for this page.
 
-Reading demos should mirror the extension content overlay. Gloss examples keep inline `data-glossa-token` wrappers with the source word on the text baseline and a compact label above it. Keep this model aligned with `src/content/overlay.ts` when changing the demo.
-
-Styles live in `public/styles/global.css`. Keep assets under `public/assets` so local file previews and Cloudflare Pages use the same paths.
-
-Use existing raster assets or generated bitmap images for image moments. Do not introduce hand-drawn SVG illustration assets for this page.
-
-Run `node --test website/landing.test.mjs` from the repository root for the landing-page smoke check.
+Website coverage lives in `tests/e2e/website.spec.ts`. It runs with the normal Playwright command `npm run test:e2e` and is included in `npm run verify`; there is no separate landing-page test command.

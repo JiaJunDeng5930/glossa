@@ -1,13 +1,15 @@
-import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../shared/errors";
-import { GLOSS_TARGET_LANG, type AnkiCard, type AnkiCardOutput, type GlossaSettings, type GlossItem, type TokenCandidate } from "../shared/types";
+import { AI_REQUEST_POLICY } from "./requestPolicy";
+import { createDiagnosticError, diagnosticErrorFrom, errorPayloadFromHttpStatus, requestDiagnosticErrorFrom } from "../errors";
+import { GLOSS_TARGET_LANG, type AnkiCard, type GlossaSettings, type TokenCandidate } from "../types";
 
 export interface GlossBackendOutput {
-  items: GlossItem[];
+  items: Array<{ requestItemId: string; value: { targetText: string; display: string } }>;
 }
 
 export interface GlossFrameItem {
+  requestItemId: string;
   sentence: string;
-  token: TokenCandidate;
+  token: Pick<TokenCandidate, "surface" | "lemma" | "startOffset" | "endOffset">;
 }
 
 export interface GlossFrameBackendInput {
@@ -22,14 +24,22 @@ export interface AnkiCardInput {
   token: TokenCandidate;
 }
 
-export interface AiBackend {
+export interface AiClient {
   glossFrame(input: GlossFrameBackendInput): Promise<GlossBackendOutput>;
-  ankiCard(input: AnkiCardInput): Promise<AnkiCardOutput>;
+  ankiCard(input: AnkiCardInput): Promise<AnkiCard>;
+  probe(settings: GlossaSettings, signal?: AbortSignal): Promise<void>;
 }
 
 // Contextual AI calls send the current sentence and target token to the endpoint selected in settings.
-export function createAiBackend(fetchImpl: typeof fetch = fetch): AiBackend {
+export function createAiClient(fetchImpl: typeof fetch = fetch): AiClient {
   return {
+    async probe(settings, signal) {
+      if (isOpenAiProvider(settings.ai.provider)) {
+        await callOpenAiForTask(fetchImpl, settings, "Reply with OK.", { task: "connection-test" }, signal);
+      } else {
+        await postJson(fetchImpl, `${trimSlash(settings.ai.endpoint)}/gloss`, { items: [], targetLang: GLOSS_TARGET_LANG, prompt: settings.prompts.gloss, reasoningEffort: settings.ai.reasoningEffort, promptVersion: settings.promptVersion, modelVersion: settings.modelVersion }, undefined, settings.ai.requestTimeoutMs, validateGlossBackendOutput, signal);
+      }
+    },
     async glossFrame(input) {
       if (isOpenAiProvider(input.settings.ai.provider)) {
         const output = await callOpenAiForTask(fetchImpl, input.settings, glossSystemInstruction(), {
@@ -131,11 +141,11 @@ function reasoningBody(settings: GlossaSettings): { reasoning?: { effort: Exclud
 }
 
 function glossSystemInstruction(): string {
-  return "Return strict JSON only for the gloss task: {\"items\":[{\"tokenId\":\"...\",\"targetText\":\"...\",\"display\":\"...\",\"phrase\":\"...\"}]}. Follow the prompt field in the user payload.";
+  return "Return strict JSON only for the gloss task: {\"items\":[{\"requestItemId\":\"...\",\"value\":{\"targetText\":\"...\",\"display\":\"...\"}}]}. Follow the prompt field in the user payload.";
 }
 
 function ankiCardSystemInstruction(): string {
-  return "Return strict JSON only for the anki-card task: {\"cards\":[{\"front\":\"...\",\"back\":\"...\"}]}. The cards array may contain multiple cards. When the user prompt does not request a card count, create one card. Follow the prompt field in the user payload.";
+  return "Return strict JSON only for the anki-card task: {\"cards\":[{\"front\":\"...\",\"back\":\"...\"}]}. The cards array must contain exactly one card. Follow the prompt field in the user payload.";
 }
 
 type JsonValidator<T> = (value: unknown) => T;
@@ -150,13 +160,13 @@ function parseJsonOutput<T>(value: string, validate: JsonValidator<T>): T {
   return validate(parsed);
 }
 
-async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey?: string, timeoutMs = 30_000, validate?: JsonValidator<T>, signal?: AbortSignal): Promise<T> {
+async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, apiKey: string | undefined, timeoutMs: number, validate: JsonValidator<T>, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) {
     headers.authorization = `Bearer ${apiKey}`;
   }
   let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < AI_REQUEST_POLICY.maxAttempts; attempt += 1) {
     const controller = new AbortController();
     const abortFromCaller = (): void => controller.abort();
     if (signal?.aborted) {
@@ -181,7 +191,7 @@ async function postJson<T>(fetchImpl: typeof fetch, url: string, body: unknown, 
       } catch (error) {
         throw invalidAiResponse("AI returned invalid JSON", error);
       }
-      return validate ? validate(parsed) : parsed as T;
+      return validate(parsed);
     } catch (error) {
       const diagnosticError = requestDiagnosticErrorFrom(error, { reason: "service-error", message: "AI backend request failed", service: "ai" });
       if (signal?.aborted) {
@@ -274,30 +284,17 @@ function validateGlossBackendOutput(value: unknown): GlossBackendOutput {
   return { items: value.items.map(validateGlossItem) };
 }
 
-function validateGlossItem(value: unknown): GlossItem {
+function validateGlossItem(value: unknown): GlossBackendOutput["items"][number] {
   assertRecord(value);
-  if (
-    typeof value.tokenId !== "string"
-    || typeof value.targetText !== "string"
-    || typeof value.display !== "string"
-    || (value.phrase !== undefined && typeof value.phrase !== "string")
-  ) {
-    throw invalidResponseShape();
-  }
-  return {
-    tokenId: value.tokenId,
-    targetText: value.targetText,
-    display: value.display,
-    ...(value.phrase === undefined ? {} : { phrase: value.phrase })
-  };
+  assertRecord(value.value);
+  if (typeof value.requestItemId !== "string" || typeof value.value.targetText !== "string" || typeof value.value.display !== "string") throw invalidResponseShape();
+  return { requestItemId: value.requestItemId, value: { targetText: value.value.targetText, display: value.value.display } };
 }
 
-function validateAnkiCardOutput(value: unknown): AnkiCardOutput {
+function validateAnkiCardOutput(value: unknown): AnkiCard {
   assertRecord(value);
-  if (!Array.isArray(value.cards)) {
-    throw invalidResponseShape();
-  }
-  return { cards: value.cards.map(validateAnkiCard) };
+  if (!Array.isArray(value.cards) || value.cards.length !== 1) throw invalidResponseShape();
+  return validateAnkiCard(value.cards[0]);
 }
 
 function validateAnkiCard(value: unknown): AnkiCard {

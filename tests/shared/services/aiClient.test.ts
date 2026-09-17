@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createAiBackend } from "../../src/background/ai";
-import { DEFAULT_SETTINGS, type GlossaSettings, type TokenCandidate } from "../../src/shared/types";
+import { createAiClient } from "../../../src/shared/services/aiClient";
+import { DEFAULT_SETTINGS, type GlossaSettings, type TokenCandidate } from "../../../src/shared/types";
 
 describe("AI backend adapters", () => {
   it("sends reasoning effort to the Responses API and parses output_text", async () => {
@@ -9,7 +9,7 @@ describe("AI backend adapters", () => {
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
     const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
 
-    await createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
+    await createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings));
 
     expect(fetchImpl).toHaveBeenCalledWith("https://api.openai.com/v1/responses", expect.objectContaining({
       body: expect.stringContaining("\"reasoning\":{\"effort\":\"high\"}")
@@ -20,11 +20,11 @@ describe("AI backend adapters", () => {
 
   it("supports Chat Completions request and response shape", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
-      choices: [{ message: { content: "{\"items\":[{\"tokenId\":\"t1\",\"targetText\":\"submit\",\"display\":\"提交\"}]}" } }]
+      choices: [{ message: { content: "{\"items\":[{\"requestItemId\":\"t1\",\"value\":{\"targetText\":\"submit\",\"display\":\"提交\"}}]}" } }]
     }));
     const settings = settingsFor("openai-chat-completions", "https://api.openai.com/v1/chat/completions", "low");
 
-    const result = await createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings, [
+    const result = await createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings, [
       { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
     ]));
 
@@ -37,20 +37,21 @@ describe("AI backend adapters", () => {
     expect(calls[0]![0]).toBe("https://api.openai.com/v1/chat/completions");
     expect(body.reasoning).toEqual({ effort: "low" });
     expect(body.messages.map((message) => message.role)).toEqual(["developer", "user"]);
-    expect(result.items[0]).toMatchObject({ display: "提交" });
+    expect(result.items[0]).toMatchObject({ value: { display: "提交" } });
   });
 
   it("sends frame-shaped gloss batches to the backend", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
-      items: [{ tokenId: "t1", targetText: "submit", display: "提交" }]
+      items: [{ requestItemId: "t1", value: { targetText: "submit", display: "提交" } }]
     }));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
 
-    const result = await createAiBackend(fetchImpl as never).glossFrame({
+    const result = await createAiClient(fetchImpl as never).glossFrame({
       settings,
       items: [{
+        requestItemId: "t1",
         sentence: "Submit the form.",
-        token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
+        token: { surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
       }]
     });
 
@@ -59,7 +60,7 @@ describe("AI backend adapters", () => {
     expect(calls[0]![0]).toBe("https://ai.example.test/gloss");
     expect(body.items).toHaveLength(1);
     expect(body.targetLang).toBe("zh-CN");
-    expect(result.items[0]).toMatchObject({ display: "提交" });
+    expect(result.items[0]).toMatchObject({ value: { display: "提交" } });
   });
 
   it("supports legacy Completions request and response shape", async () => {
@@ -68,7 +69,7 @@ describe("AI backend adapters", () => {
     }));
     const settings = settingsFor("openai-completions", "https://api.openai.com/v1/completions", "medium");
 
-    const result = await createAiBackend(fetchImpl as never).ankiCard({
+    const result = await createAiClient(fetchImpl as never).ankiCard({
       settings,
       sentence: "Submit the form.",
       token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
@@ -84,7 +85,7 @@ describe("AI backend adapters", () => {
     expect(body.prompt).toContain("Return strict JSON only for the anki-card task");
     expect(body.prompt).toContain("\"task\":\"anki-card\"");
     expect(body.reasoning).toBeUndefined();
-    expect(result.cards[0]).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
+    expect(result).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
   });
 
   it("sends card requests to the glossa backend", async () => {
@@ -93,7 +94,7 @@ describe("AI backend adapters", () => {
     }));
     const settings = settingsFor("glossa-backend", "https://ai.example.test/", "medium");
 
-    const result = await createAiBackend(fetchImpl as never).ankiCard({
+    const result = await createAiClient(fetchImpl as never).ankiCard({
       settings,
       sentence: "Submit the form.",
       token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
@@ -104,14 +105,14 @@ describe("AI backend adapters", () => {
     expect(calls[0]![0]).toBe("https://ai.example.test/anki-card");
     expect(body).toMatchObject({ sentence: "Submit the form.", targetLang: "zh-CN" });
     expect(body.token).toMatchObject({ lemma: "submit" });
-    expect(result.cards[0]).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
+    expect(result).toMatchObject({ front: "<b>Submit</b> the form.", back: "提交" });
   });
 
   it("classifies HTTP auth failures as AI diagnostic errors", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "bad key" }, 401));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
 
-    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
+    await expect(createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "unauthorized", service: "ai", status: 401 }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -121,7 +122,7 @@ describe("AI backend adapters", () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ error: "missing" }, 404));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
+    await expect(createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "not-found", service: "ai", status: 404 }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -133,7 +134,7 @@ describe("AI backend adapters", () => {
     });
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
+    await expect(createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "network", service: "ai" }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -150,7 +151,7 @@ describe("AI backend adapters", () => {
     });
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    const result = await createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
+    const result = await createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings));
 
     expect(result.items).toEqual([]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -160,7 +161,7 @@ describe("AI backend adapters", () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ output_text: "not json" }));
     const settings = settingsFor("openai-responses", "https://api.openai.com/v1/responses", "high");
 
-    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
+    await expect(createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -170,7 +171,7 @@ describe("AI backend adapters", () => {
     const fetchImpl = vi.fn(async () => textResponse("not json"));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
+    await expect(createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings))).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -182,7 +183,7 @@ describe("AI backend adapters", () => {
     }));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings, [
+    await expect(createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings, [
       { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
     ]))).rejects.toMatchObject({
       payload: { reason: "invalid-response", service: "ai" }
@@ -196,7 +197,7 @@ describe("AI backend adapters", () => {
     }));
     const settings = settingsFor("glossa-backend", "https://ai.example.test", "high");
 
-    await expect(createAiBackend(fetchImpl as never).ankiCard({
+    await expect(createAiClient(fetchImpl as never).ankiCard({
       settings,
       sentence: "Submit the form.",
       token: { id: "t1", sentenceId: "s1", surface: "submit", lemma: "submit", startOffset: 0, endOffset: 6 }
@@ -217,7 +218,7 @@ describe("AI backend adapters", () => {
       }));
       const settings = settingsFor("glossa-backend", "https://ai.example.test", "medium");
 
-      const request = createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
+      const request = createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings));
       const assertion = expect(request).rejects.toMatchObject({
         payload: { service: "ai" }
       });
@@ -249,7 +250,7 @@ describe("AI backend adapters", () => {
         }
       };
 
-      const request = createAiBackend(fetchImpl as never).glossFrame(glossFrameInput(settings));
+      const request = createAiClient(fetchImpl as never).glossFrame(glossFrameInput(settings));
       const assertion = expect(request).rejects.toMatchObject({
         payload: { service: "ai" }
       });
@@ -286,6 +287,7 @@ function glossFrameInput(settings: GlossaSettings, tokens: TokenCandidate[] = []
   return {
     settings,
     items: tokens.map((token) => ({
+      requestItemId: token.id,
       sentence: "Submit the form.",
       token
     }))
@@ -305,3 +307,17 @@ function textResponse(value: string, status = 200): Response {
     headers: { "content-type": "application/json" }
   });
 }
+
+describe("single card boundary", () => {
+  it.each([[],[{front:"a",back:"b"},{front:"c",back:"d"}],[{}]].map(cards=>({cards})))("rejects invalid card cardinality or shape $cards",async ({cards})=> {
+    const fetchImpl=vi.fn(async()=>jsonResponse({cards}));
+    await expect(createAiClient(fetchImpl as never).ankiCard({settings:settingsFor("glossa-backend","https://ai.test","medium"),sentence:"Submit the form.",token:{id:"t1",sentenceId:"s1",surface:"Submit",lemma:"submit",startOffset:0,endOffset:6}})).rejects.toMatchObject({payload:{reason:"invalid-response"}});
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it("does not retry caller cancellation",async()=> {
+    const controller=new AbortController();
+    const fetchImpl=vi.fn(async()=> { controller.abort(); throw new DOMException("aborted","AbortError"); });
+    await expect(createAiClient(fetchImpl as never).glossFrame({...glossFrameInput(settingsFor("glossa-backend","https://ai.test","medium")),signal:controller.signal})).rejects.toBeDefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});

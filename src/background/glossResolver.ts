@@ -1,7 +1,7 @@
 import pLimit from "p-limit";
 
 import { buildGlossCacheKey, glossGenerationIdentity } from "../core/cache";
-import { diagnosticPayloadFrom } from "../shared/errors";
+import { createDiagnosticError, diagnosticPayloadFrom } from "../shared/errors";
 import { trace } from "../shared/diagnostics";
 import {
   createCandidateRecord,
@@ -10,26 +10,25 @@ import {
   vocabularyKey
 } from "../core/state";
 import type { ExtensionStorage } from "../storage/db";
-import type { AiBackend } from "./ai";
-import type { ErrorPayload, GlossaSettings, GlossCacheEntry, GlossItem, GlossTokenPayload, SentenceCandidate, TokenCandidate, VocabularyRecord } from "../shared/types";
+import type { AiClient } from "../shared/services/aiClient";
+import type { ErrorPayload, GlossaSettings, GlossCacheEntry, GlossItem, GlossTokenOutcome, SentenceCandidate, TokenCandidate, VocabularyRecord } from "../shared/types";
 import { GLOSS_TARGET_LANG } from "../shared/types";
 
 export interface GlossResolver {
   createSession(pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession;
-  clearMemory(): void;
   clearCache(): Promise<void>;
   activateGeneration(identity: string): Promise<void>;
-  invalidateGeneration(): void;
 }
 
 export interface GlossResolverSession {
   acceptChunk(chunkId: string, chunkIndex: number, sentences: SentenceCandidate[]): Promise<void>;
   finish(): Promise<void>;
+  close(): void;
 }
 
 export interface GlossResolverDeps {
   storage: ExtensionStorage;
-  ai: AiBackend;
+  ai: Pick<AiClient, "glossFrame">;
   maxMemoryEntries?: number;
   lookupConcurrency?: number;
   dbReadCoalesceMs?: number;
@@ -38,43 +37,35 @@ export interface GlossResolverDeps {
 }
 
 export interface GlossResolverSink {
-  emit(payload: Omit<GlossTokenPayload, "scanId">): void;
+  emit(payload: GlossTokenOutcome): void;
   isActive?(): boolean;
 }
 
-interface Miss {
+interface GlossSubscriber {
   token: TokenCandidate;
-  sentence: string;
   memoryKey: string;
+  now: number;
+  emit(payload: GlossTokenOutcome): void;
+  trackWrite(task: () => Promise<void>): void;
+  complete(): void;
+}
+
+// Jobs own demand; no occurrence or session becomes an owner of shared work.
+interface GlossJob {
+  sentence: string;
+  token: Pick<TokenCandidate, "surface" | "lemma" | "startOffset" | "endOffset">;
   dbCacheKey: string;
   inFlightKey: string;
-  inFlight: InFlightGloss;
   settings: GlossaSettings;
-  now: number;
+  createdAt: number;
   cacheEpoch: number;
-  sink: GlossResolverSink;
-  emit(payload: Omit<GlossTokenPayload, "scanId">): void;
-  trackWrite(task: () => Promise<void>): void;
+  subscribers: Set<GlossSubscriber>;
 }
 
-interface ReusedMiss {
-  token: TokenCandidate;
-  inFlight: InFlightGloss;
-  now: number;
-  sink: GlossResolverSink;
-  emit(payload: Omit<GlossTokenPayload, "scanId">): void;
-  trackWrite(task: () => Promise<void>): void;
-}
-
-type InFlightResult =
+type GlossJobResult =
   | { ok: true; item: GlossItem }
   | { ok: false; error: ErrorPayload }
   | { ok: false; cancelled: true };
-
-interface InFlightGloss {
-  promise: Promise<InFlightResult>;
-  resolve(result: InFlightResult): void;
-}
 
 interface ResolverStats {
   chunks: number;
@@ -97,7 +88,7 @@ interface PendingRead<T> {
 interface AiFrame {
   key: string;
   settings: GlossaSettings;
-  misses: Miss[];
+  jobs: GlossJob[];
   createdAt: number;
   timer: ReturnType<typeof globalThis.setTimeout>;
   controller: AbortController;
@@ -112,7 +103,7 @@ const DEFAULT_AI_FRAME_MAX_MS = 50;
 
 export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
-  const inFlight = new Map<string, InFlightGloss>();
+  const inFlight = new Map<string, GlossJob>();
   let generation = 0;
   let cacheEpoch = 0;
   let generationIdentity: string | undefined;
@@ -176,11 +167,13 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
 
   const createSession = (pageUrl: string, settings: GlossaSettings, now: number, sink: GlossResolverSink): GlossResolverSession => {
     const sessionGeneration = generation;
+    let closed = false;
+    const subscriptions = new Set<() => void>();
     const sessionCacheEpoch = cacheEpoch;
     const sessionCacheBarrier = cacheLane;
     const sessionSink: GlossResolverSink = {
       emit: (payload) => sink.emit(payload),
-      isActive: () => sessionGeneration === generation
+      isActive: () => !closed && sessionGeneration === generation
         && sink.isActive?.() !== false
     };
     const startedAt = nowMs();
@@ -221,7 +214,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
       }));
     };
 
-    const emit = (payload: Omit<GlossTokenPayload, "scanId">): void => {
+    const emit = (payload: GlossTokenOutcome): void => {
       stats[payload.status] += 1;
       if (sessionSink.isActive?.() === false) {
         return;
@@ -259,7 +252,8 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 sink: sessionSink,
                 emit,
                 track,
-                trackWrite
+                trackWrite,
+                subscriptions
               });
             }));
           });
@@ -296,6 +290,11 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
         track(task);
         return task;
       },
+      close() {
+        closed = true;
+        for (const unsubscribe of subscriptions) unsubscribe();
+        subscriptions.clear();
+      },
       async finish() {
         while (tasks.size > 0) {
           await Promise.allSettled(Array.from(tasks));
@@ -321,9 +320,6 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
 
   return {
     createSession,
-    clearMemory() {
-      memoryCache.clear();
-    },
     clearCache() {
       clearCachedValues();
       const task = cacheLane.then(() => deps.storage.glossCache.clear());
@@ -344,12 +340,6 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
       memoryCache.clear();
       aiOutlet.invalidate();
       return Promise.resolve();
-    },
-    invalidateGeneration() {
-      generationIdentity = undefined;
-      generation += 1;
-      memoryCache.clear();
-      aiOutlet.invalidate();
     }
   };
 }
@@ -363,22 +353,26 @@ async function resolveToken(input: {
   cacheEpoch: number;
   isCacheEpochCurrent(): boolean;
   pageUrl: string;
-  inFlight: Map<string, InFlightGloss>;
+  inFlight: Map<string, GlossJob>;
   recall(key: string): GlossItem | undefined;
   remember(key: string, item: GlossItem): void;
   lexiconReads: ReadCoalescer<VocabularyRecord>;
   glossCacheReads: ReadCoalescer<GlossCacheEntry>;
   aiOutlet: ReturnType<typeof createAiOutlet>;
   sink: GlossResolverSink;
-  emit(payload: Omit<GlossTokenPayload, "scanId">): void;
+  emit(payload: GlossTokenOutcome): void;
   track(task: Promise<void>): void;
   trackWrite(task: () => Promise<void>): void;
+  subscriptions: Set<() => void>;
 }): Promise<void> {
   try {
     if (input.sink.isActive?.() === false) {
       return;
     }
     const cacheKey = await glossCacheKey(input.sentence, input.token, input.settings);
+    if (input.sink.isActive?.() === false || !input.isCacheEpochCurrent()) {
+      return;
+    }
     const memoryKey = transientMemoryKey(input.pageUrl, cacheKey);
     // Fresh cached glosses replay before vocabulary state so toggling or rescanning keeps the current reading stable.
     const memoryCached = input.recall(memoryKey);
@@ -413,51 +407,59 @@ async function resolveToken(input: {
 
     input.emit({ tokenId: input.token.id, status: "pending" });
     const runtimeKey = aiInFlightKey(input.settings, cacheKey);
-    const active = input.inFlight.get(runtimeKey);
-    if (active) {
-      input.track(emitReusedMiss({
-        token: input.token,
-        inFlight: active,
-        now: input.now,
-        sink: input.sink,
-        emit: input.emit,
-        trackWrite: input.trackWrite
-      }, input.deps.storage));
-      return;
+    let job = input.inFlight.get(runtimeKey);
+    const newJob = !job;
+    if (!job) {
+      job = {
+        sentence: input.sentence.text,
+        token: tokenForAi(input.token),
+        dbCacheKey: cacheKey,
+        inFlightKey: runtimeKey,
+        settings: input.settings,
+        createdAt: input.now,
+        cacheEpoch: input.cacheEpoch,
+        subscribers: new Set()
+      };
+      input.inFlight.set(runtimeKey, job);
     }
-
-    const pending = createInFlightGloss();
-    input.inFlight.set(runtimeKey, pending);
-    const miss: Miss = {
-      token: input.token,
-      sentence: input.sentence.text,
-      memoryKey,
-      dbCacheKey: cacheKey,
-      inFlightKey: runtimeKey,
-      inFlight: pending,
-      settings: input.settings,
-      now: input.now,
-      cacheEpoch: input.cacheEpoch,
-      sink: input.sink,
-      emit: input.emit,
-      trackWrite: input.trackWrite
+    const subscribedJob = job;
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => { complete = resolve; });
+    const unsubscribe = (): void => {
+      subscribedJob.subscribers.delete(subscriber);
+      input.subscriptions.delete(unsubscribe);
+      complete();
+      if (subscribedJob.subscribers.size === 0) input.aiOutlet.remove(subscribedJob);
     };
-    input.aiOutlet.enqueue(miss);
-    input.track(pending.promise.then(() => undefined));
+    const subscriber: GlossSubscriber = {
+      token: input.token,
+      memoryKey,
+      now: input.now,
+      emit: input.emit,
+      trackWrite: input.trackWrite,
+      complete() {
+        input.subscriptions.delete(unsubscribe);
+        complete();
+      }
+    };
+    subscribedJob.subscribers.add(subscriber);
+    input.subscriptions.add(unsubscribe);
+    input.track(completed);
+    if (newJob) input.aiOutlet.enqueue(subscribedJob);
   } catch (error) {
     const payload = diagnosticPayloadFrom(error, {
       reason: "runtime",
       message: "Gloss lookup failed",
       service: "runtime"
     });
-    input.emit({ tokenId: input.token.id, status: "error", message: payload.message, error: payload });
+    input.emit({ tokenId: input.token.id, status: "error", error: payload });
   }
 }
 
 function createAiOutlet(input: {
-  ai: AiBackend;
+  ai: Pick<AiClient, "glossFrame">;
   storage: ExtensionStorage;
-  inFlight: Map<string, InFlightGloss>;
+  inFlight: Map<string, GlossJob>;
   remember(key: string, item: GlossItem): void;
   putCache(epoch: number, key: string, value: GlossCacheEntry): Promise<boolean>;
   isCacheEpochCurrent(epoch: number): boolean;
@@ -468,209 +470,126 @@ function createAiOutlet(input: {
   let currentFrame: AiFrame | undefined;
   const frames = new Set<AiFrame>();
 
-  const enqueue = (miss: Miss): void => {
-    const key = aiFrameKey(miss.settings);
-    if (currentFrame && currentFrame.key !== key) {
-      flushFrame("settings-change");
+  function settle(job: GlossJob, result: GlossJobResult): void {
+    if (input.inFlight.get(job.inFlightKey) === job) input.inFlight.delete(job.inFlightKey);
+    for (const subscriber of job.subscribers) {
+      if (result.ok) {
+        const item = rehydrateCachedGloss(result.item, subscriber.token);
+        if (input.isCacheEpochCurrent(job.cacheEpoch)) input.remember(subscriber.memoryKey, item);
+        subscriber.emit({ tokenId: subscriber.token.id, status: "ready", item });
+        subscriber.trackWrite(() => persistShownRecord(input.storage, subscriber.token, subscriber.now));
+      } else if ("error" in result) {
+        subscriber.emit({ tokenId: subscriber.token.id, status: "error", error: result.error });
+      }
+      subscriber.complete();
     }
-    if (!currentFrame) {
-      currentFrame = {
-        key,
-        settings: miss.settings,
-        misses: [],
-        createdAt: nowMs(),
-        timer: globalThis.setTimeout(() => flushFrame("time"), input.aiFrameMaxMs),
-        controller: new AbortController(),
-        cancelled: false
-      };
-      frames.add(currentFrame);
-    }
-    currentFrame.misses.push(miss);
-    if (currentFrame.misses.length >= input.aiFrameMaxItems) {
-      flushFrame("size");
-    }
-  };
+    job.subscribers.clear();
+  }
 
-  const flushFrame = (trigger: string): void => {
-    const frame = currentFrame;
-    if (!frame) {
-      return;
+  function cancelFrame(frame: AiFrame): void {
+    frame.cancelled = true;
+    globalThis.clearTimeout(frame.timer);
+    frame.controller.abort();
+    for (const job of frame.jobs) settle(job, { ok: false, cancelled: true });
+    frames.delete(frame);
+    if (currentFrame === frame) currentFrame = undefined;
+  }
+
+  async function executeFrame(frame: AiFrame, trigger: string): Promise<void> {
+    if (frame.cancelled) return;
+    // Request IDs belong to this frame, never to content occurrences in unrelated documents.
+    const requested = new Map<string, GlossJob>(frame.jobs.filter((job) => job.subscribers.size > 0)
+      .map((job) => [crypto.randomUUID(), job] as const));
+    if (requested.size === 0) return;
+    const startedAt = nowMs();
+    try {
+      const response = await input.ai.glossFrame({
+        settings: frame.settings,
+        items: Array.from(requested, ([requestItemId, job]) => ({ requestItemId, sentence: job.sentence, token: job.token })),
+        signal: frame.controller.signal
+      });
+      if (frame.cancelled) return;
+      const received = new Set<string>();
+      // Validate the whole correspondence before any writes: duplicates and unknown IDs are ambiguous.
+      for (const item of response.items) {
+        if (!requested.has(item.requestItemId) || received.has(item.requestItemId)) {
+          throw createDiagnosticError("invalid-response", "Gloss frame returned an unknown or duplicate request item ID", { service: "ai" });
+        }
+        received.add(item.requestItemId);
+      }
+      for (const item of response.items) {
+        const job = requested.get(item.requestItemId)!;
+        if (frame.cancelled) return;
+        if (job.subscribers.size === 0) continue;
+        const cachedItem: GlossItem = { tokenId: item.requestItemId, ...item.value };
+        try {
+          await input.putCache(job.cacheEpoch, job.dbCacheKey, { ...cachedItem, createdAt: job.createdAt });
+          if (frame.cancelled) return;
+          settle(job, { ok: true, item: cachedItem });
+        } catch (error) {
+          settle(job, { ok: false, error: diagnosticPayloadFrom(error, {
+            reason: "runtime", message: "Gloss cache write failed", service: "runtime"
+          }) });
+        }
+      }
+      for (const [requestItemId, job] of requested) {
+        if (!received.has(requestItemId)) settle(job, { ok: false, error: {
+          reason: "invalid-response", message: "Gloss lookup returned no item", service: "ai"
+        } });
+      }
+      trace({ component: "service-worker", operation: "service-worker.ai.frame", result: "ok",
+        details: { trigger, items: requested.size, returned: response.items.length, queueMs: Math.round(startedAt - frame.createdAt), requestMs: elapsedMs(startedAt) } });
+    } catch (error) {
+      if (frame.cancelled) return;
+      const payload = diagnosticPayloadFrom(error, { reason: "service-error", message: "Gloss lookup failed", service: "ai" });
+      for (const job of requested.values()) settle(job, { ok: false, error: payload });
+      trace({ component: "service-worker", operation: "service-worker.ai.frame", result: "error", error,
+        details: { trigger, items: requested.size, requestMs: elapsedMs(startedAt) } });
     }
+  }
+
+  function flushFrame(trigger: string): void {
+    const frame = currentFrame;
+    if (!frame) return;
     currentFrame = undefined;
     globalThis.clearTimeout(frame.timer);
     void serialAi(async () => {
-      try {
-        if (!frame.cancelled) {
-          await executeFrame(input, frame, trigger);
-        }
-      } finally {
-        frames.delete(frame);
-      }
-    });
-  };
-
-  const invalidate = (): void => {
-    currentFrame = undefined;
-    for (const frame of frames) {
-      cancelFrame(input.inFlight, frame);
-    }
-    frames.clear();
-    serialAi.clearQueue();
-  };
-
-  return { enqueue, flushFrame, invalidate };
-}
-
-function cancelFrame(inFlight: Map<string, InFlightGloss>, frame: AiFrame): void {
-  if (frame.cancelled) {
-    return;
-  }
-  frame.cancelled = true;
-  globalThis.clearTimeout(frame.timer);
-  frame.controller.abort();
-  for (const miss of frame.misses) {
-    resolveInFlightMiss(inFlight, miss, { ok: false, cancelled: true });
-  }
-}
-
-async function executeFrame(
-  deps: {
-    ai: AiBackend;
-    storage: ExtensionStorage;
-    inFlight: Map<string, InFlightGloss>;
-    remember(key: string, item: GlossItem): void;
-    putCache(epoch: number, key: string, value: GlossCacheEntry): Promise<boolean>;
-    isCacheEpochCurrent(epoch: number): boolean;
-  },
-  frame: AiFrame,
-  trigger: string
-): Promise<void> {
-  const queueElapsed = elapsedMs(frame.createdAt);
-  const requestStartedAt = nowMs();
-  try {
-    if (frame.cancelled) {
-      return;
-    }
-    const response = await deps.ai.glossFrame({
-      settings: frame.settings,
-      items: frame.misses.map((miss) => ({
-        sentence: miss.sentence,
-        token: tokenForAi(miss.token)
-      })),
-      signal: frame.controller.signal
-    });
-    if (frame.cancelled) {
-      return;
-    }
-    const unresolved = new Set(frame.misses);
-    const writeStartedAt = nowMs();
-    for (const item of response.items) {
-      if (frame.cancelled) {
-        return;
-      }
-      const miss = frame.misses.find((candidate) => unresolved.has(candidate) && candidate.token.id === item.tokenId);
-      if (!miss) {
-        continue;
-      }
-      const readyItem = rehydrateCachedGloss(item, miss.token);
-      try {
-        const committed = await deps.putCache(
-          miss.cacheEpoch,
-          miss.dbCacheKey,
-          { ...readyItem, createdAt: miss.now }
-        );
-        if (frame.cancelled) {
-          resolveInFlightMiss(deps.inFlight, miss, { ok: false, cancelled: true });
-          unresolved.delete(miss);
-          continue;
-        }
-        if (committed && deps.isCacheEpochCurrent(miss.cacheEpoch)) {
-          deps.remember(miss.memoryKey, readyItem);
-        }
-        if (miss.sink.isActive?.() !== false) {
-          miss.trackWrite(() => persistShownRecord(deps.storage, miss.token, miss.now));
-          miss.emit({ tokenId: miss.token.id, status: "ready", item: readyItem });
-        }
-        resolveInFlightMiss(deps.inFlight, miss, { ok: true, item: readyItem });
-      } catch (error) {
-        const payload = diagnosticPayloadFrom(error, {
-          reason: "runtime",
-          message: "Gloss cache write failed",
-          service: "runtime"
-        });
-        resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: payload });
-        if (miss.sink.isActive?.() !== false) {
-          miss.emit({ tokenId: miss.token.id, status: "error", message: payload.message, error: payload });
-        }
-      }
-      unresolved.delete(miss);
-    }
-    for (const miss of frame.misses) {
-      if (!unresolved.has(miss)) {
-        continue;
-      }
-      const payload: ErrorPayload = {
-        reason: "invalid-response",
-        message: "Gloss lookup returned no item",
-        service: "ai"
-      };
-      resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: payload });
-      if (miss.sink.isActive?.() !== false) {
-        miss.emit({ tokenId: miss.token.id, status: "error", message: payload.message, error: payload });
-      }
-    }
-    trace({
-      component: "service-worker",
-      operation: "service-worker.ai.frame",
-      result: "ok",
-      details: {
-        trigger,
-        items: frame.misses.length,
-        returned: response.items.length,
-        queueMs: queueElapsed,
-        requestMs: elapsedMs(requestStartedAt),
-        writeMs: elapsedMs(writeStartedAt)
-      }
-    });
-  } catch (error) {
-    if (frame.cancelled) {
-      return;
-    }
-    const payload = diagnosticPayloadFrom(error, {
-      reason: "service-error",
-      message: "Gloss lookup failed",
-      service: "ai"
-    });
-    for (const miss of frame.misses) {
-      resolveInFlightMiss(deps.inFlight, miss, { ok: false, error: payload });
-      if (miss.sink.isActive?.() !== false) {
-        miss.emit({ tokenId: miss.token.id, status: "error", message: payload.message, error: payload });
-      }
-    }
-    trace({
-      component: "service-worker",
-      operation: "service-worker.ai.frame",
-      result: "error",
-      error,
-      details: {
-        trigger,
-        items: frame.misses.length,
-        queueMs: queueElapsed,
-        requestMs: elapsedMs(requestStartedAt)
-      }
+      try { await executeFrame(frame, trigger); }
+      finally { frames.delete(frame); }
     });
   }
-}
 
-function tokenForAi(token: TokenCandidate): TokenCandidate {
   return {
-    id: token.id,
-    sentenceId: token.sentenceId,
-    surface: token.surface,
-    lemma: token.lemma,
-    startOffset: token.startOffset,
-    endOffset: token.endOffset
+    enqueue(job: GlossJob): void {
+      const key = aiFrameKey(job.settings);
+      if (currentFrame && currentFrame.key !== key) flushFrame("settings-change");
+      if (!currentFrame) {
+        currentFrame = { key, settings: job.settings, jobs: [], createdAt: nowMs(),
+          timer: globalThis.setTimeout(() => flushFrame("time"), input.aiFrameMaxMs),
+          controller: new AbortController(), cancelled: false };
+        frames.add(currentFrame);
+      }
+      currentFrame.jobs.push(job);
+      if (currentFrame.jobs.length >= input.aiFrameMaxItems) flushFrame("size");
+    },
+    remove(job: GlossJob): void {
+      if (input.inFlight.get(job.inFlightKey) === job) input.inFlight.delete(job.inFlightKey);
+      for (const frame of frames) {
+        if (!frame.jobs.includes(job)) continue;
+        frame.jobs = frame.jobs.filter((candidate) => candidate !== job);
+        if (frame.jobs.length === 0) cancelFrame(frame);
+        break;
+      }
+    },
+    invalidate(): void {
+      for (const frame of frames) cancelFrame(frame);
+      serialAi.clearQueue();
+    }
   };
+}
+
+function tokenForAi(token: TokenCandidate): GlossJob["token"] {
+  return { surface: token.surface, lemma: token.lemma, startOffset: token.startOffset, endOffset: token.endOffset };
 }
 
 function createReadCoalescer<T>(
@@ -751,44 +670,6 @@ function createReadCoalescer<T>(
       });
     }
   };
-}
-
-function createInFlightGloss(): InFlightGloss {
-  let resolvePromise: (result: InFlightResult) => void = () => undefined;
-  const promise = new Promise<InFlightResult>((resolve) => {
-    resolvePromise = resolve;
-  });
-  return {
-    promise,
-    resolve: resolvePromise
-  };
-}
-
-function resolveInFlightMiss(inFlight: Map<string, InFlightGloss>, miss: Miss, result: InFlightResult): void {
-  if (inFlight.get(miss.inFlightKey) === miss.inFlight) {
-    inFlight.delete(miss.inFlightKey);
-  }
-  miss.inFlight.resolve(result);
-}
-
-async function emitReusedMiss(
-  miss: ReusedMiss,
-  storage: ExtensionStorage
-): Promise<void> {
-  if (miss.sink.isActive?.() === false) {
-    return;
-  }
-  const result = await miss.inFlight.promise;
-  if (miss.sink.isActive?.() === false) {
-    return;
-  }
-  if (result.ok) {
-    const item = rehydrateCachedGloss(result.item, miss.token);
-    miss.emit({ tokenId: miss.token.id, status: "ready", item });
-    miss.trackWrite(() => persistShownRecord(storage, miss.token, miss.now));
-  } else if ("error" in result) {
-    miss.emit({ tokenId: miss.token.id, status: "error", message: result.error.message, error: result.error });
-  }
 }
 
 async function glossCacheKey(

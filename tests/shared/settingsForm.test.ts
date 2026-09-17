@@ -1,57 +1,71 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { applySettingsFormConstraints, applyProviderChange, applyProviderFields, populateProviderSelect, populateReasoningEffortSelect, readSettingsForm, writeSettingsForm } from "../../src/shared/settingsForm";
+import { defaultEndpointForProvider, normalizeSettings, SETTINGS_RULES } from "../../src/shared/settings";
 
-import { testAiSettings } from "../../src/shared/settingsForm";
-import { DEFAULT_SETTINGS, type GlossaSettings } from "../../src/shared/types";
+describe("settings form numeric constraints", () => {
+  function createForm(): HTMLFormElement {
+    const form = document.createElement("form");
+    form.innerHTML = `
+      <input name="learningWindowDays" type="number" min="1" step="1">
+      <input name="glossCacheTtlHours" type="number" min="1" step="1">
+      <input name="glossBackgroundOpacity" type="range" min="0.2" max="1" step="0.05">
+      <input name="glossFontSize" type="number" min="9" max="24" step="1">
+      <input name="aiRequestTimeoutSeconds" type="number" min="1" step="1">
+      <input name="ankiRequestTimeoutSeconds" type="number" min="1" step="1">
+      <input name="duplicatePromptSeconds" type="number" min="1" step="1">`;
+    return form;
+  }
 
-describe("AI settings connection test", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("keeps the OpenAI API key out of Glossa backend requests", async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ items: [] }), {
-      status: 200,
-      headers: { "content-type": "application/json" }
-    }));
-    vi.stubGlobal("fetch", fetchMock);
-    const settings: GlossaSettings = {
-      ...DEFAULT_SETTINGS,
-      ai: {
-        ...DEFAULT_SETTINGS.ai,
-        provider: "glossa-backend",
-        endpoint: "https://backend.test",
-        apiKey: "sk-private"
-      }
-    };
-
-    await testAiSettings(settings);
-
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect(init.headers).toEqual({ "content-type": "application/json" });
-  });
-
-  it("sends the API key to OpenAI providers", async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ items: [] }), {
-      status: 200,
-      headers: { "content-type": "application/json" }
-    }));
-    vi.stubGlobal("fetch", fetchMock);
-    const settings: GlossaSettings = {
-      ...DEFAULT_SETTINGS,
-      ai: {
-        ...DEFAULT_SETTINGS.ai,
-        provider: "openai-responses",
-        endpoint: "https://api.openai.test/v1/responses",
-        apiKey: "sk-private"
-      }
-    };
-
-    await testAiSettings(settings);
-
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect(init.headers).toEqual({
-      "content-type": "application/json",
-      authorization: "Bearer sk-private"
+  it("round-trips fractional domain values without imposing integer input steps", () => {
+    const form = createForm();
+    const settings = normalizeSettings({
+      learningWindowDays: 1.5,
+      glossCacheTtlMs: 1_800_000,
+      appearance: { backgroundOpacity: 0.94, fontSize: 12.5 },
+      ai: { requestTimeoutMs: 1500 },
+      anki: { requestTimeoutMs: 2500, duplicatePromptMs: 3500 }
     });
+    writeSettingsForm(form, settings);
+    expect(readSettingsForm(form, settings)).toEqual(settings);
+    expect(Array.from(form.querySelectorAll("input")).every(input => input.step === "any" && input.checkValidity())).toBe(true);
+  });
+
+  it("derives ranges and unit conversions from the same field rules", () => {
+    const form = createForm();
+    writeSettingsForm(form, normalizeSettings({}));
+    applySettingsFormConstraints(form);
+    const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+    expect(input("glossFontSize").min).toBe(String(SETTINGS_RULES.appearance.fontSize.minimum));
+    expect(input("glossFontSize").max).toBe(String(SETTINGS_RULES.appearance.fontSize.maximum));
+    expect(input("aiRequestTimeoutSeconds").min).toBe(String(SETTINGS_RULES.ai.requestTimeoutMs.minimum / 1000));
+    input("glossCacheTtlHours").value = "0";
+    expect(() => readSettingsForm(form)).toThrow("glossCacheTtlMs");
+  });
+});
+
+
+describe("settings form provider choices", () => {
+  it("renders provider capabilities and keeps custom endpoints on provider changes", () => {
+    const form = document.createElement("form");
+    form.innerHTML = `<select name="provider"></select><select name="reasoningEffort"></select>
+      <input name="aiEndpoint"><label data-ai-field="api-key"></label><label data-ai-field="reasoning"></label>`;
+    const provider = form.elements.namedItem("provider") as HTMLSelectElement;
+    const reasoning = form.elements.namedItem("reasoningEffort") as HTMLSelectElement;
+    const endpoint = form.elements.namedItem("aiEndpoint") as HTMLInputElement;
+    populateProviderSelect(provider);
+    populateReasoningEffortSelect(reasoning);
+    writeSettingsForm(form, normalizeSettings({}));
+    expect(provider.selectedOptions[0]?.textContent).toBe("OpenAI Responses API");
+    expect(reasoning.selectedOptions[0]?.textContent).toBe("中");
+    applyProviderChange(form, "openai-responses", "openai-completions");
+    expect(endpoint.value).toBe(defaultEndpointForProvider("openai-completions"));
+    expect(form.querySelector<HTMLElement>('[data-ai-field="reasoning"]')!.hidden).toBe(true);
+    endpoint.value = "https://custom.test/service";
+    applyProviderChange(form, "openai-completions", "glossa-backend");
+    expect(endpoint.value).toBe("https://custom.test/service");
+    expect(form.querySelector<HTMLElement>('[data-ai-field="api-key"]')!.hidden).toBe(true);
+    expect(form.querySelector<HTMLElement>('[data-ai-field="reasoning"]')!.hidden).toBe(false);
+    applyProviderFields(form, "openai-responses");
+    expect(form.querySelector<HTMLElement>('[data-ai-field="api-key"]')!.hidden).toBe(false);
   });
 });

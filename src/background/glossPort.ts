@@ -29,6 +29,7 @@ export function attachGlossPort(
   port.onDisconnect.addListener(() => {
     active = false;
     state = "closed";
+    session?.close();
   });
   port.onMessage.addListener((rawMessage: unknown) => {
     const runCommand = async (): Promise<void> => {
@@ -156,6 +157,7 @@ export function attachGlossPort(
       }
       active = false;
       state = "closed";
+      session?.close();
     });
   });
 }

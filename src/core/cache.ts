@@ -46,7 +46,7 @@ export async function buildCardCacheKey(input: CardCacheKeyInput): Promise<strin
 }
 
 export function glossGenerationIdentity(settings: GlossaSettings): string {
-  return [
+  return JSON.stringify([
     settings.ai.provider,
     settings.ai.endpoint,
     settings.ai.reasoningEffort,
@@ -54,7 +54,7 @@ export function glossGenerationIdentity(settings: GlossaSettings): string {
     settings.promptVersion,
     settings.modelVersion,
     settings.prompts.gloss
-  ].join("\n");
+  ]);
 }
 
 export function glossScanConfigHash(settings: GlossaSettings): string {

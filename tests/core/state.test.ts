@@ -15,7 +15,6 @@ describe("vocabulary state machine", () => {
     const shown = markRecordShown(record, now + 1_000);
 
     expect(shown.state).toBe("known");
-    expect(shown.shownCount).toBe(1);
     expect(shown.lastShownAt).toBe(now + 1_000);
   });
 
@@ -26,7 +25,6 @@ describe("vocabulary state machine", () => {
     const clicked = markRecordClicked(known, now + 1_000, 3);
 
     expect(clicked.state).toBe("learning_active");
-    expect(clicked.clickCount).toBe(1);
     const expiresAt = clicked.expiresAt;
     expect(expiresAt).toBe(now + 1_000 + 3 * 24 * 60 * 60 * 1_000);
     expect(transitionExpiredLearning(clicked, expiresAt! - 1).state).toBe("learning_active");
@@ -38,7 +36,6 @@ describe("vocabulary state machine", () => {
     const first = markRecordClicked(createCandidateRecord("test", "Test", "en", now), now, 3);
     const second = markRecordClicked(first, now + 2 * 24 * 60 * 60 * 1_000, 3);
 
-    expect(second.clickCount).toBe(2);
     expect(second.expiresAt).toBe(now + 5 * 24 * 60 * 60 * 1_000);
   });
 
