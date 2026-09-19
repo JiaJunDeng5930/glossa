@@ -2,6 +2,12 @@ import type { ErrorPayload, ErrorService } from "./types";
 
 export function userMessageForError(error: ErrorPayload | undefined, fallbackService: ErrorService): string {
   const service = error?.service ?? fallbackService;
+  if (service === "dictionary") {
+    return error?.code === "dictionary-word-not-found" ? "词典中没有这个词的释义" : "词典读取失败";
+  }
+  if (service === "jev") {
+    return jevMessage(error);
+  }
   if (service === "anki") {
     return ankiMessage(error);
   }
@@ -82,4 +88,13 @@ function ankiServiceMessage(code: ErrorPayload["code"]): string {
     return "Anki 卡片内容为空";
   }
   return "Anki 操作失败，请检查当前牌组和卡片模板";
+}
+
+function jevMessage(error: ErrorPayload | undefined): string {
+  if (!error || error.reason === "network") return "Jev 服务访问失败";
+  if (error.reason === "timeout") return "Jev 服务请求超时";
+  if (error.reason === "unauthorized") return "Jev 拒绝了请求，请检查 API 密钥或访问权限。";
+  if (error.reason === "not-found") return "Jev 接口地址错误";
+  if (error.reason === "invalid-response") return "Jev 返回格式错误";
+  return "Jev 服务返回错误";
 }

@@ -107,7 +107,7 @@ export function isErrorReason(value: unknown): value is ErrorReason {
 }
 
 function isErrorService(value: unknown): value is ErrorService {
-  return value === "ai" || value === "anki" || value === "runtime";
+  return value === "ai" || value === "jev" || value === "dictionary" || value === "anki" || value === "runtime";
 }
 
 function fallbackOptions(service: ErrorService | undefined): { service?: ErrorService } {

@@ -154,10 +154,44 @@
       <section class="onboarding-step" data-step="ai" aria-labelledby="ai-heading" hidden>
         <div class="step-copy">
           <p class="document-label">AI</p>
-          <h1 id="ai-heading">连接 AI 服务</h1>
-          <p>配置生成释义和卡片内容的 AI 服务。</p>
+          <h1 id="ai-heading">选择翻译方式</h1>
+          <p>普通 AI 直接翻译；词典模式由 Jev 根据语境选择释义。只需测试当前翻译模式的连接。</p>
         </div>
         <div class="settings-form">
+          <label>
+                翻译模式
+                <select name="translationMode">
+                  <option value="llm">普通 AI 翻译</option>
+                  <option value="dictionary-jev">词典 + Jev 释义选择</option>
+                </select>
+              </label>
+          <div data-dictionary-settings hidden>
+            <label class="checkbox-field">
+                  <input name="fallbackToLlm" type="checkbox">
+                  <span>词典未收录时使用普通 AI 翻译</span>
+                </label>
+                <p class="field-help">关闭回退或普通 AI 不可用时，词语只显示红叉。Jev 从词典释义中选择当前语境下最合适的一项。</p>
+            <label>
+                  Jev 接口地址
+                  <input name="jevEndpoint" autocomplete="off">
+                </label>
+                <label>
+                  Jev API 密钥
+                  <input name="jevApiKey" type="password" autocomplete="off">
+                </label>
+                <label>
+                  Jev 模型
+                  <input name="jevModel" autocomplete="off">
+                </label>
+                <label>
+                  Jev 超时秒数
+                  <input name="jevRequestTimeoutSeconds" type="number">
+                </label>
+            <button id="test-jev" class="secondary-action" type="button" data-state="idle">测试 Jev 连接</button>
+            <output id="jev-status" class="inline-status" role="status"></output>
+          </div>
+          <div data-onboarding-llm-settings>
+            <p class="field-help">普通 AI 用于直接翻译、词典未收录时的回退与生成卡片。词典模式下无须测试普通 AI 即可继续。</p>
           <label>
             AI 服务
           <select name="provider"></select>
@@ -184,6 +218,7 @@
           </label>
           <button id="test-ai" class="secondary-action" type="button" data-state="idle">测试连接</button>
           <output id="ai-status" class="inline-status" role="status"></output>
+          </div>
         </div>
       </section>
 

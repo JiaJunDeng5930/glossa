@@ -25,7 +25,7 @@ describe("vocabulary and card state transitions", () => {
     await seedGloss(fixture, input, "提交");
     const resolver = createGlossResolver({
       storage: fixture.storage,
-      ai: { glossFrame: vi.fn() },
+      generator: { glossFrame: vi.fn() },
       dbReadCoalesceMs: 0
     });
     const events: Array<GlossTokenOutcome> = [];
@@ -55,7 +55,7 @@ describe("vocabulary and card state transitions", () => {
     });
     const resolver = createGlossResolver({
       storage: fixture.storage,
-      ai: { glossFrame: vi.fn() },
+      generator: { glossFrame: vi.fn() },
       dbReadCoalesceMs: 0
     });
     const events: Array<GlossTokenOutcome> = [];
@@ -89,7 +89,7 @@ describe("vocabulary and card state transitions", () => {
     });
     const resolver = createGlossResolver({
       storage: fixture.storage,
-      ai: { glossFrame: vi.fn() },
+      generator: { glossFrame: vi.fn() },
       dbReadCoalesceMs: 0
     });
     const events: Array<GlossTokenOutcome> = [];

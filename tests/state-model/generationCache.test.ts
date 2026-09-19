@@ -35,7 +35,7 @@ describe("generation and cache state transitions", () => {
       }),
       ankiCard: vi.fn()
     };
-    const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const resolver = createGlossResolver({ storage: fixture.storage, generator: ai, frameMaxMs: 1, dbReadCoalesceMs: 0 });
     await resolver.activateGeneration(glossGenerationIdentity(oldSettings));
 
     const oldScan = resolveScan(resolver, sentence("old-token", "novel"), oldSettings, 100, oldEvents);
@@ -63,7 +63,7 @@ describe("generation and cache state transitions", () => {
       glossFrame: vi.fn((_input: GlossFrameBackendInput) => response.promise),
       ankiCard: vi.fn()
     };
-    const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const resolver = createGlossResolver({ storage: fixture.storage, generator: ai, frameMaxMs: 1, dbReadCoalesceMs: 0 });
     await resolver.activateGeneration(glossGenerationIdentity(activeSettings));
     const events: Array<GlossTokenOutcome> = [];
     const scan = resolveScan(resolver, sentence("stale-token", "stale"), activeSettings, 100, events);
@@ -91,7 +91,7 @@ describe("generation and cache state transitions", () => {
     const read = deferred<Map<string, GlossCacheEntry>>();
     fixture.storage.glossCache.getFreshMany = vi.fn(() => read.promise);
     const ai = { glossFrame: vi.fn(), ankiCard: vi.fn() };
-    const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const resolver = createGlossResolver({ storage: fixture.storage, generator: ai, frameMaxMs: 1, dbReadCoalesceMs: 0 });
     await resolver.activateGeneration(glossGenerationIdentity(activeSettings));
     const input = sentence("cached-token", "cached");
     const events: Array<GlossTokenOutcome> = [];
@@ -130,7 +130,7 @@ describe("generation and cache state transitions", () => {
       glossFrame: vi.fn(async (input: GlossFrameBackendInput) => frameReply(input, "新结果")),
       ankiCard: vi.fn()
     };
-    const resolver = createGlossResolver({ storage: fixture.storage, ai, aiFrameMaxMs: 1, dbReadCoalesceMs: 0 });
+    const resolver = createGlossResolver({ storage: fixture.storage, generator: ai, frameMaxMs: 1, dbReadCoalesceMs: 0 });
     await resolver.activateGeneration(glossGenerationIdentity(activeSettings));
 
     const clear = resolver.clearCache();

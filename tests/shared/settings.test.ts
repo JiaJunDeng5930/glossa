@@ -69,3 +69,23 @@ describe("settings field rules", () => {
     expect(normalizeSettings(settingsOverrides(applySettingsPatch(DEFAULT_SETTINGS,{ai:{provider:"openai-completions"}})))).toEqual(applySettingsPatch(DEFAULT_SETTINGS,{ai:{provider:"openai-completions"}}));
   });
 });
+
+
+describe("dictionary and Jev settings", () => {
+  it("repairs missing mode settings and invalid Jev leaves", () => {
+    expect(normalizeSettings({ jev: { endpoint: "file:///tmp", model: "", requestTimeoutMs: 1 }, translation: { mode: "unsupported", fallbackToLlm: "yes" } })).toEqual(DEFAULT_SETTINGS);
+    expect(() => validateSettingsPatch({ translation: { mode: "unsupported" } })).toThrow("translation.mode");
+    expect(() => validateSettingsPatch({ jev: { apiKey: 42 } })).toThrow("jev.apiKey");
+  });
+
+  it("merges Jev and translation leaves without overwriting a newer service configuration", () => {
+    const base = normalizeSettings({ jev: { apiKey: "test-key", model: "custom-jev" }, ai: { apiKey: "ordinary-key" } });
+    const latest = applySettingsPatch(base, { jev: { endpoint: "https://example.test/jev" }, translation: { fallbackToLlm: true } });
+    const updated = applySettingsPatch(latest, { jev: { apiKey: null }, translation: { mode: "dictionary-jev" } });
+    expect(updated.jev).toEqual({ endpoint: "https://example.test/jev", model: "custom-jev", requestTimeoutMs: 30_000 });
+    expect(updated.translation).toEqual({ mode: "dictionary-jev", fallbackToLlm: true });
+    expect(updated.ai.apiKey).toBe("ordinary-key");
+    expect(diffSettings(latest, updated)).toEqual({ jev: { apiKey: null }, translation: { mode: "dictionary-jev" } });
+    expect(normalizeSettings(settingsOverrides(updated))).toEqual(updated);
+  });
+});

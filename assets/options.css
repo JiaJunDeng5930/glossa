@@ -1010,3 +1010,8 @@ button:where(:enabled):hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+.translation-service-fields {
+  display: grid;
+  gap: 19px;
+}

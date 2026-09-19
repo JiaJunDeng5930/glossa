@@ -1,5 +1,6 @@
 import { hashText } from "../shared/hash";
 import type { GlossaSettings } from "../shared/types";
+import { dictionaryIdentity } from "../shared/services/dictionary";
 
 export interface GlossCacheKeyInput {
   targetLang: string;
@@ -46,7 +47,7 @@ export async function buildCardCacheKey(input: CardCacheKeyInput): Promise<strin
 }
 
 export function glossGenerationIdentity(settings: GlossaSettings): string {
-  return JSON.stringify([
+  const llmIdentity = [
     settings.ai.provider,
     settings.ai.endpoint,
     settings.ai.reasoningEffort,
@@ -54,6 +55,17 @@ export function glossGenerationIdentity(settings: GlossaSettings): string {
     settings.promptVersion,
     settings.modelVersion,
     settings.prompts.gloss
+  ];
+  if (settings.translation.mode === "llm") return JSON.stringify(["llm", ...llmIdentity]);
+  return JSON.stringify([
+    "dictionary-jev",
+    settings.translation.fallbackToLlm,
+    dictionaryIdentity.id,
+    dictionaryIdentity.version,
+    settings.jev.endpoint,
+    settings.jev.model,
+    settings.jev.apiKey ?? "",
+    ...(settings.translation.fallbackToLlm ? llmIdentity : [])
   ]);
 }
 

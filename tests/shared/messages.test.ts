@@ -101,6 +101,8 @@ describe("extension message envelopes", () => {
           fontSize: 11
         },
         prompts: { gloss: "gloss", ankiCard: "card" },
+        translation: { ...DEFAULT_SETTINGS.translation },
+        jev: { ...DEFAULT_SETTINGS.jev },
         ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "https://example.test", reasoningEffort: "medium" },
         anki: { ...DEFAULT_SETTINGS.anki, endpoint: "http://127.0.0.1:8765", deck: "Glossa", modelName: "Basic" }
       }

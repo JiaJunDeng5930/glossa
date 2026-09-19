@@ -716,3 +716,37 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+[data-step="ai"] [data-dictionary-settings],
+[data-step="ai"] [data-onboarding-llm-settings] {
+  display: contents;
+}
+
+[data-step="ai"] label:has(select[name="translationMode"]),
+[data-step="ai"] label:has(input[name="jevEndpoint"]),
+[data-step="ai"] label:has(input[name="jevApiKey"]),
+[data-step="ai"] .field-help,
+[data-step="ai"] .checkbox-field {
+  grid-column: 1 / -1;
+}
+
+[data-step="ai"] .field-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+[data-step="ai"] .checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-step="ai"] input[type="checkbox"] {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}

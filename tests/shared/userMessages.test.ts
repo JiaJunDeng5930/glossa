@@ -8,6 +8,11 @@ describe("frontend user error messages", () => {
     expect(userMessageForError({ reason: "invalid-response", message: "bad json", service: "ai" }, "ai")).toBe("AI 返回格式错误");
   });
 
+  it("maps dictionary and Jev diagnostics without displaying transport text", () => {
+    expect(userMessageForError({ reason: "not-found", code: "dictionary-word-not-found", message: "internal dictionary lookup", service: "dictionary" }, "ai")).toBe("词典中没有这个词的释义");
+    expect(userMessageForError({ reason: "unauthorized", message: "HTTP 401", service: "jev" }, "ai")).toBe("Jev 拒绝了请求，请检查 API 密钥或访问权限。");
+  });
+
   it("maps Anki diagnostics to UI copy", () => {
     expect(userMessageForError({ reason: "network", message: "fetch failed", service: "anki" }, "anki")).toBe("Anki 服务未启动或无法访问");
     expect(userMessageForError({ reason: "unauthorized", message: "HTTP 401", service: "anki" }, "anki")).toContain("AnkiConnect 拒绝了请求");
