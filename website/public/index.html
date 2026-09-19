@@ -45,7 +45,7 @@
             <p class="eyebrow"><span>Chrome Extension</span><span>For Deep Reading</span></p>
             <h1 id="hero-title">生词智能语境翻译，<br />让原文阅读<br />不被打断。</h1>
             <p class="hero-lede">
-              启动 Glossa，生词上方显示中文义。<br />释义贴合语境，阅读自然保持连贯。
+              启动 Glossa，生词上方显示中文释义。<br />释义贴合语境，阅读自然保持连贯。
             </p>
             <div class="hero-actions">
               <a
@@ -309,9 +309,13 @@
         storyInteractive = false;
         displayedStoryProgress = 1;
         story?.classList.remove("is-interactive");
+        story?.classList.toggle("is-reduced-motion", reducedMotion.matches);
         for (const name of ["--gloss-1", "--gloss-2", "--gloss-3", "--gloss-4", "--alt", "--click", "--card", "--mask"]) {
           setStoryValue(name, 1);
         }
+        setStoryValue("--alt", 0);
+        setStoryValue("--click", 0);
+        setStoryValue("--mask", 0);
         setStoryValue("--card-y", "0px");
         setStoryValue("--card-scale", 1);
         setStoryValue("--pointer-visible", 0);
@@ -328,6 +332,7 @@
         }
 
         storyInteractive = true;
+        story?.classList.remove("is-reduced-motion");
         story?.classList.add("is-interactive");
         const distance = story ? story.offsetHeight - window.innerHeight : 0;
         displayedStoryProgress = story && distance > 0

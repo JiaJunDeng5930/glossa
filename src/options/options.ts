@@ -1,3 +1,4 @@
+import { settingsFieldFeedback } from "./formValidation";
 import { normalizeLemma } from "../core/state";
 import { diagnosticErrorFrom } from "../shared/errors";
 import {
@@ -46,6 +47,15 @@ const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 form.inert = true;
 const statusOutput = document.querySelector<HTMLOutputElement>("#status")!;
 const saveButton = document.querySelector<HTMLButtonElement>("#save-settings")!;
+const retrySettingsButton = document.querySelector<HTMLButtonElement>("#retry-settings")!;
+const catalogHelp = document.querySelector<HTMLElement>("#anki-catalog-help")!;
+const knownWordsSearch = document.querySelector<HTMLInputElement>("#known-words-search")!;
+const knownWordsSearchSummary = document.querySelector<HTMLOutputElement>("#known-words-search-summary")!;
+let knownWordsRecords: VocabularyRecord[] = [];
+let settingsLoadState: "loading" | "error" | "ready" = "loading";
+let invalidControl: HTMLElement | undefined;
+let fieldError: HTMLElement | undefined;
+let validationMessage = "";
 const saveLabel = saveButton.querySelector<HTMLElement>(".save-label")!;
 const shortcutCapture = document.querySelector<HTMLButtonElement>("#shortcut-capture")!;
 const translateShortcutCapture = document.querySelector<HTMLButtonElement>("#translate-shortcut-capture")!;
@@ -105,14 +115,16 @@ populateKnownWordSelect(knownWordListSelect);
 setupSectionNavigation();
 setSaveState("clean");
 installStorageListener();
-void loadSettings().catch(() => setStatus("设置加载失败，请重新打开页面", "error"));
+void loadSettings();
+retrySettingsButton.addEventListener("click", () => void loadSettings());
+knownWordsSearch.addEventListener("input", () => renderKnownWords(knownWordsRecords));
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void persistForm();
 });
 
-form.addEventListener("input", () => editDraftFromForm());
+form.addEventListener("input", editDraftFromForm);
 
 providerSelect.addEventListener("input", () => {
   providerBeforeInput = draft?.value.ai.provider;
@@ -191,21 +203,23 @@ document.addEventListener("keyup", (event) => {
   if (isModifierKey(event.key)) finishShortcutCapture();
 });
 
-function editDraftFromForm(): void {
-  syncDraftFromForm();
+function editDraftFromForm(event?: Event): void {
+  const control = event?.target;
+  syncDraftFromForm(false, control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement ? control.name : undefined);
 }
 
-function syncDraftFromForm(): GlossaSettings | undefined {
+function syncDraftFromForm(focusError = false, editedControl?: string): GlossaSettings | undefined {
   if (!draft) return undefined;
   let next: GlossaSettings;
   try {
     next = readSettingsForm(form, draft.value);
-  } catch {
-    markFormInvalid();
+  } catch (error) {
+    markFormInvalid(error, focusError, editedControl);
     return undefined;
   }
   const wasInvalid = formValidationError;
   formValidationError = false;
+  clearFieldError();
   const patch = diffSettings(draft.value, next);
   if (Object.keys(patch).length > 0) draft.edit(patch);
   updatePreview(draft.value);
@@ -217,19 +231,55 @@ function syncDraftFromForm(): GlossaSettings | undefined {
   return draft.value;
 }
 
-function markFormInvalid(): void {
+function clearFieldError(): void {
+  invalidControl?.removeAttribute("aria-invalid");
+  if (invalidControl && fieldError) {
+    const descriptions = (invalidControl.getAttribute("aria-describedby") ?? "").split(" ").filter((id) => id && id !== fieldError!.id);
+    if (descriptions.length) invalidControl.setAttribute("aria-describedby", descriptions.join(" "));
+    else invalidControl.removeAttribute("aria-describedby");
+  }
+  fieldError?.remove();
+  invalidControl = undefined;
+  fieldError = undefined;
+}
+
+function markFormInvalid(error: unknown, focusError: boolean, editedControl?: string): void {
   formValidationError = true;
-  aiController?.invalidate();
-  jevController?.invalidate();
-  ankiController?.invalidate();
-  catalogController?.invalidate();
-  setSaveState("error");
-  setStatus("设置格式无效，请修正后再保存", "error");
+  clearFieldError();
+  const feedback = settingsFieldFeedback(error);
+  const changedControl = editedControl ?? feedback?.control;
+  if (changedControl && ["provider", "aiEndpoint", "apiKey", "modelVersion", "reasoningEffort", "aiRequestTimeoutSeconds"].includes(changedControl)) aiController?.invalidate();
+  if (changedControl && ["jevEndpoint", "jevApiKey", "jevModel", "jevRequestTimeoutSeconds"].includes(changedControl)) jevController?.invalidate();
+  if (changedControl && ["ankiEndpoint", "ankiRequestTimeoutSeconds", "ankiDeck", "ankiModelName"].includes(changedControl)) ankiController?.invalidate();
+  if (changedControl && ["ankiEndpoint", "ankiRequestTimeoutSeconds"].includes(changedControl)) catalogController?.invalidate();
+  validationMessage = feedback?.message ?? "设置格式无效，请检查输入后再保存。";
+  const control = feedback && form.elements.namedItem(feedback.control);
+  if (control instanceof HTMLElement) {
+    invalidControl = control;
+    control.setAttribute("aria-invalid", "true");
+    fieldError = document.createElement("span");
+    fieldError.id = "settings-field-error";
+    fieldError.className = "field-error";
+    fieldError.textContent = validationMessage;
+    control.setAttribute("aria-describedby", [control.getAttribute("aria-describedby"), fieldError.id].filter(Boolean).join(" "));
+    control.after(fieldError);
+    if (focusError) focusInvalidControl();
+  }
+  // A field error cannot unlock the pending save or an unrelated connection operation.
+  setSaveState(draft?.saving ? "saving" : "error");
+  setStatus(validationMessage, "error");
+}
+
+function focusInvalidControl(): void {
+  invalidControl?.scrollIntoView({ block: "center", behavior: "instant" });
+  invalidControl?.focus({ preventScroll: true });
 }
 
 function canRunSettingsOperation(): boolean {
+  if (settingsLoadState !== "ready") return false;
   if (!formValidationError) return true;
-  setStatus("设置格式无效，请修正后再保存", "error");
+  setStatus(validationMessage, "error");
+  focusInvalidControl();
   return false;
 }
 
@@ -255,21 +305,36 @@ async function refreshSettingsFromWorker(): Promise<void> {
 }
 
 async function loadSettings(): Promise<void> {
-  const settings = await getSettings();
-  draft = createSettingsDraft({ initial: settings, persist: persistSettings });
-  formValidationError = false;
-  draft.subscribe((next) => setSaveState(next.saving ? "saving" : next.dirty ? "dirty" : "clean"));
-  writeSettingsForm(form, settings);
-  shortcutCapture.textContent = settings.shortcutKey;
-  translateShortcutCapture.textContent = settings.translateShortcutKey;
-  applyProviderFields(form, settings.ai.provider);
-  setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
-  setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
-  setAnkiSelectsEnabled(false);
-  updatePreview(settings);
-  createControllers(settings);
-  form.inert = false;
-  void knownWordsOperationLane.run(() => refreshKnownWords());
+  settingsLoadState = "loading";
+  form.inert = true;
+  retrySettingsButton.hidden = true;
+  saveButton.disabled = true;
+  setStatus("正在加载设置…", "pending");
+  try {
+    const settings = await getSettings();
+    draft = createSettingsDraft({ initial: settings, persist: persistSettings });
+    formValidationError = false;
+    draft.subscribe((next) => setSaveState(next.saving ? "saving" : next.dirty ? "dirty" : "clean"));
+    writeSettingsForm(form, settings);
+    shortcutCapture.textContent = settings.shortcutKey;
+    translateShortcutCapture.textContent = settings.translateShortcutKey;
+    applyProviderFields(form, settings.ai.provider);
+    setSelectOptions(ankiDeckSelect, [settings.anki.deck], settings.anki.deck);
+    setSelectOptions(ankiModelNameSelect, [settings.anki.modelName], settings.anki.modelName);
+    setAnkiSelectsEnabled(false);
+    updatePreview(settings);
+    createControllers(settings);
+    settingsLoadState = "ready";
+    form.inert = false;
+    setSaveState("clean");
+    setStatus("", "");
+    void knownWordsOperationLane.run(() => refreshKnownWords());
+  } catch {
+    settingsLoadState = "error";
+    saveButton.disabled = true;
+    retrySettingsButton.hidden = false;
+    setStatus("设置加载失败，请重试加载。", "error");
+  }
 }
 
 function createControllers(settings: GlossaSettings): void {
@@ -363,6 +428,7 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
   const ownsOutput = claimFeedback(ankiFeedback, state, token);
   if (!draft) return;
   if (state.phase === "pending") {
+    catalogHelp.textContent = "正在读取牌组与模板，请稍候…";
     setTestState(refreshAnkiButton, "loading");
     setAnkiSelectsEnabled(false);
     setCatalogPlaceholders(draft.value.anki);
@@ -375,7 +441,11 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
     const modelName = pickExistingValue(draft.value.anki.modelName, state.value.modelNames);
     setSelectOptions(ankiDeckSelect, state.value.decks, deck);
     setSelectOptions(ankiModelNameSelect, state.value.modelNames, modelName);
-    setAnkiSelectsEnabled(state.value.decks.length > 0 && state.value.modelNames.length > 0);
+    ankiDeckSelect.disabled = state.value.decks.length === 0;
+    ankiModelNameSelect.disabled = state.value.modelNames.length === 0;
+    catalogHelp.textContent = state.value.decks.length === 0 ? "未找到牌组，请在 Anki 中创建牌组后刷新。"
+      : state.value.modelNames.length === 0 ? "未找到兼容模板，请在 Anki 中添加所需模板后刷新。"
+      : "牌组与模板已更新，可以选择。";
     const patch: SettingsPatch = { anki: {} };
     if (deck !== draft.value.anki.deck) patch.anki!.deck = deck;
     if (modelName !== draft.value.anki.modelName) patch.anki!.modelName = modelName;
@@ -389,6 +459,7 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
   setTestState(refreshAnkiButton, state.phase === "error" ? "error" : "idle");
   setAnkiSelectsEnabled(false);
   setCatalogPlaceholders(draft.value.anki);
+  catalogHelp.textContent = state.phase === "error" ? `${userMessageForError(state.error, "anki")} 请检查后刷新牌组与模板。` : "目录尚未读取。请先打开 Anki，再刷新牌组与模板。";
   if (state.phase === "error" && ownsOutput) setAnkiStatus(userMessageForError(state.error, "anki"), "error");
   if (state.phase === "idle" && ownsOutput) setAnkiStatus("", "");
 }
@@ -427,7 +498,7 @@ function expectResponse<T extends RuntimeRequestType, R extends ResponseMessage<
 
 async function persistForm(): Promise<void> {
   if (!draft || draft.saving) return;
-  if (!syncDraftFromForm() || formValidationError) return;
+  if (!syncDraftFromForm(true) || formValidationError) return;
   setSaveState("saving");
   setStatus("正在保存…", "pending");
   try {
@@ -461,7 +532,7 @@ type SettingsSaveState = "clean" | "dirty" | "saving" | "error";
 function setSaveState(state: SettingsSaveState): void {
   const labels: Record<SettingsSaveState, string> = { clean: "保存", dirty: "保存更改", saving: "保存中…", error: "重试保存" };
   saveButton.dataset.state = state;
-  saveButton.disabled = state === "saving";
+  saveButton.disabled = settingsLoadState !== "ready" || state === "saving";
   saveLabel.textContent = labels[state];
 }
 
@@ -504,6 +575,8 @@ async function refreshKnownWords(successStatus = "", viewRevision = knownWordsVi
     const response = await request(createRequestMessage("options", "known.words.list", {}));
     const records = expectResponse(response, "known.words.list.result").payload.records;
     if (viewRevision !== knownWordsViewRevision) return;
+    knownWordsRecords = records;
+    clearKnownWordsButton.disabled = records.length === 0;
     renderKnownWords(records);
     setKnownWordsStatus(successStatus, successStatus ? "success" : "");
   } catch {
@@ -535,9 +608,11 @@ async function addKnownWord(viewRevision: number): Promise<void> {
 
 function renderKnownWords(records: VocabularyRecord[]): void {
   knownWordsSummary.textContent = records.length > 0 ? `共 ${records.length} 个已掌握词汇。` : "当前没有已掌握词汇。";
-  clearKnownWordsButton.disabled = records.length === 0;
+  const query = knownWordsSearch.value.trim().toLowerCase();
+  const filtered = records.filter((record) => record.lemma.toLowerCase().includes(query));
+  knownWordsSearchSummary.value = query ? `找到 ${filtered.length} 个词汇，共 ${records.length} 个。` : `共 ${records.length} 个已掌握词汇。`;
   const groups = new Map<string, VocabularyRecord[]>();
-  for (const record of records) {
+  for (const record of filtered) {
     const initial = record.lemma.charAt(0).toLowerCase();
     const letter = ALPHABET.includes(initial) ? initial : "z";
     const group = groups.get(letter) ?? [];
@@ -546,10 +621,10 @@ function renderKnownWords(records: VocabularyRecord[]): void {
   }
   const letters = ALPHABET.filter((letter) => groups.has(letter));
   populateKnownWordsNav(letters);
-  if (records.length === 0) {
+  if (filtered.length === 0) {
     const empty = document.createElement("p");
     empty.className = "field-help known-words-empty";
-    empty.textContent = "当前没有已掌握词汇。";
+    empty.textContent = query ? "没有匹配的词汇，请修改搜索内容。" : "当前没有已掌握词汇。";
     knownWordsList.replaceChildren(empty);
     return;
   }

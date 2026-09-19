@@ -75,7 +75,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
       return;
     }
     const element = event.target instanceof Element ? event.target : null;
-    if (isDuplicatePromptControl(element)) {
+    if (isGlossControl(element)) {
       return;
     }
     consumeEvent(event);
@@ -97,7 +97,7 @@ export function createSelectionController(options: SelectionControllerOptions): 
       return;
     }
     const element = event.target instanceof Element ? event.target : null;
-    if (isDuplicatePromptControl(element)) {
+    if (isGlossControl(element)) {
       return;
     }
     consumeEvent(event);
@@ -172,8 +172,8 @@ export function createSelectionController(options: SelectionControllerOptions): 
   };
 }
 
-function isDuplicatePromptControl(element: Element | null): boolean {
-  return Boolean(element?.closest("[data-glossa-duplicate-card-prompt]"));
+function isGlossControl(element: Element | null): boolean {
+  return Boolean(element?.closest("[data-glossa-duplicate-card-prompt], [data-glossa-token-label][role=button], #glossa-overlay"));
 }
 
 function consumeEvent(event: Event): void {

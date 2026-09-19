@@ -89,3 +89,16 @@ describe("dictionary and Jev settings", () => {
     expect(normalizeSettings(settingsOverrides(updated))).toEqual(updated);
   });
 });
+
+describe("settings validation field identity", () => {
+  it("identifies a rejected nested field without changing its diagnostic text", async () => {
+    const { SettingsValidationError, validateSettings } = await import("../../src/shared/settings");
+    try {
+      validateSettings({ ...DEFAULT_SETTINGS, ai: { ...DEFAULT_SETTINGS.ai, endpoint: "localhost" } });
+      throw new Error("Expected invalid endpoint to be rejected");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SettingsValidationError);
+      expect(error).toMatchObject({ field: "ai.endpoint", message: "Invalid settings field: ai.endpoint" });
+    }
+  });
+});

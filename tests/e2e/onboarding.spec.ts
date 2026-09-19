@@ -25,6 +25,34 @@ test("onboarding uses stable step identities and only saves edited setup fields"
   await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "appearance");
 });
 
+test("onboarding keeps the named-step progress and focus in sync", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page, {
+    settings: { ...DEFAULT_SETTINGS, ai: { ...DEFAULT_SETTINGS.ai, provider: "glossa-backend", endpoint: "https://ai.test" } }
+  });
+  await page.evaluate(() => {
+    Reflect.set(window, "fetch", async () => new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+  });
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
+
+  const steps = ["smart", "translation", "anki-click", "word-list", "appearance", "ai", "anki", "finish"];
+  for (let index = 0; index < steps.length; index += 1) {
+    await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", steps[index]!);
+    await expect(page.locator("[data-step]:not([hidden]) h1")).toBeFocused();
+    await expect(page.locator("#progress")).toHaveText(`${index + 1} / 8`);
+    const progress = await page.locator("#settings-form").evaluate((form) => getComputedStyle(form).getPropertyValue("--step-progress").trim());
+    expect(Number(progress)).toBeCloseTo((index + 1) / steps.length);
+
+    if (index === 5) {
+      await page.locator("#test-ai").click();
+      await expect(page.locator("#test-ai")).toHaveAttribute("data-state", "success");
+    }
+    if (index < steps.length - 1) {
+      await page.locator(index === 6 ? "#skip-anki" : "#continue").click();
+    }
+  }
+});
+
 test("onboarding keeps the AI step gated by the current controller success", async ({ page }) => {
   await loadUiPage(page, "onboarding");
   await installUiRuntime(page);
@@ -76,8 +104,53 @@ test("onboarding keeps the form inert until settings arrive", async ({ page }) =
   await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
 
   await expect(page.locator("#settings-form")).toHaveJSProperty("inert", true);
+  await expect(page.locator("#status")).toHaveText("正在加载设置…");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "pending");
+  await expect(page.locator("#continue")).toBeDisabled();
   await page.evaluate(() => (Reflect.get(window, "__glossaUiFixture") as { release(type: string): void }).release("settings.get"));
   await expect(page.locator("#settings-form")).toHaveJSProperty("inert", false);
+  await expect(page.locator("#continue")).toBeEnabled();
+});
+
+test("onboarding exposes a retry after settings loading fails", async ({ page }) => {
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page, { failOnceTypes: ["settings.get"] });
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
+
+  await expect(page.locator("#status")).toHaveText("设置加载失败，请重试");
+  await expect(page.locator("#retry-load")).toBeVisible();
+  await expect(page.locator("#retry-load")).toBeEnabled();
+  await expect(page.locator("#continue")).toBeDisabled();
+  await page.locator("#retry-load").click();
+  await expect(page.locator("#settings-form")).toHaveJSProperty("inert", false);
+  await expect(page.locator("#retry-load")).toBeHidden();
+  await expect(page.locator("#continue")).toBeEnabled();
+});
+
+test("onboarding keeps navigation reachable in a short viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 420 });
+  await loadUiPage(page, "onboarding");
+  await installUiRuntime(page);
+  await page.addScriptTag({ path: resolve("dist/onboarding.js"), type: "module" });
+
+  for (let index = 0; index < 4; index += 1) await page.locator("#continue").click();
+  await expect(page.locator("[data-step]:not([hidden])")).toHaveAttribute("data-step", "appearance");
+  const viewport = await page.evaluate(() => {
+    const footer = document.querySelector<HTMLElement>(".onboarding-footer")!.getBoundingClientRect();
+    const button = document.querySelector<HTMLButtonElement>("#continue")!.getBoundingClientRect();
+    const step = document.querySelector<HTMLElement>("[data-step=appearance]")!;
+    return {
+      footerTop: footer.top,
+      footerBottom: footer.bottom,
+      buttonBottom: button.bottom,
+      viewportHeight: window.innerHeight,
+      stepScrolls: step.scrollHeight > step.clientHeight
+    };
+  });
+  expect(viewport.footerTop).toBeGreaterThanOrEqual(0);
+  expect(viewport.buttonBottom).toBeLessThanOrEqual(viewport.viewportHeight);
+  expect(viewport.footerBottom).toBeLessThanOrEqual(viewport.viewportHeight);
+  expect(viewport.stepScrolls).toBe(true);
 });
 
 test("onboarding refreshes external Anki choices before saving the active non-Anki step", async ({ page }) => {

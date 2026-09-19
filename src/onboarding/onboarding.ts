@@ -28,10 +28,12 @@ import { createAnkiClient } from "../shared/services/ankiClient";
 
 type StepId = "smart" | "translation" | "anki-click" | "word-list" | "appearance" | "ai" | "anki" | "finish";
 const STEP_IDS: readonly StepId[] = ["smart", "translation", "anki-click", "word-list", "appearance", "ai", "anki", "finish"];
+type InitializationState = "loading" | "ready" | "error";
 const form = document.querySelector<HTMLFormElement>("#settings-form")!;
 form.inert = true;
 const steps = Array.from(document.querySelectorAll<HTMLElement>("[data-step]"));
 const progress = document.querySelector<HTMLElement>("#progress")!;
+const retryLoadButton = document.querySelector<HTMLButtonElement>("#retry-load")!;
 const continueButton = document.querySelector<HTMLButtonElement>("#continue")!;
 const backButton = document.querySelector<HTMLButtonElement>("#back")!;
 const skipAnkiButton = document.querySelector<HTMLButtonElement>("#skip-anki")!;
@@ -57,6 +59,8 @@ const glossBackgroundOpacityValue = document.querySelector<HTMLOutputElement>("#
 
 let currentStepIndex = 0;
 let navigationBusy = false;
+let initializationState: InitializationState = "loading";
+let pendingStepFocus = false;
 let draft: SettingsDraft | undefined;
 let jevController: ReturnType<typeof createConnectionController<GlossaSettings>> | undefined;
 let aiController: ReturnType<typeof createConnectionController<GlossaSettings>> | undefined;
@@ -72,15 +76,18 @@ populateKnownWordSelect(knownWordListSelect);
 const validSteps = validateStepIdentities();
 if (validSteps) {
   installStorageListener();
-  void loadSettings().catch(() => setStatus("设置加载失败，请重新打开页面", "error"));
+  startSettingsLoad();
 } else {
-  setStatus("首次设置页面初始化失败，请重新打开页面", "error");
+  setInitializationState("error", "首次设置页面初始化失败，请重新打开页面", false);
 }
 
+retryLoadButton.addEventListener("click", () => {
+  if (initializationState === "error") startSettingsLoad();
+});
 continueButton.addEventListener("click", () => startContinue(false));
 skipAnkiButton.addEventListener("click", () => startContinue(true));
 backButton.addEventListener("click", () => {
-  if (navigationBusy) return;
+  if (initializationState !== "ready" || navigationBusy) return;
   setStatus("", "");
   showStep(Math.max(0, currentStepIndex - 1));
 });
@@ -124,7 +131,7 @@ function currentStepId(): StepId {
 }
 
 function startContinue(skipAnki: boolean): void {
-  if (navigationBusy) return;
+  if (initializationState !== "ready" || navigationBusy) return;
   navigationBusy = true;
   setNavigationBusy(true);
   void continueOnboarding(skipAnki).catch(() => setStatus("设置保存失败，请重试", "error")).finally(() => {
@@ -176,23 +183,68 @@ function showStep(index: number): void {
     step.hidden = stepIndex !== index;
     step.inert = stepIndex !== index || navigationBusy;
   });
+  form.style.setProperty("--step-progress", String((index + 1) / steps.length));
   progress.textContent = `${index + 1} / ${steps.length}`;
   continueButton.textContent = index === steps.length - 1 ? "完成" : "继续";
   backButton.hidden = index === 0;
   skipAnkiButton.hidden = currentStepId() !== "anki";
-  const heading = steps[index]?.querySelector<HTMLHeadingElement>("h1");
-  if (heading) {
-    heading.tabIndex = -1;
-    heading.focus();
-  }
+  if (navigationBusy) pendingStepFocus = true;
+  else focusCurrentStepHeading();
 }
 
 function setNavigationBusy(busy: boolean): void {
-  continueButton.disabled = busy;
-  backButton.disabled = busy;
-  skipAnkiButton.disabled = busy;
+  continueButton.disabled = busy || initializationState !== "ready";
+  backButton.disabled = busy || initializationState !== "ready";
+  skipAnkiButton.disabled = busy || initializationState !== "ready";
   const step = steps[currentStepIndex];
   if (step) step.inert = busy;
+  if (!busy && pendingStepFocus) {
+    pendingStepFocus = false;
+    focusCurrentStepHeading();
+  }
+}
+
+function focusCurrentStepHeading(): void {
+  const heading = steps[currentStepIndex]?.querySelector<HTMLHeadingElement>("h1");
+  if (!heading) return;
+  heading.tabIndex = -1;
+  heading.focus();
+}
+
+function startSettingsLoad(): void {
+  setInitializationState("loading");
+  void loadSettings()
+    .then(() => setInitializationState("ready"))
+    .catch(() => setInitializationState("error", "设置加载失败，请重试", true));
+}
+
+function setInitializationState(state: InitializationState, message = "", retryable = false): void {
+  initializationState = state;
+  form.dataset.initialization = state;
+  form.setAttribute("aria-busy", state === "loading" ? "true" : "false");
+  retryLoadButton.hidden = !retryable;
+  retryLoadButton.disabled = !retryable;
+  const controlsDisabled = state !== "ready";
+  continueButton.disabled = controlsDisabled || navigationBusy;
+  backButton.disabled = controlsDisabled || navigationBusy;
+  skipAnkiButton.disabled = controlsDisabled || navigationBusy;
+  testJevButton.disabled = controlsDisabled;
+  testAiButton.disabled = controlsDisabled;
+  testAnkiButton.disabled = controlsDisabled;
+  refreshAnkiButton.disabled = controlsDisabled;
+
+  if (state === "loading") {
+    form.inert = true;
+    steps.forEach((step) => { step.inert = true; });
+    setStatus(message || "正在加载设置…", "pending");
+  } else if (state === "error") {
+    form.inert = false;
+    steps.forEach((step) => { step.inert = true; });
+    setStatus(message || "设置加载失败，请重试", "error");
+  } else {
+    form.inert = false;
+    setStatus("", "");
+  }
 }
 
 function readCurrentSettings(): GlossaSettings | undefined {

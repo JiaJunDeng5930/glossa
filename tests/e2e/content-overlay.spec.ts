@@ -819,7 +819,7 @@ test("content bundle marks an existing gloss after confirmed card creation", asy
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-success"
-      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "提交";
+      && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "✓ 提交";
   });
 });
 
@@ -876,7 +876,7 @@ test("content bundle preserves pending card feedback through a generation rescan
 
   await page.evaluate(() => (Reflect.get(window, "__resolvePendingCard") as () => void)());
   await expect(page.locator("[data-glossa-token]")).toHaveAttribute("data-glossa-feedback", "card-success");
-  await expect(page.locator("[data-glossa-token-label]")).toHaveAttribute("data-glossa-visual", "新版");
+  await expect(page.locator("[data-glossa-token-label]")).toHaveAttribute("data-glossa-visual", "✓ 新版");
 });
 
 test("content bundle marks card failures with the shared badge renderer", async ({ page }) => {
@@ -1081,7 +1081,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
   await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：制卡完成");
 });
 
-test("content bundle asks before creating another card for a carded word", async ({ page }) => {
+test("content bundle asks before creating another card for a carded word", async ({ page }, testInfo) => {
   await page.setContent("<main><p id=\"target\" tabindex=\"0\">Create archive card.</p></main>");
   await installChromeRuntime(page, {
     shortcutKey: "Alt",
@@ -1125,12 +1125,13 @@ test("content bundle asks before creating another card for a carded word", async
   await page.keyboard.up("Alt");
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
-  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveAttribute("aria-modal", "true");
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).not.toHaveAttribute("aria-modal", "true");
   await expect(page.getByRole("button", { name: "继续制卡" })).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "取消制卡" })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "继续制卡" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "继续制卡" })).not.toBeFocused();
+  await page.getByRole("button", { name: "取消制卡" }).focus();
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0);
   await expect(page.locator("#target")).toBeFocused();
@@ -1159,6 +1160,14 @@ test("content bundle asks before creating another card for a carded word", async
   expect(narrowPromptLayout.textWidth).toBeGreaterThan(200);
   expect(narrowPromptLayout.confirmTop).toBeGreaterThanOrEqual(narrowPromptLayout.textBottom);
   expect(Math.abs(narrowPromptLayout.confirmTop - narrowPromptLayout.cancelTop)).toBeLessThan(1);
+  await page.keyboard.up('Alt');
+  await page.keyboard.down('Alt');
+  await expect(page.locator('html')).toHaveAttribute('data-glossa-selecting', 'true');
+  const promptRect = await page.locator('[data-glossa-duplicate-card-prompt]').boundingBox();
+  const noteRect = await page.locator('#glossa-overlay .selection-note').boundingBox();
+  expect(promptRect && noteRect && promptRect.width > 0 && noteRect.width > 0 && promptRect.height > 0 && noteRect.height > 0 && promptRect.y + promptRect.height < noteRect.y).toBe(true);
+  await expect(page.locator('#glossa-overlay .selection-note')).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: testInfo.outputPath('reading-duplicate-selection-320.png') });
   await page.getByRole("button", { name: "继续制卡" }).click();
   await page.keyboard.up("Alt");
 
@@ -1173,7 +1182,7 @@ test("content bundle asks before creating another card for a carded word", async
 });
 
 test("content bundle cancels duplicate card prompts after their timeout", async ({ page }) => {
-  await page.setContent("<main><p id=\"target\">Create archive card.</p></main>");
+  await page.setContent("<main><p id=\"target\">Create archive card.</p><button id=outside>网页操作</button></main>");
   await installChromeRuntime(page, {
     shortcutKey: "Alt",
     autoTranslateEnabled: false,
@@ -1207,7 +1216,11 @@ test("content bundle cancels duplicate card prompts after their timeout", async 
   await page.keyboard.up("Alt");
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
+  await expect(page.locator("[data-glossa-duplicate-card-prompt]")).not.toHaveAttribute("aria-modal", "true");
+  await page.locator("#outside").click();
+  await expect(page.locator("#outside")).toBeFocused();
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0, { timeout: 2_000 });
+  await expect(page.locator("#outside")).toBeFocused();
   expect(await page.evaluate(() => (Reflect.get(window, "__duplicateMessages") as unknown[]).length)).toBe(1);
 });
 
@@ -1972,7 +1985,8 @@ test("content bundle lays out inline glosses without label or source overlap", a
     expect(item.label.bottom).toBeLessThanOrEqual(item.surface.top);
     expect(item.label.right - item.label.left).toBeLessThanOrEqual(140);
   }
-  expect(Math.abs(second.surface.top - second.plainArchive.top)).toBeLessThan(1);
+  expect(overlaps(second.surface, second.plainArchive)).toBe(false);
+  expect(overlaps(second.label, second.plainArchive)).toBe(false);
   expect(overlaps(first.label, second.label)).toBe(false);
   expect(overlaps(first.surface, second.surface)).toBe(false);
 });
@@ -2026,6 +2040,11 @@ test("content bundle preserves existing glosses while mutation rescans wait for 
       if (obscure && !Reflect.get(window, "__initialGlossRendered")) {
         Reflect.set(window, "__initialGlossRendered", true);
         emit(glossToken(message.payload.scanId, obscure.id, "ready", { tokenId: obscure.id, targetText: obscure.surface, display: "晦涩" }));
+        emit(glossDone(message.payload.scanId));
+        return;
+      }
+      // A boot scan may flush multiple chunks; only the newly inserted source owns this response.
+      if (!tokens.some(token => token.surface.toLowerCase() === "dynamic")) {
         emit(glossDone(message.payload.scanId));
         return;
       }
@@ -2109,7 +2128,13 @@ test("content bundle yields during empty discovery and paints before scan comple
   await page.evaluate(() => {
     const events: Array<{ event: string; at: number }> = [];
     Reflect.set(window, "__discoveryEvents", events);
+    let firstChunkSeen = false;
     Reflect.set(window, "__glossaOnScan", (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+      if (firstChunkSeen) {
+        emit((Reflect.get(window, "glossDone") as (id: string) => unknown)(message.payload.scanId));
+        return;
+      }
+      firstChunkSeen = true;
       events.push({ event: "first-chunk", at: performance.now() });
       const token = message.payload.sentences.flatMap(sentence => sentence.tokens)[0]!;
       const glossToken = Reflect.get(window, "glossToken") as (scanId: string, tokenId: string, status: string, item: unknown) => unknown;
@@ -2696,3 +2721,100 @@ function completeRuntimeSettings(settings: RuntimeSettings): GlossaSettings {
     }
   };
 }
+
+test.describe('annotation interactions', () => {
+  test.use({ hasTouch: true });
+for (const viewportWidth of [1440, 390, 320]) {
+  test(`content bundle expands glosses and preserves host links at ${viewportWidth}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: viewportWidth, height: 900 });
+    await page.route('https://reading.test/**', route => route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }));
+    await page.goto('https://reading.test/');
+    await page.setContent(`<style>body{margin:18px;background:${viewportWidth === 390 ? '#20221f;color:#faf8f1' : '#faf8f1;color:#171814'};font:18px/1.8 Georgia}a{color:#1462c4;text-decoration:underline;text-decoration-color:#1462c4;text-decoration-thickness:2px}p{max-width:680px}</style><main><h1>Reading context</h1><p id="target"><a id="host-link" href="#destination">Obscure archive</a> remains uncertain. Elaborate resilience enhances comprehension through contextual interpretation.</p><button id="outside">网页操作</button></main>`);
+    const source = await page.locator('#target').textContent();
+    await installChromeRuntime(page, { shortcutKey: 'Alt', translateShortcutKey: 'Ctrl+Shift+G', autoTranslateEnabled: true, knownWordList: 'junior-high' });
+    await page.evaluate(() => {
+      Reflect.set(window, '__glossaOnScan', (message: { payload: { scanId: string; sentences: Array<{ tokens: Array<{ id: string; surface: string }> }> } }, emit: (response: unknown) => void) => {
+        const tokenResponse = Reflect.get(window, 'glossToken') as (scanId: string, id: string, status: string, item?: unknown) => unknown;
+        const done = Reflect.get(window, 'glossDone') as (scanId: string) => unknown;
+        for (const token of message.payload.sentences.flatMap(sentence => sentence.tokens)) {
+          emit(tokenResponse(message.payload.scanId, token.id, 'ready', { tokenId: token.id, targetText: token.surface, display: token.surface.toLowerCase() === 'archive' ? '将重要历史记录与相关研究资料完整归档以便后续检索和长期保存' : token.surface.toLowerCase() === 'resilience' ? '理解依赖具体语境' : '语境释义' }));
+        }
+        emit(done(message.payload.scanId));
+      });
+      let attempts = 0;
+      Reflect.set(window, '__glossaOnSendMessage', (message: { type: string; requestId: string; source: string }, callback?: (response: unknown) => void) => {
+        if (message.type !== 'word.clicked') return undefined;
+        attempts++;
+        const response = { type: attempts === 3 ? 'word.clicked.ok' : 'error', version: 1, requestId: message.requestId, source: 'service-worker', target: message.source, createdAt: Date.now(), payload: attempts === 3 ? { noteId: 11 } : { reason: attempts === 1 ? 'network' : 'outcome-unknown', message: 'Anki request failed', service: 'anki' } };
+        callback?.(response);
+        return Promise.resolve(response);
+      });
+    });
+    await page.addScriptTag({ type: 'module', path: resolve('dist/content.js') });
+    const archive = page.locator('[data-glossa-token][data-glossa-surface="archive"]');
+    const label = archive.locator('[data-glossa-token-label]');
+    await expect(label).toHaveAttribute('role', 'button');
+    await expect(page.locator('[data-glossa-token-label][role=button]')).toHaveCount(1);
+    await expect(page.locator('[data-glossa-surface=Obscure] [data-glossa-token-label]')).not.toHaveAttribute('tabindex');
+    expect(await page.locator('#target').textContent()).toBe(source);
+    expect(await archive.locator('[data-glossa-token-surface]').evaluate(node => getComputedStyle(node).textDecorationLine)).toBe('underline');
+    expect(await page.locator('#host-link').evaluate(node => getComputedStyle(node).textDecorationColor)).toBe('rgb(20, 98, 196)');
+    await label.focus();
+    await page.keyboard.press('Enter');
+    const expanded = page.locator('[data-glossa-expanded-gloss]');
+    await expect(expanded).toContainText('将重要历史记录与相关研究资料完整归档以便后续检索和长期保存');
+    await expect(label).toHaveAttribute('aria-expanded', 'true');
+    await expect(label).toHaveCSS('opacity', '1');
+    await page.screenshot({ path: testInfo.outputPath(`reading-long-${viewportWidth}.png`) });
+    await page.keyboard.press('Escape');
+    await expect(expanded).toHaveCount(0);
+    await expect(label).toBeFocused();
+    await label.tap();
+    await expect(expanded).toBeVisible();
+    await page.getByRole('button', { name: '关闭释义' }).click();
+    expect((await sentMessageTypes(page)).filter(type => type === 'word.clicked')).toHaveLength(0);
+    for (const [word, symbol] of [['Obscure', '×'], ['archive', '?'], ['uncertain', '✓']]) {
+      await page.keyboard.down('Alt');
+      await clickWord(page, '#target', word!);
+      await page.keyboard.up('Alt');
+      await expect(page.locator(`[data-glossa-token][data-glossa-surface="${word}"] [data-glossa-token-label]`)).toHaveAttribute('data-glossa-visual', new RegExp(`^${symbol === '?' ? '\\?' : symbol} `));
+    }
+    expect(await page.locator('#target').textContent()).toBe(source);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: testInfo.outputPath(`reading-feedback-${viewportWidth}.png`) });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await label.click();
+    await expect(expanded).toBeVisible();
+    if (viewportWidth === 1440) {
+      const responsiveGloss = page.locator('[data-glossa-surface=resilience]');
+      const responsiveLabel = responsiveGloss.locator('[data-glossa-token-label]');
+      await responsiveGloss.evaluate(node => (node as HTMLElement).style.setProperty('--glossa-font-size', '20px'));
+      await expect(responsiveLabel).not.toHaveAttribute('role');
+      await page.setViewportSize({ width: 320, height: 900 });
+      await expect(responsiveLabel).toHaveAttribute('role', 'button');
+      await responsiveGloss.evaluate(node => (node as HTMLElement).style.setProperty('--glossa-font-size', '10px'));
+      await expect(responsiveLabel).not.toHaveAttribute('role');
+      await expect(responsiveLabel).not.toHaveAttribute('tabindex');
+      await responsiveGloss.evaluate(node => (node as HTMLElement).style.setProperty('--glossa-font-size', '20px'));
+      await expect(responsiveLabel).toHaveAttribute('role', 'button');
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(responsiveLabel).not.toHaveAttribute('role');
+      await archive.locator('[data-glossa-token-surface]').click();
+      await expect.poll(() => page.evaluate(() => location.hash)).toBe('#destination');
+      await page.evaluate(() => { history.pushState({}, '', '/next'); window.dispatchEvent(new Event('scroll')); });
+      await expect(expanded).toHaveCount(0);
+    } else if (viewportWidth === 390) {
+      await page.locator('#outside').click();
+      await pressTranslationShortcut(page);
+      await expect(expanded).toHaveCount(0);
+      await expect(page.locator('[data-glossa-token]')).toHaveCount(0);
+      await expect(page.locator('#outside')).toBeFocused();
+      expect(await page.locator('#target').textContent()).toBe(source);
+    } else {
+      await page.locator('#target').evaluate(node => { node.textContent = 'The source paragraph was replaced.'; });
+      await expect(expanded).toHaveCount(0);
+    }
+  });
+}
+
+});

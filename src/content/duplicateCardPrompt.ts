@@ -9,7 +9,6 @@ export function promptDuplicateCardCreation(doc: Document, input: { surface: str
     prompt.dataset.glossaOwned = "1";
     prompt.dataset.glossaDuplicateCardPrompt = "1";
     prompt.setAttribute("role", "dialog");
-    prompt.setAttribute("aria-modal", "true");
     prompt.setAttribute("aria-label", "重复制卡确认");
     prompt.style.cssText = [
       "position:fixed",
@@ -102,8 +101,9 @@ export function promptDuplicateCardCreation(doc: Document, input: { surface: str
         globalThis.clearTimeout(timer);
       }
       duplicatePromptResolvers.delete(doc);
+      const returnFocus = prompt.contains(doc.activeElement);
       prompt.remove();
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected && previousFocus !== doc.body) {
+      if (returnFocus && previousFocus instanceof HTMLElement && previousFocus.isConnected && previousFocus !== doc.body) {
         previousFocus.focus({ preventScroll: true });
       }
       resolve(confirmed);
@@ -114,17 +114,6 @@ export function promptDuplicateCardCreation(doc: Document, input: { surface: str
     confirm.addEventListener("click", () => finish(true), { once: true });
     cancel.addEventListener("click", () => finish(false), { once: true });
     prompt.addEventListener("keydown", (event) => {
-      if (event.key === "Tab") {
-        const activeElement = doc.activeElement;
-        if (event.shiftKey && activeElement === confirm) {
-          event.preventDefault();
-          cancel.focus();
-        } else if (!event.shiftKey && activeElement === cancel) {
-          event.preventDefault();
-          confirm.focus();
-        }
-        return;
-      }
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();

@@ -17,6 +17,13 @@ export interface SettingsNumberRule extends Rule<number> {
   readonly exclusiveMinimum: boolean;
 }
 type Rules<T> = { [K in keyof T]-?: T[K] extends object ? Rules<T[K]> : T[K] extends number ? SettingsNumberRule : Rule<T[K]> };
+export class SettingsValidationError extends Error {
+  constructor(readonly field: string) {
+    super(`Invalid settings field: ${field}`);
+    this.name = "SettingsValidationError";
+  }
+}
+
 const invalid = (): never => { throw new Error("Invalid settings field"); };
 const text: Rule<string> = { parse: v => typeof v === "string" && v.trim() ? v.trim() : invalid() };
 const number = (minimum: number, maximum = Infinity, exclusiveMinimum = false): SettingsNumberRule => ({
@@ -59,7 +66,7 @@ function walk(schema: Tree, value: unknown, defaults: Record<string, unknown> = 
       if (parsed !== undefined) result[key] = parsed;
       else if (mode === "patch") result[key] = null;
     } catch {
-      if (mode !== "repair") throw new Error(`Invalid settings field: ${path}${key}`);
+      if (mode !== "repair") throw new SettingsValidationError(`${path}${key}`);
       if (defaults[key] !== undefined) result[key] = defaults[key];
     }
   }

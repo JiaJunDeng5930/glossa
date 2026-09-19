@@ -36,8 +36,16 @@ async function assertMobileNavigation(page: Page, viewport: { width: number; hei
       href: document.activeElement?.getAttribute("href"),
       inNavigation: document.querySelector(".site-nav")!.contains(document.activeElement),
       focusVisible: document.activeElement?.matches(":focus-visible"),
-    })), { href, inNavigation: true, focusVisible: true });
+      fullyVisible: (() => {
+        const nav = document.querySelector(".site-nav")!.getBoundingClientRect();
+        const link = document.activeElement!.getBoundingClientRect();
+        return link.left >= nav.left && link.right <= nav.right
+          && link.top >= nav.top && link.bottom <= nav.bottom;
+      })(),
+    })), { href, inNavigation: true, focusVisible: true, fullyVisible: true });
   }
+
+  assert.ok(await page.locator(".site-footer a").evaluate((node) => node.getBoundingClientRect().height >= 24));
 
   for (const href of navigationHrefs.slice(0, 3)) {
     await navigation.locator(`a[href="${href}"]`).focus();
@@ -82,6 +90,7 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ({
     assert.equal(await page.locator("#hero-title").textContent(), "生词智能语境翻译，让原文阅读不被打断。");
     assert.equal(await page.locator(".hero-caption span").count(), 0);
     assert.match(await page.locator(".margin-note").textContent() ?? "", /结合整句语境，\s*给出此处词义。/);
+    assert.match(await page.locator(".hero-lede").textContent() ?? "", /显示中文释义/);
     assert.equal(
       await page.locator(".button-primary").getAttribute("href"),
       "https://github.com/JiaJunDeng5930/glossa/releases/latest",
@@ -190,6 +199,10 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ({
     }, thresholdStoryTop);
     assert.equal(await thresholdStory.evaluate((node) => node.classList.contains("is-interactive")), true);
     await assertStoryCopySeparation(page);
+    assert.equal(await page.locator(".story-copy > .eyebrow").evaluate((node) => {
+      const lineHeight = Number.parseFloat(getComputedStyle(node).lineHeight);
+      return [...node.querySelectorAll("span")].every((span) => span.getBoundingClientRect().height <= lineHeight + 1);
+    }), true);
     assert.equal(await page.evaluate(() => {
       const header = document.querySelector(".site-header")!.getBoundingClientRect();
       const demo = document.querySelector(".story-browser")!.getBoundingClientRect();
@@ -236,6 +249,20 @@ test("landing page keeps its story, CTA, and responsive layout intact", async ({
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload({ waitUntil: "load" });
     assert.equal(await page.locator("[data-story]").evaluate((node) => node.classList.contains("is-interactive")), false);
+    assert.equal(await page.locator("[data-story]").evaluate((node) => node.classList.contains("is-reduced-motion")), true);
+    assert.equal(await page.locator(".hero-gloss .glossa-label").evaluateAll((nodes) => nodes.every((node) => {
+      const style = getComputedStyle(node);
+      return Number.parseFloat(style.opacity) > 0.99 && style.transform !== "none";
+    })), true);
+    assert.deepEqual(await page.evaluate(() => {
+      const chapters = [...document.querySelectorAll(".story-chapter")].map((node) => node.getBoundingClientRect());
+      const browser = document.querySelector(".story-browser")!.getBoundingClientRect();
+      return {
+        cardPosition: getComputedStyle(document.querySelector(".anki-memory-card")!).position,
+        chaptersInColumns: chapters.every((rect, index) => index === 0 || rect.left > chapters[index - 1]!.right),
+        exampleAfterSteps: browser.top >= Math.max(...chapters.map((rect) => rect.bottom)),
+      };
+    }), { cardPosition: "relative", chaptersInColumns: true, exampleAfterSteps: true });
     assert.ok(Number.parseFloat(await page.locator(".story-pointer").evaluate((node) => getComputedStyle(node).opacity)) < 0.05);
     assert.deepEqual(runtimeErrors, []);
 });
