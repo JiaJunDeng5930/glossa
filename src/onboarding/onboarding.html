@@ -21,13 +21,13 @@
       <section class="onboarding-step" data-step="smart" aria-labelledby="smart-heading">
         <div class="step-copy">
           <p class="document-label">识别</p>
-          <h1 id="smart-heading">智能识别生词</h1>
-          <p>Glossa 会结合基础词表和学习记录，优先显示值得看的词。</p>
+          <h1 id="smart-heading">哪些词会显示释义</h1>
+          <p>Glossa 为基础词表和已掌握词汇以外的词显示中文释义。显示过释义的词会记为已掌握；加入 Anki 的词在设定天数内仍会显示释义。</p>
         </div>
-        <article class="vocab-preview" aria-label="生词熟词识别预览">
+        <article class="vocab-preview" aria-label="词汇状态示例">
           <div>
             <span>familiar</span>
-            <strong>熟词</strong>
+            <strong>已掌握</strong>
           </div>
           <div>
             <span>gloss</span>
@@ -44,7 +44,7 @@
         <div class="step-copy">
           <p class="document-label">首次使用</p>
           <h1 id="translation-heading">翻译本页</h1>
-          <p>点击扩展图标后，按「翻译本页」显示生词释义。</p>
+          <p>点击扩展图标，再点击“翻译本页”，网页中的生词旁就会显示中文释义。</p>
         </div>
         <article class="reading-preview" aria-label="翻译本页预览">
           <p>
@@ -59,9 +59,9 @@
 
       <section class="onboarding-step reading-step" data-step="anki-click" aria-labelledby="anki-click-heading" hidden>
         <div class="step-copy">
-          <p class="document-label">制卡</p>
+          <p class="document-label">Anki</p>
           <h1 id="anki-click-heading">加入 Anki</h1>
-          <p>按住 Alt 点击单词，Glossa 会准备一张 Anki 卡片。</p>
+          <p>连接 Anki 后，按住 Alt 并点击单词，就会为这个词创建一张 Anki 卡片。</p>
         </div>
         <article class="reading-preview" aria-label="加入 Anki 预览">
           <p>
@@ -81,7 +81,7 @@
         <div class="step-copy">
           <p class="document-label">词表</p>
           <h1 id="word-list-heading">选择基础词表</h1>
-          <p>Glossa 会跳过这些常见词，把注意力留给生词。</p>
+          <p>所选词表中的单词不会显示释义。选择适合自己英语水平的词表，之后也可以在设置中更改。</p>
         </div>
         <div class="single-form">
           <label>
@@ -95,7 +95,7 @@
         <div class="step-copy">
           <p class="document-label">外观</p>
           <h1 id="appearance-heading">设置释义样式</h1>
-          <p>调整页面上方释义标签和制卡反馈的显示效果。</p>
+          <p>调整单词旁中文释义的字体和颜色，以及加入 Anki 后提示的颜色。</p>
         </div>
         <div class="color-editor">
           <label>
@@ -107,15 +107,15 @@
             <input name="glossBackgroundColor" type="color">
           </label>
           <label>
-            制卡成功背景
+            加入成功时的背景颜色
             <input name="cardSuccessBackgroundColor" type="color">
           </label>
           <label>
-            制卡失败背景
+            加入失败时的背景颜色
             <input name="cardErrorBackgroundColor" type="color">
           </label>
           <label>
-            <span>深浅 <output id="gloss-background-opacity-value" for="gloss-background-opacity">94%</output></span>
+            <span>背景不透明度 <output id="gloss-background-opacity-value" for="gloss-background-opacity">94%</output></span>
             <input id="gloss-background-opacity" name="glossBackgroundOpacity" type="range">
           </label>
           <label>
@@ -158,14 +158,14 @@
         <div class="step-copy">
           <p class="document-label">AI</p>
           <h1 id="ai-heading">选择翻译方式</h1>
-          <p>普通 AI 直接翻译；词典模式由 Jev 根据语境选择释义。只需测试当前翻译模式的连接。</p>
+          <p>普通 AI 根据上下文生成中文释义；Jev 从词典中选择符合上下文的释义。选好后，测试对应服务的连接。</p>
         </div>
         <div class="settings-form">
           <label>
-                翻译模式
+                翻译方式
                 <select name="translationMode">
-                  <option value="llm">普通 AI 翻译</option>
-                  <option value="dictionary-jev">词典 + Jev 释义选择</option>
+                  <option value="llm">普通 AI</option>
+                  <option value="dictionary-jev">Jev（从词典中选择释义）</option>
                 </select>
               </label>
           <div data-dictionary-settings hidden>
@@ -173,13 +173,13 @@
                   <input name="fallbackToLlm" type="checkbox">
                   <span>词典未收录时使用普通 AI 翻译</span>
                 </label>
-                <p class="field-help">关闭回退或普通 AI 不可用时，词语只显示红叉。Jev 从词典释义中选择当前语境下最合适的一项。</p>
+                <p class="field-help">如果词典没有收录，且未启用普通 AI 或普通 AI 不可用，单词旁会显示红叉。</p>
             <label>
                   Jev 接口地址
                   <input name="jevEndpoint" autocomplete="off">
                 </label>
                 <label>
-                  Jev API 密钥
+                  Jev API Key
                   <input name="jevApiKey" type="password" autocomplete="off">
                 </label>
                 <label>
@@ -187,14 +187,14 @@
                   <input name="jevModel" autocomplete="off">
                 </label>
                 <label>
-                  Jev 超时秒数
+                  Jev 请求超时（秒）
                   <input name="jevRequestTimeoutSeconds" type="number">
                 </label>
             <button id="test-jev" class="secondary-action" type="button" data-state="idle">测试 Jev 连接</button>
             <output id="jev-status" class="inline-status" role="status"></output>
           </div>
           <div data-onboarding-llm-settings>
-            <p class="field-help">普通 AI 用于直接翻译、词典未收录时的回退与生成卡片。词典模式下无须测试普通 AI 即可继续。</p>
+            <p class="field-help">生成 Anki 卡片需要普通 AI。使用 Jev 时，也可以让普通 AI 翻译词典未收录的生词；这一步只需测试 Jev 连接即可继续。</p>
           <label>
             AI 服务
           <select name="provider"></select>
@@ -204,7 +204,7 @@
             <input name="aiEndpoint" autocomplete="off">
           </label>
           <label data-ai-field="api-key">
-            AI API 密钥
+            AI API Key
             <input name="apiKey" type="password" autocomplete="off">
           </label>
           <label>
@@ -216,7 +216,7 @@
             <select name="reasoningEffort"></select>
           </label>
           <label>
-            AI 超时秒数
+            AI 请求超时（秒）
             <input name="aiRequestTimeoutSeconds" type="number">
           </label>
           <button id="test-ai" class="secondary-action" type="button" data-state="idle">测试连接</button>
@@ -228,7 +228,7 @@
       <section class="onboarding-step" data-step="anki" aria-labelledby="anki-heading" hidden>
         <div class="step-copy">
           <p class="document-label">Anki</p>
-          <h1 id="anki-heading">连接 AnkiConnect</h1>
+          <h1 id="anki-heading">连接 Anki</h1>
           <p><a href="https://ankiweb.net/shared/info/2055492159" target="_blank" rel="noreferrer">安装 AnkiConnect（代码 2055492159）</a>，保持 Anki 打开，再选择牌组和模板。</p>
         </div>
         <div class="settings-form">
@@ -245,14 +245,14 @@
             <select name="ankiModelName" disabled></select>
           </label>
           <label>
-            Anki 超时秒数
+            Anki 请求超时（秒）
             <input name="ankiRequestTimeoutSeconds" type="number">
           </label>
           <label>
-            重复制卡提示秒数
+            重复加入提示时长（秒）
             <input name="duplicatePromptSeconds" type="number">
           </label>
-          <button id="refresh-anki" class="secondary-action" type="button" data-state="idle">刷新 Anki</button>
+          <button id="refresh-anki" class="secondary-action" type="button" data-state="idle">刷新牌组与模板</button>
           <button id="test-anki" class="secondary-action" type="button" data-state="idle">测试连接</button>
           <output id="anki-status" class="inline-status" role="status"></output>
         </div>
@@ -261,8 +261,8 @@
       <section class="onboarding-step finish-step" data-step="finish" aria-labelledby="finish-heading" hidden>
         <div class="step-copy">
           <p class="document-label">完成</p>
-          <h1 id="finish-heading">可以开始阅读</h1>
-          <p>AI 已连接。Anki 可随时在设置中配置。</p>
+          <h1 id="finish-heading">设置完成</h1>
+          <p>翻译方式已设置。打开英文网页，点击扩展图标，再点击“翻译本页”即可显示中文释义。Anki 可以稍后在设置中配置。</p>
         </div>
       </section>
 

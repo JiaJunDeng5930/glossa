@@ -35,7 +35,7 @@ test("popup reports a structured toggle error and restores the button", async ({
   await page.addScriptTag({ path: resolve("dist/popup.js"), type: "module" });
 
   await page.locator("#translate-page").click();
-  await expect(page.locator("#popup-status")).toHaveText("扩展请求超时");
+  await expect(page.locator("#popup-status")).toHaveText("扩展没有及时响应，请重新打开扩展或刷新页面。");
   await expect(page.locator("#translate-page")).toBeEnabled();
 });
 
@@ -45,7 +45,7 @@ test("popup reports malformed toggle responses without closing", async ({ page }
   await page.addScriptTag({ path: resolve("dist/popup.js"), type: "module" });
 
   await page.locator("#translate-page").click();
-  await expect(page.locator("#popup-status")).toHaveText("扩展运行时错误");
+  await expect(page.locator("#popup-status")).toHaveText("扩展暂时无法处理请求，请重新打开扩展或刷新页面。");
   await expect(page.locator("#translate-page")).toBeEnabled();
   await expect.poll(() => page.evaluate(() => Boolean(Reflect.get(window, "__glossaPopupClosed")))).toBe(false);
 });
@@ -74,8 +74,8 @@ test("popup localizes pages without a content script", async ({ page }) => {
   await installPopupChrome(page, { unavailable: true });
   await page.addScriptTag({ path: resolve("dist/popup.js"), type: "module" });
 
-  await expect(page.locator("#page-state-label")).toHaveText("此页面不可用", { timeout: 8_000 });
+  await expect(page.locator("#page-state-label")).toHaveText("无法翻译此页面", { timeout: 8_000 });
   await expect(page.locator("#translate-page")).toBeDisabled();
-  await expect(page.locator("#popup-status")).toHaveText("当前页面不支持扩展翻译");
+  await expect(page.locator("#popup-status")).toHaveText("这个页面不支持 Glossa 翻译");
   await expect(page.locator("#popup-status")).not.toContainText("Receiving end");
 });

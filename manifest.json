@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glossa",
-  "description": "为陌生英文单词显示行内语境释义。",
+  "description": "在英文网页的生词旁显示中文释义，也可以将生词加入 Anki。",
   "icons": {
     "16": "assets/icon-16.png",
     "32": "assets/icon-32.png",

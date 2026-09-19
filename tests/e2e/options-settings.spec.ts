@@ -176,7 +176,7 @@ test("options refreshes external Anki choices before a later non-Anki save", asy
 
   await page.locator("textarea[name=glossPrompt]").fill("Keep the local prompt.");
   await page.locator("input[name=learningWindowDays]").fill("0");
-  await expect(page.locator("#status")).toHaveText("学习窗口（天）：请输入不小于 1 的数字。");
+  await expect(page.locator("#status")).toHaveText("加入 Anki 后继续显示释义（天）：请输入不小于 1 的数字。");
 
   const external = {
     ...DEFAULT_SETTINGS,
@@ -276,7 +276,7 @@ test("options keeps reset-card-history pending until the worker responds", async
   await expect(page.locator("#anki-status")).toHaveAttribute("data-state", "pending");
   await expect(page.locator("#reset-card-history")).toBeDisabled();
   await page.evaluate(() => (Reflect.get(window, "__glossaUiFixture") as { release(type: string): void }).release("card.history.reset"));
-  await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有卡片保持不变");
+  await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有的卡片已保留");
   await expect(page.locator("#reset-card-history")).toBeEnabled();
 });
 
@@ -346,7 +346,7 @@ test("options explains unavailable, loading, empty, and failed Anki catalogs", a
   });
   await page.addScriptTag({ path: resolve("dist/options.js"), type: "module" });
   await expect(page.locator("#settings-form")).toHaveJSProperty("inert", false);
-  await expect(page.locator("#anki-catalog-help")).toContainText("目录尚未读取");
+  await expect(page.locator("#anki-catalog-help")).toContainText("还没有读取牌组与模板");
   await expect(page.locator("#refresh-anki")).toHaveText("刷新牌组与模板");
   await expect(page.locator("select[name=ankiDeck]")).toBeDisabled();
   await page.getByRole("button", { name: "刷新牌组与模板" }).click();

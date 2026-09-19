@@ -106,7 +106,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
   const selectionNote = doc.createElement("div");
   selectionNote.className = "selection-note";
   selectionNote.dataset.glossaOwned = "1";
-  selectionNote.textContent = "选择单词来制卡";
+  selectionNote.textContent = "点击单词，加入 Anki";
   shadow.append(style, veil, selectionNote);
   doc.documentElement.append(host);
   const rendered = new Map<string, RenderedOccurrence>();
@@ -427,10 +427,10 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       : feedback.status !== "none" ? feedbackFallback(feedback.status)
       : gloss.status === "pending" ? "..." : "×";
     const message = feedback.status !== "none" && feedback.message ? feedback.message
-      : feedback.status === "card-pending" ? `${record.token.surface}：正在制卡`
-      : feedback.status === "card-success" ? `${record.token.surface}：制卡完成`
-      : feedback.status === "card-error" ? `${record.token.surface}：制卡失败`
-      : feedback.status === "card-unknown" ? `${record.token.surface}：制卡结果未知`
+      : feedback.status === "card-pending" ? `${record.token.surface}：正在加入 Anki`
+      : feedback.status === "card-success" ? `${record.token.surface}：已加入 Anki`
+      : feedback.status === "card-error" ? `${record.token.surface}：加入 Anki 失败`
+      : feedback.status === "card-unknown" ? `${record.token.surface}：无法确认是否已加入 Anki`
       : gloss.status === "error" ? gloss.message
       : gloss.status === "pending" ? `${record.token.surface}：正在生成释义` : `${record.token.surface}：${display}`;
     registry.mutate(() => {
