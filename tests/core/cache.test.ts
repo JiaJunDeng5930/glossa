@@ -1,9 +1,42 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCardCacheKey, buildGlossCacheKey } from "../../src/core/cache";
+import { buildCardCacheKey, buildGlossCacheKey, glossGenerationIdentity } from "../../src/core/cache";
+import { dictionaryIdentity } from "../../src/shared/services/dictionary";
 import { DEFAULT_SETTINGS } from "../../src/shared/types";
 
 describe("cache keys", () => {
+  it("separates dictionary selection from ordinary LLM results and includes the dictionary revision", () => {
+    const settings = { ...DEFAULT_SETTINGS, translation: { mode: "dictionary-jev" as const, fallbackToLlm: false } };
+    expect(glossGenerationIdentity(settings)).not.toBe(glossGenerationIdentity(DEFAULT_SETTINGS));
+    expect(JSON.parse(glossGenerationIdentity(settings))).toContain(dictionaryIdentity.id);
+    expect(JSON.parse(glossGenerationIdentity(settings))).toContain(dictionaryIdentity.version);
+    for (const jev of [
+      { ...settings.jev, endpoint: "https://other.jev.test/classify" },
+      { ...settings.jev, apiKey: "new-key" },
+      { ...settings.jev, model: "new-classifier" }
+    ]) {
+      expect(glossGenerationIdentity({ ...settings, jev })).not.toBe(glossGenerationIdentity(settings));
+    }
+  });
+
+  it("ignores inactive LLM settings in dictionary mode and includes them when fallback is enabled", () => {
+    const settings = { ...DEFAULT_SETTINGS, translation: { mode: "dictionary-jev" as const, fallbackToLlm: false } };
+    const changed = { ...settings, ai: { ...settings.ai, endpoint: "https://other-llm.test" }, modelVersion: "other-llm" };
+    expect(glossGenerationIdentity(changed)).toBe(glossGenerationIdentity(settings));
+    const fallback = { ...settings, translation: { ...settings.translation, fallbackToLlm: true } };
+    expect(glossGenerationIdentity(fallback)).not.toBe(glossGenerationIdentity(settings));
+    expect(glossGenerationIdentity({ ...changed, translation: fallback.translation })).not.toBe(glossGenerationIdentity(fallback));
+  });
+
+  it("reuses completed dictionary results when only request timeouts change", () => {
+    const settings = { ...DEFAULT_SETTINGS, translation: { mode: "dictionary-jev" as const, fallbackToLlm: true } };
+    expect(glossGenerationIdentity({
+      ...settings,
+      jev: { ...settings.jev, requestTimeoutMs: 1234 },
+      ai: { ...settings.ai, requestTimeoutMs: 5678 }
+    })).toBe(glossGenerationIdentity(settings));
+  });
+
   it("separates gloss results across generation settings", async () => {
     const input = {
       targetLang: "zh-CN",

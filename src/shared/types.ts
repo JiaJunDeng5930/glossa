@@ -55,7 +55,7 @@ export interface GlossCacheEntry extends GlossItem {
 export type MessageSource = "content-script" | "service-worker" | "options" | "onboarding" | "popup";
 export type MessageVersion = 1;
 export type ErrorReason = "network" | "timeout" | "unauthorized" | "not-found" | "service-error" | "invalid-response" | "runtime" | "outcome-unknown";
-export type ErrorService = "ai" | "anki" | "runtime";
+export type ErrorService = "ai" | "jev" | "dictionary" | "anki" | "runtime";
 
 export interface MessageEnvelope<TType extends string, TSource extends MessageSource, TTarget extends MessageSource, TPayload> {
   type: TType;
@@ -131,7 +131,7 @@ export interface WordCardDuplicatePayload {
   promptMs: number;
 }
 
-export const ERROR_CODES = ["anki-deck-not-found", "anki-model-not-found", "anki-no-compatible-model", "anki-empty-card"] as const;
+export const ERROR_CODES = ["dictionary-word-not-found", "anki-deck-not-found", "anki-model-not-found", "anki-no-compatible-model", "anki-empty-card"] as const;
 export type ErrorCode = typeof ERROR_CODES[number];
 
 export interface ErrorPayload {
@@ -171,6 +171,20 @@ export interface AiSettings {
   requestTimeoutMs: number;
 }
 
+export type TranslationMode = "llm" | "dictionary-jev";
+
+export interface TranslationSettings {
+  mode: TranslationMode;
+  fallbackToLlm: boolean;
+}
+
+export interface JevSettings {
+  endpoint: string;
+  apiKey?: string;
+  model: string;
+  requestTimeoutMs: number;
+}
+
 export interface AnkiSettings {
   endpoint: string;
   deck: string;
@@ -206,6 +220,8 @@ export interface GlossaSettings {
   appearance: AppearanceSettings;
   prompts: PromptSettings;
   ai: AiSettings;
+  translation: TranslationSettings;
+  jev: JevSettings;
   anki: AnkiSettings;
 }
 
@@ -235,6 +251,12 @@ export const DEFAULT_SETTINGS: GlossaSettings = {
   prompts: {
     gloss: "Translate each unfamiliar English word or phrase into Simplified Chinese for its current context. Return a short inline label that fits above the source word.",
     ankiCard: "Create Anki cards for the clicked English word. Put an English example sentence for the target sense on the front and bold the target word. Put only the direct Simplified Chinese meaning for the current context on the back."
+  },
+  translation: { mode: "llm", fallbackToLlm: false },
+  jev: {
+    endpoint: "https://api.typesafe.ai/v1/systemone",
+    model: "jev-latest",
+    requestTimeoutMs: 30_000
   },
   ai: {
     provider: DEFAULT_AI_PROVIDER,

@@ -25,6 +25,7 @@ Glossa 是一个 Chrome 扩展，用来在网页中给陌生英文单词显示�
 - 通过缓存减少重复 AI 请求
 - 支持快捷键开启、关闭页面翻译
 - 支持自定义释义样式、AI 设置、Anki 设置和提示词
+- 支持本地词典查义，由 Jev 根据语境选择中文释义
 
 ## 使用方法
 
@@ -47,6 +48,14 @@ Glossa 是一个 Chrome 扩展，用来在网页中给陌生英文单词显示�
 4. 遇到已经制过卡的单词时，页面右上角会出现确认提示
 
 ## 配置
+
+### 翻译模式
+
+设置页可选择普通模型翻译，或「词典 + Jev 释义选择」模式。后者从随扩展提供的 [ECDICT](https://github.com/skywind3000/ECDICT) 本地英汉词典读取单词及其词形对应的释义，将句子、目标单词和全部候选发送给 [Jev Choice](https://docs.typesafe.ai/primitives/choice)，显示它选中的词典释义。
+
+Jev 有独立的 Endpoint、API Key、Model 和 Request timeout 设置。默认 Endpoint 为 `https://api.typesafe.ai/v1/systemone`，Model 为 `jev-latest`。选择此模式后可独立测试 Jev 连接，无须先接通普通模型。
+
+未命中时回退到普通 AI 的选项默认关闭。开启后，仅词典中找不到的单词会交给普通模型；关闭时，未命中的单词显示红叉。普通模型未接通、Jev 请求失败或词典读取失败时，对应单词也只显示红叉，不弹出额外通知。Anki 制卡仍使用下方配置的普通模型。
 
 ### AI 设置
 
@@ -132,6 +141,7 @@ Glossa 在当前页面扫描可见文本，把候选单词交给后台服务。�
 ```bash
 npm run typecheck
 npm run wordlists:check
+npm run dictionary:check
 npm run test
 npm run build
 npm run test:e2e

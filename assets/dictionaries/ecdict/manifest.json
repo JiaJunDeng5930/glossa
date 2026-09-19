@@ -1,0 +1,182 @@
+{
+  "id": "ecdict",
+  "version": "bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b-v1",
+  "format": 1,
+  "source": {
+    "repository": "https://github.com/skywind3000/ECDICT",
+    "commit": "bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b",
+    "url": "https://raw.githubusercontent.com/skywind3000/ECDICT/bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b/ecdict.csv",
+    "sha256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf",
+    "rows": 770611
+  },
+  "license": {
+    "spdx": "MIT",
+    "file": "LICENSE",
+    "url": "https://raw.githubusercontent.com/skywind3000/ECDICT/bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b/LICENSE",
+    "sha256": "f8552dd246f61a4e064569eae6194a01c6b3d63b03bf27c6ca863593c549ed0f"
+  },
+  "coverage": {
+    "headwordPattern": "[A-Za-z]+(?:[-'][A-Za-z]+)*",
+    "translatedRows": 399213,
+    "entries": 400453,
+    "inflections": "Original forms (exchange 0) and reverse mappings for p,d,i,3,r,t,s; all source translations retained."
+  },
+  "partitions": {
+    "a": {
+      "file": "a.json.gz",
+      "sha256": "0ba0838d651cf6dd9939515234e09acbdc3fc01eaab1ace5356101ece24f8aeb",
+      "bytes": 572283,
+      "entries": 30039
+    },
+    "b": {
+      "file": "b.json.gz",
+      "sha256": "a9790851d9425c3f08de8f52910d3fcb674d97fcf05d98c0e5fc7de57344c0e3",
+      "bytes": 456745,
+      "entries": 23135
+    },
+    "c": {
+      "file": "c.json.gz",
+      "sha256": "3326547a2fbac0e33136161ef59ec7e1edfbb353890ee22e4267f5653e9a75cd",
+      "bytes": 675396,
+      "entries": 35206
+    },
+    "d": {
+      "file": "d.json.gz",
+      "sha256": "77bd9c86ba5ce278b80203289cd20f4a3a6109aaf4cc6b0ce8528abb9079504e",
+      "bytes": 398219,
+      "entries": 21167
+    },
+    "e": {
+      "file": "e.json.gz",
+      "sha256": "110cfe998b78d84dd011da652e581a309a3354644cb881609e46814b511faa27",
+      "bytes": 299344,
+      "entries": 16010
+    },
+    "f": {
+      "file": "f.json.gz",
+      "sha256": "b7a8f461db44408225bf9717ce16c149329025e4a26e54f60db651c26203dd30",
+      "bytes": 274969,
+      "entries": 13625
+    },
+    "g": {
+      "file": "g.json.gz",
+      "sha256": "108f39d39ee5dee2eae172d91e5d9e31267b6366949fa86a4f37dd979515395d",
+      "bytes": 252391,
+      "entries": 13256
+    },
+    "h": {
+      "file": "h.json.gz",
+      "sha256": "62acb8362381e52e3222050eb941c88001bb903ed3452418a7417f9d62b8d38d",
+      "bytes": 337533,
+      "entries": 18957
+    },
+    "i": {
+      "file": "i.json.gz",
+      "sha256": "fb9bf3019bebce02fdbe604720f72288e1c1884494d547dbe5e385aa12aebc2d",
+      "bytes": 250615,
+      "entries": 12973
+    },
+    "j": {
+      "file": "j.json.gz",
+      "sha256": "8b2229411e6738c25bfd8d9d0ebe6bcacdb009c38528da6053c046c01b16a32a",
+      "bytes": 68523,
+      "entries": 3219
+    },
+    "k": {
+      "file": "k.json.gz",
+      "sha256": "4c5a62b16f276f56fc7a939e4c550891a2b7c02b894eb574d205bdcfcaf31480",
+      "bytes": 122150,
+      "entries": 6485
+    },
+    "l": {
+      "file": "l.json.gz",
+      "sha256": "6dabc3337bc664a2306008cf678e949cb775f614896b1ccdcd7b9a4866e0bfd8",
+      "bytes": 256737,
+      "entries": 13473
+    },
+    "m": {
+      "file": "m.json.gz",
+      "sha256": "4ebf52628add3c49feacb68d7b2fdf86c3019395a426c563c03c06e605e82146",
+      "bytes": 498982,
+      "entries": 27246
+    },
+    "n": {
+      "file": "n.json.gz",
+      "sha256": "05869191b56d22d8e0f2a918681657c826a0521e49504f97f744f3af39ece4e7",
+      "bytes": 230490,
+      "entries": 12022
+    },
+    "o": {
+      "file": "o.json.gz",
+      "sha256": "802de434753ae3b45009c478881f409dbb50b6be2b532b909de214a40f395ee5",
+      "bytes": 207500,
+      "entries": 11234
+    },
+    "p": {
+      "file": "p.json.gz",
+      "sha256": "2aa39a2ea80173a4d5332b7c8ed35dd6789cac9472f2cdb69861cf01834c0988",
+      "bytes": 667159,
+      "entries": 35967
+    },
+    "q": {
+      "file": "q.json.gz",
+      "sha256": "cf93d27187e4f91437b115aef0421418ea220057dd2df928289cf9201a916b01",
+      "bytes": 38456,
+      "entries": 1838
+    },
+    "r": {
+      "file": "r.json.gz",
+      "sha256": "d62c233658bc8ee290f1976000c1220adb445d13fcf63a6a47478bc9e1d31313",
+      "bytes": 333666,
+      "entries": 17151
+    },
+    "s": {
+      "file": "s.json.gz",
+      "sha256": "0ea36b580aa4d136d85755ebb170cd7af0c9896b7988679f61f914b077b69b93",
+      "bytes": 777216,
+      "entries": 39847
+    },
+    "t": {
+      "file": "t.json.gz",
+      "sha256": "74f7744881e731ffc13d80fd18d6ea6e85e2e71d3e199cd4cbe8a2b4306e2138",
+      "bytes": 411829,
+      "entries": 21346
+    },
+    "u": {
+      "file": "u.json.gz",
+      "sha256": "8e3f4d2efcebb7df67763dc4c9ba4a51c098e5855197f8a38d4fafd549cf8f27",
+      "bytes": 163135,
+      "entries": 8440
+    },
+    "v": {
+      "file": "v.json.gz",
+      "sha256": "f75ac8584535358a7537e48e87d5b3d54cbcad01b96c299d34ba0efcc23fbd57",
+      "bytes": 117529,
+      "entries": 5929
+    },
+    "w": {
+      "file": "w.json.gz",
+      "sha256": "f9e7ef882803b0a50fb1dd00d397ac19dfdd182f7e573c03293491e567f1af3e",
+      "bytes": 158956,
+      "entries": 7654
+    },
+    "x": {
+      "file": "x.json.gz",
+      "sha256": "46ae37c4da0f4e37e2db15b52b63eccf95f4efa94dcb0924fc03354f11e1f36b",
+      "bytes": 16202,
+      "entries": 863
+    },
+    "y": {
+      "file": "y.json.gz",
+      "sha256": "28cdc96d9fb61468f9095b53478de64b1a2951915e2ebf2e1afb2f767d9098e0",
+      "bytes": 31615,
+      "entries": 1483
+    },
+    "z": {
+      "file": "z.json.gz",
+      "sha256": "4cd044c592b0a6e1af7745a3d47515f0cb04f5c5fdf54220db5f99899f92f268",
+      "bytes": 37870,
+      "entries": 1888
+    }
+  }
+}

@@ -10,7 +10,7 @@ import {
   vocabularyKey
 } from "../core/state";
 import type { ExtensionStorage } from "../storage/db";
-import type { AiClient } from "../shared/services/aiClient";
+import type { GlossGenerator } from "../shared/services/glossGenerator";
 import type { ErrorPayload, GlossaSettings, GlossCacheEntry, GlossItem, GlossTokenOutcome, SentenceCandidate, TokenCandidate, VocabularyRecord } from "../shared/types";
 import { GLOSS_TARGET_LANG } from "../shared/types";
 
@@ -28,12 +28,12 @@ export interface GlossResolverSession {
 
 export interface GlossResolverDeps {
   storage: ExtensionStorage;
-  ai: Pick<AiClient, "glossFrame">;
+  generator: GlossGenerator;
   maxMemoryEntries?: number;
   lookupConcurrency?: number;
   dbReadCoalesceMs?: number;
-  aiFrameMaxItems?: number;
-  aiFrameMaxMs?: number;
+  frameMaxItems?: number;
+  frameMaxMs?: number;
 }
 
 export interface GlossResolverSink {
@@ -85,7 +85,7 @@ interface PendingRead<T> {
   reject(error: unknown): void;
 }
 
-interface AiFrame {
+interface GlossFrame {
   key: string;
   settings: GlossaSettings;
   jobs: GlossJob[];
@@ -98,8 +98,8 @@ interface AiFrame {
 const DEFAULT_MAX_MEMORY_ENTRIES = 512;
 const DEFAULT_LOOKUP_CONCURRENCY = 8;
 const DEFAULT_DB_READ_COALESCE_MS = 8;
-const DEFAULT_AI_FRAME_MAX_ITEMS = 32;
-const DEFAULT_AI_FRAME_MAX_MS = 50;
+const DEFAULT_GLOSS_FRAME_MAX_ITEMS = 32;
+const DEFAULT_GLOSS_FRAME_MAX_MS = 50;
 
 export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
   const memoryCache = new Map<string, GlossItem>();
@@ -116,15 +116,15 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
     (keys) => deps.storage.lexicon.getMany(keys),
     deps.dbReadCoalesceMs ?? DEFAULT_DB_READ_COALESCE_MS
   );
-  const aiOutlet = createAiOutlet({
-    ai: deps.ai,
+  const glossOutlet = createGlossOutlet({
+    generator: deps.generator,
     storage: deps.storage,
     inFlight,
     remember,
     putCache,
     isCacheEpochCurrent: (epoch) => epoch === cacheEpoch,
-    aiFrameMaxItems: deps.aiFrameMaxItems ?? DEFAULT_AI_FRAME_MAX_ITEMS,
-    aiFrameMaxMs: deps.aiFrameMaxMs ?? DEFAULT_AI_FRAME_MAX_MS
+    frameMaxItems: deps.frameMaxItems ?? DEFAULT_GLOSS_FRAME_MAX_ITEMS,
+    frameMaxMs: deps.frameMaxMs ?? DEFAULT_GLOSS_FRAME_MAX_MS
   });
 
   function putCache(capturedEpoch: number, key: string, value: GlossCacheEntry): Promise<boolean> {
@@ -248,7 +248,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
                 remember,
                 lexiconReads,
                 glossCacheReads,
-                aiOutlet,
+                glossOutlet,
                 sink: sessionSink,
                 emit,
                 track,
@@ -338,7 +338,7 @@ export function createGlossResolver(deps: GlossResolverDeps): GlossResolver {
       generationIdentity = identity;
       generation += 1;
       memoryCache.clear();
-      aiOutlet.invalidate();
+      glossOutlet.invalidate();
       return Promise.resolve();
     }
   };
@@ -358,7 +358,7 @@ async function resolveToken(input: {
   remember(key: string, item: GlossItem): void;
   lexiconReads: ReadCoalescer<VocabularyRecord>;
   glossCacheReads: ReadCoalescer<GlossCacheEntry>;
-  aiOutlet: ReturnType<typeof createAiOutlet>;
+  glossOutlet: ReturnType<typeof createGlossOutlet>;
   sink: GlossResolverSink;
   emit(payload: GlossTokenOutcome): void;
   track(task: Promise<void>): void;
@@ -406,13 +406,13 @@ async function resolveToken(input: {
     }
 
     input.emit({ tokenId: input.token.id, status: "pending" });
-    const runtimeKey = aiInFlightKey(input.settings, cacheKey);
+    const runtimeKey = glossInFlightKey(input.settings, cacheKey);
     let job = input.inFlight.get(runtimeKey);
     const newJob = !job;
     if (!job) {
       job = {
         sentence: input.sentence.text,
-        token: tokenForAi(input.token),
+        token: tokenForGloss(input.token),
         dbCacheKey: cacheKey,
         inFlightKey: runtimeKey,
         settings: input.settings,
@@ -429,7 +429,7 @@ async function resolveToken(input: {
       subscribedJob.subscribers.delete(subscriber);
       input.subscriptions.delete(unsubscribe);
       complete();
-      if (subscribedJob.subscribers.size === 0) input.aiOutlet.remove(subscribedJob);
+      if (subscribedJob.subscribers.size === 0) input.glossOutlet.remove(subscribedJob);
     };
     const subscriber: GlossSubscriber = {
       token: input.token,
@@ -445,7 +445,7 @@ async function resolveToken(input: {
     subscribedJob.subscribers.add(subscriber);
     input.subscriptions.add(unsubscribe);
     input.track(completed);
-    if (newJob) input.aiOutlet.enqueue(subscribedJob);
+    if (newJob) input.glossOutlet.enqueue(subscribedJob);
   } catch (error) {
     const payload = diagnosticPayloadFrom(error, {
       reason: "runtime",
@@ -456,19 +456,19 @@ async function resolveToken(input: {
   }
 }
 
-function createAiOutlet(input: {
-  ai: Pick<AiClient, "glossFrame">;
+function createGlossOutlet(input: {
+  generator: GlossGenerator;
   storage: ExtensionStorage;
   inFlight: Map<string, GlossJob>;
   remember(key: string, item: GlossItem): void;
   putCache(epoch: number, key: string, value: GlossCacheEntry): Promise<boolean>;
   isCacheEpochCurrent(epoch: number): boolean;
-  aiFrameMaxItems: number;
-  aiFrameMaxMs: number;
+  frameMaxItems: number;
+  frameMaxMs: number;
 }) {
-  const serialAi = pLimit(1);
-  let currentFrame: AiFrame | undefined;
-  const frames = new Set<AiFrame>();
+  const serialGeneration = pLimit(1);
+  let currentFrame: GlossFrame | undefined;
+  const frames = new Set<GlossFrame>();
 
   function settle(job: GlossJob, result: GlossJobResult): void {
     if (input.inFlight.get(job.inFlightKey) === job) input.inFlight.delete(job.inFlightKey);
@@ -486,7 +486,7 @@ function createAiOutlet(input: {
     job.subscribers.clear();
   }
 
-  function cancelFrame(frame: AiFrame): void {
+  function cancelFrame(frame: GlossFrame): void {
     frame.cancelled = true;
     globalThis.clearTimeout(frame.timer);
     frame.controller.abort();
@@ -495,7 +495,7 @@ function createAiOutlet(input: {
     if (currentFrame === frame) currentFrame = undefined;
   }
 
-  async function executeFrame(frame: AiFrame, trigger: string): Promise<void> {
+  async function executeFrame(frame: GlossFrame, trigger: string): Promise<void> {
     if (frame.cancelled) return;
     // Request IDs belong to this frame, never to content occurrences in unrelated documents.
     const requested = new Map<string, GlossJob>(frame.jobs.filter((job) => job.subscribers.size > 0)
@@ -503,7 +503,7 @@ function createAiOutlet(input: {
     if (requested.size === 0) return;
     const startedAt = nowMs();
     try {
-      const response = await input.ai.glossFrame({
+      const response = await input.generator.glossFrame({
         settings: frame.settings,
         items: Array.from(requested, ([requestItemId, job]) => ({ requestItemId, sentence: job.sentence, token: job.token })),
         signal: frame.controller.signal
@@ -521,6 +521,10 @@ function createAiOutlet(input: {
         const job = requested.get(item.requestItemId)!;
         if (frame.cancelled) return;
         if (job.subscribers.size === 0) continue;
+        if ("error" in item) {
+          settle(job, { ok: false, error: item.error });
+          continue;
+        }
         const cachedItem: GlossItem = { tokenId: item.requestItemId, ...item.value };
         try {
           await input.putCache(job.cacheEpoch, job.dbCacheKey, { ...cachedItem, createdAt: job.createdAt });
@@ -537,13 +541,13 @@ function createAiOutlet(input: {
           reason: "invalid-response", message: "Gloss lookup returned no item", service: "ai"
         } });
       }
-      trace({ component: "service-worker", operation: "service-worker.ai.frame", result: "ok",
+      trace({ component: "service-worker", operation: "service-worker.gloss.frame", result: "ok",
         details: { trigger, items: requested.size, returned: response.items.length, queueMs: Math.round(startedAt - frame.createdAt), requestMs: elapsedMs(startedAt) } });
     } catch (error) {
       if (frame.cancelled) return;
       const payload = diagnosticPayloadFrom(error, { reason: "service-error", message: "Gloss lookup failed", service: "ai" });
       for (const job of requested.values()) settle(job, { ok: false, error: payload });
-      trace({ component: "service-worker", operation: "service-worker.ai.frame", result: "error", error,
+      trace({ component: "service-worker", operation: "service-worker.gloss.frame", result: "error", error,
         details: { trigger, items: requested.size, requestMs: elapsedMs(startedAt) } });
     }
   }
@@ -553,7 +557,7 @@ function createAiOutlet(input: {
     if (!frame) return;
     currentFrame = undefined;
     globalThis.clearTimeout(frame.timer);
-    void serialAi(async () => {
+    void serialGeneration(async () => {
       try { await executeFrame(frame, trigger); }
       finally { frames.delete(frame); }
     });
@@ -561,16 +565,16 @@ function createAiOutlet(input: {
 
   return {
     enqueue(job: GlossJob): void {
-      const key = aiFrameKey(job.settings);
+      const key = glossFrameKey(job.settings);
       if (currentFrame && currentFrame.key !== key) flushFrame("settings-change");
       if (!currentFrame) {
         currentFrame = { key, settings: job.settings, jobs: [], createdAt: nowMs(),
-          timer: globalThis.setTimeout(() => flushFrame("time"), input.aiFrameMaxMs),
+          timer: globalThis.setTimeout(() => flushFrame("time"), input.frameMaxMs),
           controller: new AbortController(), cancelled: false };
         frames.add(currentFrame);
       }
       currentFrame.jobs.push(job);
-      if (currentFrame.jobs.length >= input.aiFrameMaxItems) flushFrame("size");
+      if (currentFrame.jobs.length >= input.frameMaxItems) flushFrame("size");
     },
     remove(job: GlossJob): void {
       if (input.inFlight.get(job.inFlightKey) === job) input.inFlight.delete(job.inFlightKey);
@@ -583,12 +587,12 @@ function createAiOutlet(input: {
     },
     invalidate(): void {
       for (const frame of frames) cancelFrame(frame);
-      serialAi.clearQueue();
+      serialGeneration.clearQueue();
     }
   };
 }
 
-function tokenForAi(token: TokenCandidate): GlossJob["token"] {
+function tokenForGloss(token: TokenCandidate): GlossJob["token"] {
   return { surface: token.surface, lemma: token.lemma, startOffset: token.startOffset, endOffset: token.endOffset };
 }
 
@@ -727,14 +731,15 @@ function transientMemoryKey(pageUrl: string, cacheKey: string): string {
   return `${pageUrl}::${cacheKey}`;
 }
 
-function aiInFlightKey(settings: GlossaSettings, cacheKey: string): string {
-  return `${aiFrameKey(settings)}\n${cacheKey}`;
+function glossInFlightKey(settings: GlossaSettings, cacheKey: string): string {
+  return `${glossFrameKey(settings)}\n${cacheKey}`;
 }
 
-function aiFrameKey(settings: GlossaSettings): string {
+function glossFrameKey(settings: GlossaSettings): string {
   return [
     glossGenerationIdentity(settings),
-    String(settings.ai.requestTimeoutMs)
+    settings.translation.mode === "dictionary-jev" ? String(settings.jev.requestTimeoutMs) : "",
+    settings.translation.mode === "llm" || settings.translation.fallbackToLlm ? String(settings.ai.requestTimeoutMs) : ""
   ].join("\n");
 }
 

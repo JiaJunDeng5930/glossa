@@ -1,5 +1,8 @@
 import { createAnkiClient } from "../shared/services/ankiClient";
 import { createAiClient } from "../shared/services/aiClient";
+import { createDictionary } from "../shared/services/dictionary";
+import { createJevClient } from "../shared/services/jevClient";
+import { createGlossGenerator } from "../shared/services/glossGenerator";
 import { createGlossResolver } from "./glossResolver";
 import { attachGlossPort } from "./glossPort";
 import { createBackgroundMessageHandler } from "./messages";
@@ -15,7 +18,8 @@ import type { ErrorMessage, MessageSource, OptionsErrorMessage } from "../shared
 const storage = createExtensionStorage();
 const ai = createAiClient();
 const anki = createAnkiClient();
-const glossResolver = createGlossResolver({ storage, ai });
+const generator = createGlossGenerator({ ai, dictionary: createDictionary(), jev: createJevClient() });
+const glossResolver = createGlossResolver({ storage, generator });
 const handleMessage = createBackgroundMessageHandler({
   storage,
   ai,

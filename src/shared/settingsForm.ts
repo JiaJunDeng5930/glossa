@@ -25,6 +25,7 @@ const NUMBER_CONTROLS: Record<string, { rule: SettingsNumberRule; units: number 
   glossCacheTtlHours: { rule: SETTINGS_RULES.glossCacheTtlMs, units: 3_600_000 },
   glossBackgroundOpacity: { rule: SETTINGS_RULES.appearance.backgroundOpacity, units: 1 },
   glossFontSize: { rule: SETTINGS_RULES.appearance.fontSize, units: 1 },
+  jevRequestTimeoutSeconds: { rule: SETTINGS_RULES.jev.requestTimeoutMs, units: 1_000 },
   aiRequestTimeoutSeconds: { rule: SETTINGS_RULES.ai.requestTimeoutMs, units: 1_000 },
   ankiRequestTimeoutSeconds: { rule: SETTINGS_RULES.anki.requestTimeoutMs, units: 1_000 },
   duplicatePromptSeconds: { rule: SETTINGS_RULES.anki.duplicatePromptMs, units: 1_000 }
@@ -64,6 +65,19 @@ export function readSettingsForm(form: HTMLFormElement, base: GlossaSettings = D
       delete ai.apiKey;
     }
   }
+  const jev = {
+    ...base.jev,
+    endpoint: readOptionalInput(form, "jevEndpoint")?.trim() || base.jev.endpoint,
+    model: readOptionalInput(form, "jevModel")?.trim() || base.jev.model,
+    requestTimeoutMs: hasControl(form, "jevRequestTimeoutSeconds")
+      ? secondsToMs(readFormInput(form, "jevRequestTimeoutSeconds"))
+      : base.jev.requestTimeoutMs
+  };
+  const jevApiKey = readOptionalInput(form, "jevApiKey");
+  if (jevApiKey !== undefined) {
+    if (jevApiKey.trim()) jev.apiKey = jevApiKey.trim();
+    else delete jev.apiKey;
+  }
   const fontSize = hasControl(form, "glossFontSize")
     ? Number(readFormInput(form, "glossFontSize"))
     : base.appearance.fontSize;
@@ -96,6 +110,11 @@ export function readSettingsForm(form: HTMLFormElement, base: GlossaSettings = D
       ankiCard: readOptionalInput(form, "ankiPrompt")?.trim() || base.prompts.ankiCard
     },
     ai,
+    jev,
+    translation: {
+      mode: readOptionalInput(form, "translationMode") ?? base.translation.mode,
+      fallbackToLlm: hasControl(form, "fallbackToLlm") ? readFormCheckbox(form, "fallbackToLlm") : base.translation.fallbackToLlm
+    },
     anki: {
       endpoint: readOptionalInput(form, "ankiEndpoint")?.trim() || base.anki.endpoint,
       deck: readOptionalInput(form, "ankiDeck")?.trim() || base.anki.deck,
@@ -125,6 +144,13 @@ export function writeSettingsForm(form: HTMLFormElement, settings: GlossaSetting
   setFormInput(form, "glossBackgroundOpacity", String(settings.appearance.backgroundOpacity));
   setFormInput(form, "glossFontFamily", settings.appearance.fontFamily);
   setFormInput(form, "glossFontSize", String(settings.appearance.fontSize));
+  setFormInput(form, "translationMode", settings.translation.mode);
+  setFormChecked(form, "fallbackToLlm", settings.translation.fallbackToLlm);
+  setFormInput(form, "jevEndpoint", settings.jev.endpoint);
+  setFormInput(form, "jevApiKey", settings.jev.apiKey ?? "");
+  setFormInput(form, "jevModel", settings.jev.model);
+  setFormInput(form, "jevRequestTimeoutSeconds", String(msToSeconds(settings.jev.requestTimeoutMs)));
+  applyTranslationFields(form, settings);
   setFormInput(form, "provider", settings.ai.provider);
   setFormInput(form, "aiEndpoint", settings.ai.endpoint);
   setFormInput(form, "apiKey", settings.ai.apiKey ?? "");
@@ -308,4 +334,13 @@ function hexToRgb(hex: string, alpha: number): string {
   const green = (value >> 8) & 255;
   const blue = value & 255;
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+export function applyTranslationFields(form: HTMLFormElement, settings: GlossaSettings): void {
+  for (const element of form.querySelectorAll<HTMLElement>("[data-dictionary-settings]")) {
+    element.hidden = settings.translation.mode !== "dictionary-jev";
+  }
+  for (const element of form.querySelectorAll<HTMLElement>("[data-onboarding-llm-settings]")) {
+    element.hidden = settings.translation.mode !== "llm" && !settings.translation.fallbackToLlm;
+  }
 }

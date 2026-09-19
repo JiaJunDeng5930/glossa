@@ -3,6 +3,7 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs
 import { dirname, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
+import { checkEcdictAssets } from "./ecdict.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = resolve(root, "dist");
@@ -23,7 +24,12 @@ const staticPages = [
   ["src/popup/popup.html", "popup/popup.html", "popup.js"]
 ];
 
+const dictionaryManifest = JSON.parse(await readFile(resolve(root, "assets/dictionaries/ecdict/manifest.json"), "utf8"));
+const dictionaryAssetPaths = ["manifest.json", dictionaryManifest.license.file, ...Object.values(dictionaryManifest.partitions).map((partition) => partition.file)]
+  .map((file) => `dictionaries/ecdict/${file}`);
+
 const publishedAssetPaths = [
+  ...dictionaryAssetPaths,
   "icon-16.png",
   "icon-32.png",
   "icon-48.png",
@@ -44,6 +50,7 @@ const publishedAssetPaths = [
 
 const expectedEntryOutputs = Object.keys(entryPoints).flatMap((name) => [`${name}.js`, `${name}.js.map`]);
 
+await checkEcdictAssets();
 await rm(dist, { recursive: true, force: true });
 
 const context = await esbuild.context({

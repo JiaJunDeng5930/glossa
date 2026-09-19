@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySettingsFormConstraints, applyProviderChange, applyProviderFields, populateProviderSelect, populateReasoningEffortSelect, readSettingsForm, writeSettingsForm } from "../../src/shared/settingsForm";
+import { applySettingsFormConstraints, applyTranslationFields, applyProviderChange, applyProviderFields, populateProviderSelect, populateReasoningEffortSelect, readSettingsForm, writeSettingsForm } from "../../src/shared/settingsForm";
 import { defaultEndpointForProvider, normalizeSettings, SETTINGS_RULES } from "../../src/shared/settings";
 
 describe("settings form numeric constraints", () => {
@@ -96,5 +96,35 @@ describe("settings form dynamic Anki choices", () => {
 
     expect((form.elements.namedItem("ankiDeck") as HTMLSelectElement).value).toBe("External deck");
     expect((form.elements.namedItem("ankiModelName") as HTMLSelectElement).value).toBe("External model");
+  });
+});
+
+
+describe("dictionary and Jev settings form", () => {
+  it("preserves service settings when their controls are absent", () => {
+    const form = document.createElement("form");
+    form.innerHTML = '<input name="learningWindowDays" value="5">';
+    const base = normalizeSettings({ translation: { mode: "dictionary-jev", fallbackToLlm: true }, jev: { apiKey: "test-key", model: "custom-jev" } });
+    expect(readSettingsForm(form, base)).toEqual({ ...base, learningWindowDays: 5 });
+  });
+
+  it("round-trips the selected mode and allows independently clearing the Jev key", () => {
+    const form = document.createElement("form");
+    form.innerHTML = `<select name="translationMode"><option value="llm">LLM</option><option value="dictionary-jev">Jev</option></select>
+      <input name="fallbackToLlm" type="checkbox"><input name="jevEndpoint"><input name="jevApiKey">
+      <input name="jevModel"><input name="jevRequestTimeoutSeconds" type="number">
+      <div data-dictionary-settings></div><div data-onboarding-llm-settings></div>`;
+    const base = normalizeSettings({ translation: { mode: "dictionary-jev" }, jev: { apiKey: "test-key", requestTimeoutMs: 1500 }, ai: { apiKey: "ordinary-key" } });
+    writeSettingsForm(form, base);
+    expect(readSettingsForm(form, base)).toEqual(base);
+    expect(form.querySelector<HTMLElement>("[data-dictionary-settings]")!.hidden).toBe(false);
+    expect(form.querySelector<HTMLElement>("[data-onboarding-llm-settings]")!.hidden).toBe(true);
+    (form.elements.namedItem("jevApiKey") as HTMLInputElement).value = "";
+    (form.elements.namedItem("fallbackToLlm") as HTMLInputElement).checked = true;
+    const updated = readSettingsForm(form, base);
+    expect(updated.jev.apiKey).toBeUndefined();
+    expect(updated.ai.apiKey).toBe("ordinary-key");
+    applyTranslationFields(form, updated);
+    expect(form.querySelector<HTMLElement>("[data-onboarding-llm-settings]")!.hidden).toBe(false);
   });
 });

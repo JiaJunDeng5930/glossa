@@ -18,7 +18,8 @@
           <a href="#reading-section">阅读</a>
           <a href="#known-words-section">已掌握词汇</a>
           <a href="#appearance-section">释义样式</a>
-          <a href="#ai-section">AI</a>
+          <a href="#translation-section">翻译模式与 Jev</a>
+          <a href="#ai-section">普通 AI</a>
           <a href="#anki-section">Anki</a>
           <a href="#prompt-section">提示词</a>
           <a href="#cache-section">缓存</a>
@@ -176,15 +177,65 @@
             </div>
           </section>
 
+          <section id="translation-section" class="settings-panel" aria-labelledby="translation-heading">
+            <div class="panel-heading">
+              <p>04</p>
+              <h2 id="translation-heading">翻译模式与 Jev</h2>
+            </div>
+            <label>
+                翻译模式
+                <select name="translationMode">
+                  <option value="llm">普通 AI 翻译</option>
+                  <option value="dictionary-jev">词典 + Jev 释义选择</option>
+                </select>
+              </label>
+            <div class="translation-service-fields" data-dictionary-settings hidden>
+              <label class="switch-field">
+                  <span>词典未收录时使用普通 AI 翻译</span>
+                  <input name="fallbackToLlm" type="checkbox">
+                </label>
+                <p class="field-help">词典未收录的词在关闭回退或普通 AI 不可用时只显示红叉。Jev 从词典释义中选择当前语境下最合适的一项。</p>
+              <div class="field-grid">
+                <label class="wide-field">
+                  Jev 接口地址
+                  <input name="jevEndpoint" autocomplete="off">
+                </label>
+                <label>
+                  Jev API 密钥
+                  <input name="jevApiKey" type="password" autocomplete="off">
+                </label>
+                <label>
+                  Jev 模型
+                  <input name="jevModel" autocomplete="off">
+                </label>
+                <label>
+                  Jev 超时秒数
+                  <input name="jevRequestTimeoutSeconds" type="number">
+                </label>
+              </div>
+              <button id="test-jev" class="test-button" type="button" data-state="idle" aria-label="测试 Jev">
+                <span class="test-label">测试 Jev</span>
+                <span class="test-spinner" aria-hidden="true"></span>
+                <svg class="test-icon test-icon-success" aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M20 6 9 17l-5-5"/>
+                </svg>
+                <svg class="test-icon test-icon-error" aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 8v5M12 17h.01M10.3 4.5 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z"/>
+                </svg>
+              </button>
+              <output id="jev-status" class="inline-status" role="status"></output>
+            </div>
+          </section>
+
           <div class="settings-grid">
             <section id="ai-section" class="settings-panel" aria-labelledby="ai-heading">
               <div class="panel-heading">
-                <p>04</p>
-                <h2 id="ai-heading">AI</h2>
+                <p>05</p>
+                <h2 id="ai-heading">普通 AI</h2>
               </div>
               <label>
                 AI 服务
-                <span class="field-help">选择生成释义和卡片内容的服务类型。</span>
+                <span class="field-help">用于普通翻译、词典未收录时的回退，以及生成 Anki 卡片。</span>
                 <select name="provider"></select>
               </label>
               <label>
@@ -227,7 +278,7 @@
 
             <section id="anki-section" class="settings-panel" aria-labelledby="anki-heading">
               <div class="panel-heading">
-                <p>05</p>
+                <p>06</p>
                 <h2 id="anki-heading">Anki</h2>
               </div>
               <label>
@@ -280,7 +331,7 @@
 
           <section id="prompt-section" class="settings-panel" aria-labelledby="prompt-heading">
             <div class="panel-heading">
-              <p>06</p>
+              <p>07</p>
               <h2 id="prompt-heading">提示词</h2>
             </div>
             <label>
@@ -311,7 +362,7 @@
 
           <section id="cache-section" class="settings-panel compact-panel" aria-labelledby="cache-heading">
             <div class="panel-heading">
-              <p>07</p>
+              <p>08</p>
               <h2 id="cache-heading">缓存</h2>
             </div>
             <div class="summary-row">

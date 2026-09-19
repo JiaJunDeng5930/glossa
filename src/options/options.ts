@@ -7,7 +7,7 @@ import {
   type RuntimeRequestType
 } from "../shared/messages";
 import { sendRuntimeRequest } from "../shared/runtimeClient";
-import { aiConnectionKey, ankiConnectionKey, diffSettings, type SettingsPatch } from "../shared/settings";
+import { aiConnectionKey, ankiConnectionKey, jevConnectionKey, diffSettings, type SettingsPatch } from "../shared/settings";
 import {
   claimFeedback,
   createAnkiCatalogController,
@@ -18,6 +18,7 @@ import {
 } from "../shared/connectionController";
 import {
   applyAppearancePreview,
+  applyTranslationFields,
   applyProviderChange,
   applyProviderFields,
   pickExistingValue,
@@ -37,6 +38,7 @@ import { formatShortcutFromEvent, normalizeShortcut } from "../shared/shortcut";
 import { DEFAULT_SETTINGS, type AiSettings, type AnkiSettings, type GlossaSettings, type VocabularyRecord } from "../shared/types";
 import { userMessageForError } from "../shared/userMessages";
 import { createAnkiClient } from "../shared/services/ankiClient";
+import { createJevClient } from "../shared/services/jevClient";
 import { createAiClient } from "../shared/services/aiClient";
 import { createKnownWordsOperationLane } from "./knownWordsOperationLane";
 
@@ -58,6 +60,8 @@ const glossBackgroundOpacityValue = document.querySelector<HTMLOutputElement>("#
 const knownWordListSelect = form.elements.namedItem("knownWordList") as HTMLSelectElement;
 const ankiDeckSelect = form.elements.namedItem("ankiDeck") as HTMLSelectElement;
 const ankiModelNameSelect = form.elements.namedItem("ankiModelName") as HTMLSelectElement;
+const testJevButton = document.querySelector<HTMLButtonElement>("#test-jev")!;
+const jevStatus = document.querySelector<HTMLOutputElement>("#jev-status")!;
 const testAiButton = document.querySelector<HTMLButtonElement>("#test-ai")!;
 const testAnkiButton = document.querySelector<HTMLButtonElement>("#test-anki")!;
 const refreshAnkiButton = document.querySelector<HTMLButtonElement>("#refresh-anki")!;
@@ -83,6 +87,7 @@ const reasoningSelect = form.elements.namedItem("reasoningEffort") as HTMLSelect
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 
 let draft: SettingsDraft | undefined;
+let jevController: ReturnType<typeof createConnectionController<GlossaSettings>> | undefined;
 let aiController: ReturnType<typeof createConnectionController<GlossaSettings>> | undefined;
 let ankiController: ReturnType<typeof createConnectionController<AnkiSettings>> | undefined;
 let catalogController: ReturnType<typeof createAnkiCatalogController<AnkiSettings, { decks: string[]; modelNames: string[] }>> | undefined;
@@ -120,6 +125,9 @@ providerSelect.addEventListener("change", () => {
   editDraftFromForm();
 });
 
+testJevButton.addEventListener("click", () => {
+  if (canRunSettingsOperation()) jevController?.test();
+});
 testAiButton.addEventListener("click", () => {
   if (canRunSettingsOperation()) aiController?.test();
 });
@@ -212,6 +220,7 @@ function syncDraftFromForm(): GlossaSettings | undefined {
 function markFormInvalid(): void {
   formValidationError = true;
   aiController?.invalidate();
+  jevController?.invalidate();
   ankiController?.invalidate();
   catalogController?.invalidate();
   setSaveState("error");
@@ -265,7 +274,13 @@ async function loadSettings(): Promise<void> {
 
 function createControllers(settings: GlossaSettings): void {
   const aiClient = createAiClient();
+  const jevClient = createJevClient();
   const ankiClient = createAnkiClient();
+  jevController = createConnectionController<GlossaSettings>({
+    identity: jevConnectionKey,
+    run: (value, signal) => jevClient.probe(value.jev, signal),
+    errorFallback: { reason: "service-error", message: "Jev 连接检测失败", service: "jev" }
+  }, settings);
   aiController = createConnectionController<GlossaSettings>({
     identity: aiConnectionKey,
     run: (value, signal) => aiClient.probe(value, signal),
@@ -282,14 +297,33 @@ function createControllers(settings: GlossaSettings): void {
     errorFallback: { reason: "service-error", message: "Anki 选项读取失败", service: "anki" }
   }, settings.anki);
   aiController.subscribe(renderAiState);
+  jevController.subscribe(renderJevState);
   ankiController.subscribe(renderAnkiState);
   catalogController.subscribe(renderCatalogState);
 }
 
 function updateControllers(settings: GlossaSettings): void {
+  applyTranslationFields(form, settings);
   aiController?.updateSettings(settings);
+  jevController?.updateSettings(settings);
   ankiController?.updateSettings(settings.anki);
   catalogController?.updateSettings(settings.anki);
+}
+
+function renderJevState(state: OperationState<void>): void {
+  if (state.phase === "pending") {
+    setTestState(testJevButton, "loading");
+    setJevStatus("正在测试 Jev 连接…", "pending");
+  } else if (state.phase === "success") {
+    setTestState(testJevButton, "success");
+    setJevStatus("Jev 连接可用", "success");
+  } else if (state.phase === "error") {
+    setTestState(testJevButton, "error");
+    setJevStatus(userMessageForError(state.error, "jev"), "error");
+  } else {
+    setTestState(testJevButton, "idle");
+    setJevStatus("", "");
+  }
 }
 
 function renderAiState(state: OperationState<void>): void {
@@ -579,6 +613,11 @@ function populateKnownWordsNav(letters: string[]): void {
     button.textContent = letter.toUpperCase();
     return button;
   }));
+}
+
+function setJevStatus(value: string, state: "pending" | "success" | "error" | "" = value ? "error" : ""): void {
+  jevStatus.value = value;
+  jevStatus.dataset.state = state;
 }
 
 function setAiStatus(value: string, state: "pending" | "success" | "error" | "" = value ? "error" : ""): void {
