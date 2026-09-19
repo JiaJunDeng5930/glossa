@@ -34,7 +34,8 @@
           </div>
           <div class="header-actions">
             <output id="status" role="status"></output>
-            <button id="save-settings" class="primary-action" type="submit" form="settings-form" data-state="clean">
+            <button id="retry-settings" class="secondary" type="button" hidden>重试加载</button>
+            <button id="save-settings" class="primary-action" type="submit" form="settings-form" data-state="clean" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/>
                 <path d="M17 21v-8H7v8M7 3v5h8"/>
@@ -44,7 +45,7 @@
           </div>
         </header>
 
-        <form id="settings-form" class="settings-form">
+        <form id="settings-form" class="settings-form" novalidate>
           <section id="reading-section" class="settings-panel" aria-labelledby="reading-heading">
             <div class="panel-heading">
               <p>01</p>
@@ -132,10 +133,10 @@
                 </label>
                 <label>
                   <span class="field-heading">
-                    <span>深浅</span>
+                    <span>背景不透明度</span>
                     <output id="gloss-background-opacity-value" for="gloss-background-opacity">94%</output>
                   </span>
-                  <span class="field-help">控制释义和反馈标签的背景透明度。</span>
+                  <span class="field-help">数值越高，释义和反馈标签的背景越不透明。</span>
                   <input id="gloss-background-opacity" name="glossBackgroundOpacity" type="range">
                 </label>
                 <label>
@@ -289,12 +290,12 @@
               <label>
                 Anki 牌组
                 <span class="field-help">新卡片写入的 Anki 牌组。</span>
-                <select name="ankiDeck" disabled></select>
+                <select name="ankiDeck" aria-describedby="anki-catalog-help" disabled></select>
               </label>
               <label>
                 Anki 卡片模板
                 <span class="field-help">新卡片写入的模板，需要包含 Front 和 Back 字段。</span>
-                <select name="ankiModelName" disabled></select>
+                <select name="ankiModelName" aria-describedby="anki-catalog-help" disabled></select>
               </label>
               <label>
                 Anki 超时秒数
@@ -307,11 +308,12 @@
                 <input name="duplicatePromptSeconds" type="number">
               </label>
               <div class="anki-actions">
-                <button id="refresh-anki" class="icon-button" type="button" data-state="idle" aria-label="刷新 Anki" title="刷新 Anki">
+                <button id="refresh-anki" class="secondary" type="button" data-state="idle" aria-label="刷新牌组与模板" title="刷新牌组与模板">
                   <span class="test-spinner" aria-hidden="true"></span>
                   <svg class="test-icon refresh-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/>
                   </svg>
+                  <span>刷新牌组与模板</span>
                 </button>
                 <button id="test-anki" class="test-button" type="button" data-state="idle" aria-label="测试 Anki">
                   <span class="test-label">测试 Anki</span>
@@ -324,6 +326,7 @@
                   </svg>
                 </button>
               </div>
+              <p id="anki-catalog-help" class="field-help" role="status">请先打开 Anki，再刷新牌组与模板。</p>
               <button id="reset-card-history" class="secondary danger-action" type="button">重置制卡记录</button>
               <output id="anki-status" class="inline-status" role="status"></output>
             </section>
@@ -404,6 +407,11 @@
           <button id="clear-known-words" class="secondary danger-action" type="button">清空已掌握词汇</button>
           <output id="known-words-status" class="inline-status" role="status"></output>
         </form>
+        <label class="known-words-search">
+          搜索已掌握词汇
+          <input id="known-words-search" type="search" placeholder="输入单词或部分字母" autocomplete="off">
+        </label>
+        <output id="known-words-search-summary" class="field-help" role="status"></output>
         <div class="known-words-browser">
           <nav id="known-words-nav" class="known-words-nav" aria-label="已掌握词汇字母索引"></nav>
           <div id="known-words-list" class="known-words-list" role="list"></div>

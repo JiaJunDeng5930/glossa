@@ -933,6 +933,7 @@ button:where(:enabled):hover {
   .workspace-header {
     position: static;
     grid-template-columns: 1fr;
+    backdrop-filter: none;
   }
 
   .header-actions,
@@ -987,7 +988,7 @@ button:where(:enabled):hover {
 
   .known-words-nav {
     position: static;
-    grid-template-columns: repeat(auto-fit, minmax(24px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
   }
 
   .known-words-nav button {
@@ -1014,4 +1015,107 @@ button:where(:enabled):hover {
 .translation-service-fields {
   display: grid;
   gap: 19px;
+}
+
+/* Controls carry values; the enclosing label carries the field heading. */
+input,
+select,
+textarea {
+  font-weight: 450;
+}
+
+[aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.field-error {
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 1.5;
+}
+
+.settings-grid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-grid .settings-panel {
+  border-bottom: 0;
+}
+
+.known-words-browser:has(.known-words-nav[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.known-words-search {
+  margin-top: 20px;
+}
+
+#refresh-anki {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#refresh-anki .refresh-icon {
+  display: block;
+}
+
+#refresh-anki[data-state="loading"] .refresh-icon {
+  display: none;
+}
+
+#refresh-anki[data-state="loading"] .test-spinner {
+  display: block;
+}
+
+.icon-button,
+.compact-icon-button,
+.known-words-nav button,
+.known-word-row button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (max-width: 980px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .settings-workspace {
+    padding-bottom: 140px;
+  }
+
+  /* Keep the one save control and its feedback reachable throughout the document. */
+  .header-actions {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 10;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--paper, #f2efe7);
+    box-shadow: 0 -4px 18px rgba(23, 24, 20, 0.06);
+  }
+
+  #status {
+    overflow-wrap: anywhere;
+  }
+
+  #retry-settings:not([hidden]) {
+    grid-column: 1 / -1;
+  }
+
+  .anki-actions {
+    flex-wrap: wrap;
+  }
+}
+
+.settings-form[inert] {
+  opacity: 0.55;
 }

@@ -61,15 +61,6 @@ select {
   padding: 24px 0;
 }
 
-.onboarding-shell:has([data-step="0"]:not([hidden])) { --step-progress: 0.125; }
-.onboarding-shell:has([data-step="1"]:not([hidden])) { --step-progress: 0.25; }
-.onboarding-shell:has([data-step="2"]:not([hidden])) { --step-progress: 0.375; }
-.onboarding-shell:has([data-step="3"]:not([hidden])) { --step-progress: 0.5; }
-.onboarding-shell:has([data-step="4"]:not([hidden])) { --step-progress: 0.625; }
-.onboarding-shell:has([data-step="5"]:not([hidden])) { --step-progress: 0.75; }
-.onboarding-shell:has([data-step="6"]:not([hidden])) { --step-progress: 0.875; }
-.onboarding-shell:has([data-step="7"]:not([hidden])) { --step-progress: 1; }
-
 .onboarding-header,
 .onboarding-footer {
   min-height: 64px;
@@ -92,6 +83,14 @@ select {
   border-bottom: 1px solid var(--line);
 }
 
+.header-status {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .brand-logo {
   display: block;
   width: 142px;
@@ -108,6 +107,10 @@ select {
 
 #status[data-state="success"] {
   color: var(--green);
+}
+
+#status[data-state="pending"] {
+  color: var(--ink-soft);
 }
 
 #status[data-state="error"] {
@@ -181,6 +184,11 @@ h1 {
   letter-spacing: -0.05em;
   line-height: 1.04;
   text-wrap: balance;
+}
+
+h1:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, var(--ochre));
+  outline-offset: 8px;
 }
 
 .step-copy p:last-child {
@@ -443,6 +451,22 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+a {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--ink);
+}
+
+a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, var(--ochre));
+  outline-offset: 3px;
+}
+
 button {
   min-height: 43px;
   display: inline-flex;
@@ -629,6 +653,11 @@ button:disabled {
     max-width: 55%;
   }
 
+  .header-status {
+    max-width: 68%;
+    gap: 8px;
+  }
+
   .onboarding-step {
     gap: 22px;
     padding: 32px 0;
@@ -687,6 +716,37 @@ button:disabled {
 
   .primary-action {
     min-width: 112px;
+  }
+}
+
+@media (max-height: 560px) {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    overflow: hidden;
+  }
+
+  .onboarding-shell {
+    height: 100svh;
+    min-height: 100svh;
+  }
+
+  .onboarding-step {
+    align-content: start;
+    overflow-y: auto;
+    padding-block: 24px 32px;
+    scrollbar-gutter: stable;
+  }
+
+  .onboarding-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--paper);
+    box-shadow: 0 -8px 18px rgba(23, 24, 20, 0.08);
   }
 }
 

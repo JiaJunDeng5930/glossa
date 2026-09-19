@@ -4,7 +4,7 @@
   --ink: #171814;
   --ink-soft: #2b2f29;
   --muted: #66675f;
-  --muted-light: #96978e;
+  --muted-light: #66675f;
   --vermillion: #c84724;
   --vermillion-deep: #943219;
   --ochre: #e3b34d;
@@ -208,7 +208,7 @@ button:focus-visible {
 }
 
 .eyebrow-light {
-  color: rgba(250, 248, 241, 0.56);
+  color: #fff9ee;
 }
 
 .hero {
@@ -1041,7 +1041,7 @@ button:focus-visible {
 }
 
 .story .eyebrow-light {
-  color: rgba(23, 24, 20, 0.48);
+  color: #575a51;
 }
 
 .details {
@@ -1322,6 +1322,9 @@ button:focus-visible {
 }
 
 .site-footer a {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
   color: var(--ink);
   font-weight: 700;
 }
@@ -1376,6 +1379,32 @@ button:focus-visible {
 
   .details-grid {
     gap: 3.5rem;
+  }
+}
+
+@media (min-width: 1081px) and (max-width: 1180px) {
+  .story-shell {
+    grid-template-columns: minmax(21rem, 0.37fr) minmax(0, 0.63fr);
+    gap: 2rem;
+  }
+
+  .story-copy > .eyebrow {
+    gap: 0.35rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  .story-copy > .eyebrow span {
+    white-space: nowrap;
+  }
+
+  .story-copy > .eyebrow span + span {
+    gap: 0.35rem;
+  }
+
+  .story-copy > .eyebrow span + span::before {
+    width: 1.5rem;
   }
 }
 
@@ -1538,37 +1567,30 @@ button:focus-visible {
 
 @media (max-width: 640px) {
   :root {
-    --header-height: 7.5rem;
+    --header-height: 10rem;
   }
 
   .site-header {
-    grid-template-columns: minmax(0, 1fr) max-content;
-    grid-template-rows: auto auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
     align-content: center;
-    column-gap: 0.65rem;
     row-gap: 0.3rem;
     padding-block: 0.5rem;
   }
 
   .brand {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 1;
   }
 
   .site-nav {
     grid-column: 1;
     grid-row: 2;
+    width: 100%;
     justify-content: flex-start;
     gap: 0.75rem;
-    overflow-x: auto;
-    padding: 0.35rem;
-    overscroll-behavior-inline: contain;
-    scroll-padding-inline: 0.35rem;
-    scrollbar-width: none;
-  }
-
-  .site-nav::-webkit-scrollbar {
-    display: none;
+    overflow: visible;
+    padding: 0.35rem 0;
   }
 
   .site-nav a {
@@ -1576,8 +1598,9 @@ button:focus-visible {
   }
 
   .header-download {
-    grid-column: 2;
-    grid-row: 2;
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
     white-space: nowrap;
     font-size: 0.76rem;
   }
@@ -1766,5 +1789,63 @@ button:focus-visible {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .hero-gloss .glossa-label {
+    animation: none !important;
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@media (min-width: 1081px) {
+  .story.is-reduced-motion .story-shell {
+    grid-template-columns: 1fr;
+    gap: clamp(4rem, 7vw, 8rem);
+    align-items: start;
+  }
+
+  .story.is-reduced-motion .story-chapters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(1.5rem, 3vw, 3.5rem);
+    margin-top: clamp(3rem, 5vw, 4rem);
+  }
+
+  .story.is-reduced-motion .story-chapter {
+    max-width: none;
+  }
+
+  .story.is-reduced-motion .story-chapter h2 {
+    font-size: clamp(2.4rem, 3.4vw, 4rem);
+  }
+
+  .story.is-reduced-motion .story-chapter p {
+    max-width: none;
+    font-size: clamp(0.9rem, 1vw, 1.05rem);
+  }
+
+  .story.is-reduced-motion .story-visual {
+    width: min(49rem, 100%);
+    margin-inline: auto;
+  }
+
+  .story.is-reduced-motion .story-browser {
+    min-height: 0;
+  }
+
+  .story.is-reduced-motion .anki-memory-card {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: min(21rem, calc(100% - 2.5rem));
+    margin: 1.5rem 2.5rem 0 auto;
+    opacity: 1;
+    transform: none;
+  }
+
+  .story.is-reduced-motion .story-dim,
+  .story.is-reduced-motion .selection-hint,
+  .story.is-reduced-motion .story-pointer {
+    display: none;
   }
 }

@@ -70,8 +70,8 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     }
     .selection-note {
       position: fixed;
-      top: 18px;
-      right: 18px;
+      bottom: 18px;
+      left: 18px;
       max-width: min(320px, calc(100vw - 36px));
       padding: 11px 14px;
       border: 1px solid rgba(23, 24, 20, 0.32);
@@ -110,6 +110,86 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
   shadow.append(style, veil, selectionNote);
   doc.documentElement.append(host);
   const rendered = new Map<string, RenderedOccurrence>();
+  let expandedGloss: { record: RenderedOccurrence; panel: HTMLElement } | undefined;
+  const pendingExpansionChecks = new Set<RenderedOccurrence>();
+  let expansionCheckFrame: number | undefined;
+  function scheduleGlossExpansion(record: RenderedOccurrence): void {
+    pendingExpansionChecks.add(record);
+    if (expansionCheckFrame !== undefined) return;
+    expansionCheckFrame = doc.defaultView?.requestAnimationFrame(() => {
+      expansionCheckFrame = undefined;
+      const records = [...pendingExpansionChecks].filter(item => rendered.get(item.token.id) === item && item.label.isConnected);
+      pendingExpansionChecks.clear();
+      // Keep layout reads out of synchronous rendering, which runs inside incremental page discovery.
+      // Remove every control's reserved width before measuring, then apply the results as a batch.
+      for (const item of records) {
+        item.label.removeAttribute("role");
+        delete item.wrapper.dataset.glossaExpandable;
+      }
+      const clipped = records.map(item => item.gloss.status === "ready" && item.label.scrollWidth > item.label.clientWidth);
+      records.forEach((item, index) => applyGlossExpansion(item, clipped[index]!));
+    });
+  }
+  function applyGlossExpansion(record: RenderedOccurrence, truncated: boolean): void {
+    const { label, wrapper } = record;
+    if (truncated) {
+      wrapper.dataset.glossaExpandable = "true";
+      label.setAttribute("role", "button");
+      label.tabIndex = 0;
+      label.setAttribute("aria-label", `${wrapper.title}；展开完整释义`);
+      label.setAttribute("aria-expanded", String(expandedGloss?.record === record));
+    } else {
+      if (expandedGloss?.record === record) closeExpandedGloss();
+      label.removeAttribute("tabindex");
+      label.removeAttribute("aria-label");
+      label.removeAttribute("aria-expanded");
+    }
+  }
+  const labelResizeObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(entries => {
+    for (const entry of entries) {
+      const record = rendered.get((entry.target as HTMLElement).dataset.glossaTokenLabel ?? "");
+      if (record) scheduleGlossExpansion(record);
+    }
+  });
+  doc.fonts?.addEventListener("loadingdone", () => {
+    for (const record of rendered.values()) scheduleGlossExpansion(record);
+  });
+
+  function closeExpandedGloss(): void {
+    if (!expandedGloss) return;
+    const { record, panel } = expandedGloss;
+    const returnFocus = panel.contains(shadow.activeElement);
+    panel.remove();
+    record.label.setAttribute("aria-expanded", "false");
+    expandedGloss = undefined;
+    if (returnFocus && record.label.isConnected) record.label.focus({ preventScroll: true });
+  }
+  function toggleExpandedGloss(record: RenderedOccurrence): void {
+    const wasOpen = expandedGloss?.record === record;
+    closeExpandedGloss();
+    if (wasOpen || record.gloss.status !== "ready" || record.label.getAttribute("role") !== "button") return;
+    const panel = doc.createElement("section");
+    panel.dataset.glossaExpandedGloss = "1";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", `${record.token.surface}：完整释义`);
+    panel.style.cssText = "position:fixed;bottom:76px;left:18px;box-sizing:border-box;width:max-content;max-width:calc(100vw - 36px);max-height:60vh;overflow:auto;padding:16px;border:1px solid #77796f;background:#faf8f1;color:#171814;box-shadow:0 10px 30px #17181430;font:16px/1.6 system-ui;pointer-events:auto;overflow-wrap:anywhere";
+    const content = doc.createElement("div");
+    content.textContent = `${record.token.surface}：${record.gloss.display}`;
+    const close = doc.createElement("button");
+    close.textContent = "关闭释义";
+    close.style.cssText = "margin-top:12px;min-height:40px;padding:6px 12px;font:inherit;color:inherit;background:#f2efe7;border:1px solid #77796f;cursor:pointer";
+    close.addEventListener("click", closeExpandedGloss);
+    panel.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      event.preventDefault(); event.stopPropagation(); closeExpandedGloss();
+    });
+    panel.append(content, close);
+    shadow.append(panel);
+    expandedGloss = { record, panel };
+    record.label.setAttribute("aria-expanded", "true");
+    close.focus({ preventScroll: true });
+  }
+
   const installStyle = (root: Document | ShadowRoot): void => {
     const existing = root instanceof Document
       ? root.getElementById(STYLE_ID)
@@ -159,6 +239,12 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
         transform-origin: 50% 100%;
         animation: glossa-label-enter 180ms cubic-bezier(0.2, 0.72, 0.2, 1) both;
       }
+      [data-glossa-token-label]:focus-visible {
+        outline: 3px solid #b8791f;
+        outline-offset: 2px;
+      }
+      [data-glossa-token-label][role="button"] { padding-right: 20px; pointer-events: auto; cursor: pointer; }
+      [data-glossa-token-label][role="button"]::after { content: "⤢"; position: absolute; right: 4px; top: 1px; }
       [data-glossa-token-label]::before,
       [data-glossa-token-width]::before {
         content: attr(data-glossa-visual);
@@ -227,17 +313,20 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       [data-glossa-token-surface] {
         display: inline;
         line-height: inherit;
+      }
+      [data-glossa-token]:not([data-glossa-in-link]) > [data-glossa-token-surface] {
         text-decoration: underline;
         text-decoration-color: color-mix(in srgb, ${GLOSSA_THEME.accent} 72%, currentColor);
         text-decoration-thickness: 1px;
         text-underline-offset: 3px;
       }
+      [data-glossa-token][data-glossa-expandable="true"] [data-glossa-token-width] { padding-right: 21px; }
       [data-glossa-token-width] {
         display: block;
         height: 0;
         overflow: hidden;
         visibility: hidden;
-        padding-inline: 5px;
+        padding-inline: 6px;
         font-family: var(--glossa-font-family);
         font-size: var(--glossa-font-size);
         font-weight: ${INLINE_LABEL_FONT_WEIGHT};
@@ -271,7 +360,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
 
   function prune(): number {
     let count = 0;
-    for (const [id, record] of rendered) if (!record.wrapper.isConnected || !registry.valid(record.token)) { rendered.delete(id); registry.unwrap(id); count++; }
+    for (const [id, record] of rendered) if (!record.wrapper.isConnected || !registry.valid(record.token)) { if (expandedGloss?.record === record) closeExpandedGloss(); pendingExpansionChecks.delete(record); labelResizeObserver?.unobserve(record.label); rendered.delete(id); registry.unwrap(id); count++; }
     return count;
   }
   function ensure(token: ScannedToken): RenderedOccurrence | undefined {
@@ -300,19 +389,41 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
     surface.dataset.glossaTokenSurface = token.id;
     for (const node of [label, width, surface]) { node.dataset.glossaOwned = "1"; node.setAttribute("translate", "no"); }
     wrapper.append(width, label, surface);
+    const link = location.node.parentElement?.closest("a");
+    if (link) {
+      wrapper.dataset.glossaInLink = "1";
+      // Decorations do not propagate through the inline-block wrapper.
+      const linkStyle = doc.defaultView?.getComputedStyle(link);
+      if (linkStyle) {
+        surface.style.textDecoration = linkStyle.textDecoration;
+        surface.style.textUnderlineOffset = linkStyle.textUnderlineOffset;
+      }
+    }
     if (!registry.wrap(token, { wrapper, surface })) return undefined;
     const record: RenderedOccurrence = { token, wrapper, surface, label, width, gloss: { status: "none" }, feedback: { status: "none" } };
+    // The annotation is a separate activation target; source clicks retain the host link action.
+    label.addEventListener("click", event => {
+      if (label.getAttribute("role") !== "button") return;
+      event.preventDefault(); event.stopPropagation(); toggleExpandedGloss(record);
+    });
+    label.addEventListener("keydown", event => {
+      if (label.getAttribute("role") !== "button" || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault(); event.stopPropagation(); toggleExpandedGloss(record);
+    });
     rendered.set(token.id, record);
+    labelResizeObserver?.observe(label);
     return record;
   }
   function commit(record: RenderedOccurrence, gloss: GlossState, feedback: FeedbackState): RenderSummary {
+    if (expandedGloss?.record === record) closeExpandedGloss();
     record.gloss = gloss; record.feedback = feedback;
     if (feedback.status === "none" && (gloss.status === "none" || gloss.status === "hidden")) {
+      pendingExpansionChecks.delete(record); labelResizeObserver?.unobserve(record.label);
       registry.unwrap(record.token.id); rendered.delete(record.token.id); return { result: "hidden" };
     }
     const kind = feedback.status !== "card-pending" && gloss.status === "ready" ? "gloss" : "feedback";
     const display = feedback.status === "card-pending" ? "..."
-      : gloss.status === "ready" ? gloss.display
+      : gloss.status === "ready" ? `${feedback.status !== "none" ? `${feedbackFallback(feedback.status)} ` : ""}${gloss.display}`
       : feedback.status !== "none" ? feedbackFallback(feedback.status)
       : gloss.status === "pending" ? "..." : "×";
     const message = feedback.status !== "none" && feedback.message ? feedback.message
@@ -330,6 +441,7 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       if (feedback.status === "none") delete record.wrapper.dataset.glossaFeedback;
       else record.wrapper.dataset.glossaFeedback = feedback.status;
       record.wrapper.title = message; record.wrapper.setAttribute("aria-label", message);
+      scheduleGlossExpansion(record);
     });
     return { result: "updated" };
   }
@@ -371,9 +483,11 @@ export function createGlossOverlay(doc: Document, appearance: AppearanceSettings
       return !existing && result.result === "updated" ? { result: "rendered" } : result;
     },
     setSelectionMode(active) { registry.mutate(() => { if (active) host.dataset.glossaSelecting = "true"; else delete host.dataset.glossaSelecting; }); },
-    setAppearance(next) { appearance = next; registry.mutate(() => { applyAppearance(host, next); for (const record of rendered.values()) applyAppearance(record.wrapper, next); }); },
+    setAppearance(next) { appearance = next; registry.mutate(() => { applyAppearance(host, next); for (const record of rendered.values()) { applyAppearance(record.wrapper, next); scheduleGlossExpansion(record); } }); },
     markStalePendingAsError(ids, message) { for (const id of ids) { const record = rendered.get(id); if (record?.gloss.status === "pending" && registry.valid(record.token)) commit(record, { status: "error", message }, record.feedback); } },
-    clear() { for (const id of rendered.keys()) registry.unwrap(id); rendered.clear(); },
+    clear() { closeExpandedGloss(); labelResizeObserver?.disconnect();
+      if (expansionCheckFrame !== undefined) doc.defaultView?.cancelAnimationFrame(expansionCheckFrame);
+      expansionCheckFrame = undefined; pendingExpansionChecks.clear(); for (const id of rendered.keys()) registry.unwrap(id); rendered.clear(); },
     pruneDisconnected: prune,
     ownsMutation(record) { return registry.ownsMutation(record); },
     refreshKeys() { return new Set(Array.from(rendered.values()).filter(record => record.gloss.status === "ready" && registry.valid(record.token)).map(record => glossRefreshKey(record.token))); }

@@ -12,7 +12,10 @@
       <form id="settings-form" class="onboarding-shell">
       <header class="onboarding-header">
         <img class="brand-logo" src="../assets/logo.png" alt="Glossa">
-        <output id="status" role="status"></output>
+        <div class="header-status">
+          <output id="status" role="status"></output>
+          <button id="retry-load" class="secondary-action" type="button" hidden>重试加载</button>
+        </div>
       </header>
 
       <section class="onboarding-step" data-step="smart" aria-labelledby="smart-heading">
@@ -264,7 +267,7 @@
       </section>
 
       <footer class="onboarding-footer">
-        <span id="progress">1 / 8</span>
+        <span id="progress" role="status" aria-live="polite">1 / 8</span>
         <div class="footer-actions">
           <button id="back" class="secondary-action" type="button" hidden>返回</button>
           <button id="skip-anki" class="secondary-action" type="button" hidden>跳过 Anki</button>
