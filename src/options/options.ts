@@ -252,7 +252,7 @@ function markFormInvalid(error: unknown, focusError: boolean, editedControl?: st
   if (changedControl && ["jevEndpoint", "jevApiKey", "jevModel", "jevRequestTimeoutSeconds"].includes(changedControl)) jevController?.invalidate();
   if (changedControl && ["ankiEndpoint", "ankiRequestTimeoutSeconds", "ankiDeck", "ankiModelName"].includes(changedControl)) ankiController?.invalidate();
   if (changedControl && ["ankiEndpoint", "ankiRequestTimeoutSeconds"].includes(changedControl)) catalogController?.invalidate();
-  validationMessage = feedback?.message ?? "设置格式无效，请检查输入后再保存。";
+  validationMessage = feedback?.message ?? "部分设置填写有误，请检查后再保存。";
   const control = feedback && form.elements.namedItem(feedback.control);
   if (control instanceof HTMLElement) {
     invalidControl = control;
@@ -432,7 +432,7 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
     setTestState(refreshAnkiButton, "loading");
     setAnkiSelectsEnabled(false);
     setCatalogPlaceholders(draft.value.anki);
-    if (ownsOutput) setAnkiStatus("正在读取 Anki 选项…", "pending");
+    if (ownsOutput) setAnkiStatus("正在读取 Anki 牌组与模板…", "pending");
     return;
   }
   if (state.phase === "success") {
@@ -444,7 +444,7 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
     ankiDeckSelect.disabled = state.value.decks.length === 0;
     ankiModelNameSelect.disabled = state.value.modelNames.length === 0;
     catalogHelp.textContent = state.value.decks.length === 0 ? "未找到牌组，请在 Anki 中创建牌组后刷新。"
-      : state.value.modelNames.length === 0 ? "未找到兼容模板，请在 Anki 中添加所需模板后刷新。"
+      : state.value.modelNames.length === 0 ? "未找到包含 Front 和 Back 字段的模板，请在 Anki 中添加后刷新。"
       : "牌组与模板已更新，可以选择。";
     const patch: SettingsPatch = { anki: {} };
     if (deck !== draft.value.anki.deck) patch.anki!.deck = deck;
@@ -453,13 +453,13 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
       draft.edit(patch);
       updateControllers(draft.value);
     }
-    if (ownsOutput) setAnkiStatus(state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "Anki 选项已更新" : "Anki 没有可用的牌组或兼容模板", state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "success" : "error");
+    if (ownsOutput) setAnkiStatus(state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "Anki 牌组与模板已更新" : "Anki 没有可用的牌组或模板，请检查后刷新", state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "success" : "error");
     return;
   }
   setTestState(refreshAnkiButton, state.phase === "error" ? "error" : "idle");
   setAnkiSelectsEnabled(false);
   setCatalogPlaceholders(draft.value.anki);
-  catalogHelp.textContent = state.phase === "error" ? `${userMessageForError(state.error, "anki")} 请检查后刷新牌组与模板。` : "目录尚未读取。请先打开 Anki，再刷新牌组与模板。";
+  catalogHelp.textContent = state.phase === "error" ? `${userMessageForError(state.error, "anki")} 请检查后刷新牌组与模板。` : "还没有读取牌组与模板。请先打开 Anki，再点击刷新。";
   if (state.phase === "error" && ownsOutput) setAnkiStatus(userMessageForError(state.error, "anki"), "error");
   if (state.phase === "idle" && ownsOutput) setAnkiStatus("", "");
 }
@@ -515,7 +515,7 @@ async function persistForm(): Promise<void> {
   } catch {
     if (formValidationError) {
       setSaveState("error");
-      setStatus("设置格式无效，请修正后再保存", "error");
+      setStatus("部分设置填写有误，请修改后再保存", "error");
     } else {
       setSaveState("error");
       setStatus("设置保存失败，请重试", "error");
@@ -530,7 +530,7 @@ function setStatus(value: string, state: "dirty" | "pending" | "success" | "erro
 
 type SettingsSaveState = "clean" | "dirty" | "saving" | "error";
 function setSaveState(state: SettingsSaveState): void {
-  const labels: Record<SettingsSaveState, string> = { clean: "保存", dirty: "保存更改", saving: "保存中…", error: "重试保存" };
+  const labels: Record<SettingsSaveState, string> = { clean: "保存设置", dirty: "保存设置", saving: "保存中…", error: "重试保存" };
   saveButton.dataset.state = state;
   saveButton.disabled = settingsLoadState !== "ready" || state === "saving";
   saveLabel.textContent = labels[state];
@@ -544,14 +544,14 @@ function updatePreview(settings: GlossaSettings): void {
 }
 
 async function resetCardHistory(): Promise<void> {
-  if (!window.confirm("重置制卡记录？Glossa 的卡片缓存与重复提醒记录会被清空，Anki 中已有卡片会保留。")) return;
+  if (!window.confirm("要重置制卡记录吗？这会清空 Glossa 保存的卡片内容和重复加入记录。Anki 中已有的卡片会保留。")) return;
   const owner = ankiFeedback.claimExternal();
   resetCardHistoryButton.disabled = true;
   setAnkiStatus("正在重置制卡记录…", "pending");
   try {
     const response = await request(createRequestMessage("options", "card.history.reset", {}));
     expectResponse(response, "card.history.reset.ok");
-    if (ankiFeedback.owns(owner)) setAnkiStatus("制卡记录已重置，Anki 中已有卡片保持不变", "success");
+    if (ankiFeedback.owns(owner)) setAnkiStatus("制卡记录已重置，Anki 中已有的卡片已保留", "success");
   } catch (error) {
     if (ankiFeedback.owns(owner)) setAnkiStatus(userMessageForError(diagnosticErrorFrom(error, { reason: "runtime", message: "制卡记录重置失败", service: "runtime" }).payload, "runtime"), "error");
   } finally {
@@ -564,7 +564,7 @@ async function clearGlossCache(): Promise<void> {
   try {
     const response = await request(createRequestMessage("options", "gloss.cache.clear", {}));
     expectResponse(response, "gloss.cache.cleared");
-    setStatus("翻译缓存已清空", "success");
+    setStatus("释义缓存已清空", "success");
   } catch (error) {
     setStatus(userMessageForError(diagnosticErrorFrom(error, { reason: "runtime", message: "翻译缓存清空失败", service: "runtime" }).payload, "runtime"), "error");
   }
@@ -666,7 +666,7 @@ async function removeKnownWord(lemma: string, viewRevision: number): Promise<voi
 }
 
 async function clearKnownWords(viewRevision: number): Promise<void> {
-  if (!window.confirm("清空所有已掌握词汇？这些词之后会重新出现在页面释义中。Anki 卡片和制卡记录会保留。")) return;
+  if (!window.confirm("要清空所有已掌握词汇吗？除基础词表中的词以外，这些词之后会重新显示释义。Anki 卡片和制卡记录会保留。")) return;
   clearKnownWordsButton.disabled = true;
   setKnownWordsStatus("正在清空…", "pending");
   try {
@@ -723,7 +723,7 @@ function finishShortcutCapture(): void {
   const otherName = capturingShortcutName === "shortcutKey" ? "translateShortcutKey" : "shortcutKey";
   if (normalizeShortcut(pendingShortcut) === normalizeShortcut(readFormInput(form, otherName))) {
     shortcutButtonFor(capturingShortcutName).textContent = "按下快捷键";
-    shortcutErrorFor(capturingShortcutName).textContent = capturingShortcutName === "shortcutKey" ? "与翻译快捷键冲突，请按其他组合键。" : "与选词快捷键冲突，请按其他组合键。";
+    shortcutErrorFor(capturingShortcutName).textContent = capturingShortcutName === "shortcutKey" ? "与翻译快捷键冲突，请按其他组合键。" : "与加入 Anki 快捷键冲突，请按其他组合键。";
     pendingShortcut = "";
     return;
   }

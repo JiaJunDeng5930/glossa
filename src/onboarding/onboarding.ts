@@ -78,7 +78,7 @@ if (validSteps) {
   installStorageListener();
   startSettingsLoad();
 } else {
-  setInitializationState("error", "首次设置页面初始化失败，请重新打开页面", false);
+  setInitializationState("error", "首次设置页面无法加载，请重新打开", false);
 }
 
 retryLoadButton.addEventListener("click", () => {
@@ -280,12 +280,12 @@ function markFormInvalid(): void {
   jevController?.invalidate();
   ankiController?.invalidate();
   catalogController?.invalidate();
-  setStatus("设置格式无效，请修正后再继续", "error");
+  setStatus("部分设置填写有误，请修改后再继续", "error");
 }
 
 function canRunSettingsOperation(): boolean {
   if (!formValidationError) return true;
-  setStatus("设置格式无效，请修正后再继续", "error");
+  setStatus("部分设置填写有误，请修改后再继续", "error");
   return false;
 }
 
@@ -419,7 +419,7 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
     setTestState(refreshAnkiButton, "loading");
     setAnkiSelectsEnabled(false);
     setCatalogPlaceholders(draft.value.anki);
-    if (ownsOutput) setAnkiStatus("正在读取 Anki 选项…", "pending");
+    if (ownsOutput) setAnkiStatus("正在读取 Anki 牌组与模板…", "pending");
   } else if (state.phase === "success") {
     setTestState(refreshAnkiButton, "success");
     const deck = pickExistingValue(draft.value.anki.deck, state.value.decks);
@@ -434,7 +434,7 @@ function renderCatalogState(state: OperationState<{ decks: string[]; modelNames:
       draft.edit(patch);
       updateControllers(draft.value);
     }
-    if (ownsOutput) setAnkiStatus(state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "Anki 选项已更新" : "Anki 没有可用的牌组或兼容模板", state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "success" : "error");
+    if (ownsOutput) setAnkiStatus(state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "Anki 牌组与模板已更新" : "Anki 没有可用的牌组或模板，请检查后刷新", state.value.decks.length > 0 && state.value.modelNames.length > 0 ? "success" : "error");
   } else {
     setTestState(refreshAnkiButton, state.phase === "error" ? "error" : "idle");
     setAnkiSelectsEnabled(false);

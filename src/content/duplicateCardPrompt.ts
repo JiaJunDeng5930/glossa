@@ -9,7 +9,7 @@ export function promptDuplicateCardCreation(doc: Document, input: { surface: str
     prompt.dataset.glossaOwned = "1";
     prompt.dataset.glossaDuplicateCardPrompt = "1";
     prompt.setAttribute("role", "dialog");
-    prompt.setAttribute("aria-label", "重复制卡确认");
+    prompt.setAttribute("aria-label", "再次加入 Anki");
     prompt.style.cssText = [
       "position:fixed",
       "top:20px",
@@ -57,17 +57,17 @@ export function promptDuplicateCardCreation(doc: Document, input: { surface: str
     `;
     const text = doc.createElement("span");
     text.id = "glossa-duplicate-card-prompt-description";
-    text.textContent = `${input.surface} 已经制过卡，继续制卡？`;
+    text.textContent = `${input.surface} 已经加入过 Anki，要再加一张卡片吗？`;
     text.style.cssText = "min-width:0;overflow-wrap:anywhere;font-weight:650;letter-spacing:0.005em";
     prompt.setAttribute("aria-describedby", text.id);
     const confirm = doc.createElement("button");
     confirm.type = "button";
-    confirm.textContent = "继续制卡";
-    confirm.setAttribute("aria-label", "继续制卡");
+    confirm.textContent = "再加一张";
+    confirm.setAttribute("aria-label", "再加一张");
     const cancel = doc.createElement("button");
     cancel.type = "button";
     cancel.textContent = "取消";
-    cancel.setAttribute("aria-label", "取消制卡");
+    cancel.setAttribute("aria-label", "取消加入 Anki");
     confirm.style.cssText = [
       "min-width:88px",
       "height:36px",

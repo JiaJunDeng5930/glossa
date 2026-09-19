@@ -61,7 +61,7 @@ test("extension service worker handles settings and card-history reset after res
       void dialog.accept();
     });
     await page.locator("#reset-card-history").click();
-    await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有卡片保持不变");
+    await expect(page.locator("#anki-status")).toHaveText("制卡记录已重置，Anki 中已有的卡片已保留");
     await expect.poll(() => readCardHistory(page)).toEqual({ cardCache: 0, cardedWords: 0, noteIds: 0 });
   } finally {
     await context.close();

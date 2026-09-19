@@ -941,7 +941,7 @@ test("content bundle marks card failures with the shared badge renderer", async 
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-error"
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "×"
-      && node.title === "Anki 服务未启动或无法访问";
+      && node.title === "无法连接 Anki，请确认 Anki 已打开且已安装 AnkiConnect。";
   });
   expect(await page.evaluate(() => {
     const label = document.querySelector<HTMLElement>("[data-glossa-token-label]")!;
@@ -969,7 +969,7 @@ test("content bundle marks card failures with the shared badge renderer", async 
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-unknown"
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "?"
-      && node.title === "Anki 请求结果未知，请先在 Anki 中确认是否已创建卡片。";
+      && node.title === "无法确认卡片是否已加入，请先到 Anki 中查看，再决定是否重试。";
   });
 
   await page.keyboard.down("Alt");
@@ -1013,8 +1013,8 @@ test("content bundle exposes user-readable gloss failure text", async ({ page })
   await page.waitForFunction(() => {
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaStatus === "error"
-      && node.title === "AI 返回格式错误"
-      && node.getAttribute("aria-label") === "AI 返回格式错误";
+      && node.title === "无法读取 AI 返回的内容，请检查接口和模型设置。"
+      && node.getAttribute("aria-label") === "无法读取 AI 返回的内容，请检查接口和模型设置。";
   });
 });
 
@@ -1061,7 +1061,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
       && node.dataset.glossaDisplayKind === "feedback"
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "...";
   });
-  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：正在制卡");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：正在加入 Anki");
 
   await page.keyboard.down("Alt");
   await page.locator("[data-glossa-token]").click();
@@ -1078,7 +1078,7 @@ test("content bundle shows card loading feedback before creation finishes", asyn
     return node?.dataset.glossaFeedback === "card-success"
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "✓";
   });
-  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：制卡完成");
+  await expect(page.locator("[data-glossa-token]")).toHaveAttribute("aria-label", "archive：已加入 Anki");
 });
 
 test("content bundle asks before creating another card for a carded word", async ({ page }, testInfo) => {
@@ -1126,12 +1126,12 @@ test("content bundle asks before creating another card for a carded word", async
 
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toBeVisible();
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).not.toHaveAttribute("aria-modal", "true");
-  await expect(page.getByRole("button", { name: "继续制卡" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "再加一张" })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "取消制卡" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "取消加入 Anki" })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "继续制卡" })).not.toBeFocused();
-  await page.getByRole("button", { name: "取消制卡" }).focus();
+  await expect(page.getByRole("button", { name: "再加一张" })).not.toBeFocused();
+  await page.getByRole("button", { name: "取消加入 Anki" }).focus();
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-glossa-duplicate-card-prompt]")).toHaveCount(0);
   await expect(page.locator("#target")).toBeFocused();
@@ -1168,7 +1168,7 @@ test("content bundle asks before creating another card for a carded word", async
   expect(promptRect && noteRect && promptRect.width > 0 && noteRect.width > 0 && promptRect.height > 0 && noteRect.height > 0 && promptRect.y + promptRect.height < noteRect.y).toBe(true);
   await expect(page.locator('#glossa-overlay .selection-note')).toHaveCSS('opacity', '1');
   await page.screenshot({ path: testInfo.outputPath('reading-duplicate-selection-320.png') });
-  await page.getByRole("button", { name: "继续制卡" }).click();
+  await page.getByRole("button", { name: "再加一张" }).click();
   await page.keyboard.up("Alt");
 
   await page.waitForFunction(() => {
@@ -1359,7 +1359,7 @@ test("content bundle keeps waiting for slow card creation Anki errors", async ({
     const node = document.querySelector<HTMLElement>("[data-glossa-token]");
     return node?.dataset.glossaFeedback === "card-error"
       && node.querySelector("[data-glossa-token-label]")?.getAttribute("data-glossa-visual") === "×"
-      && node.title === "Anki 卡片模板不存在";
+      && node.title === "找不到所选 Anki 卡片模板，请在设置中刷新并重新选择。";
   }, undefined, { timeout: 10_000 });
 });
 

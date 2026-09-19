@@ -6,11 +6,11 @@
     <meta name="theme-color" content="#f2efe7" />
     <meta
       name="description"
-      content="Glossa 是一款 Chrome 英文阅读扩展，在网页生词上方显示贴合语境的中文释义，并支持 Alt 点击加入 Anki。"
+      content="Glossa 是一款 Chrome 英文阅读扩展，能根据句子在生词上方显示中文释义，也能把生词和例句加入 Anki。"
     />
     <link rel="icon" href="./favicon.svg" />
     <link rel="stylesheet" href="./styles/global.css" />
-    <title>Glossa — 生词智能语境翻译，让原文阅读不被打断</title>
+    <title>Glossa — 在英文网页上显示生词释义</title>
   </head>
   <body>
     <a class="skip-link" href="#main">跳到正文</a>
@@ -22,7 +22,7 @@
 
       <nav class="site-nav" aria-label="主导航">
         <a href="#story">阅读演示</a>
-        <a href="#details">产品能力</a>
+        <a href="#details">功能与设置</a>
         <a href="#install">安装</a>
         <a href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
@@ -42,10 +42,10 @@
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-grid">
           <div class="hero-copy">
-            <p class="eyebrow"><span>Chrome Extension</span><span>For Deep Reading</span></p>
-            <h1 id="hero-title">生词智能语境翻译，<br />让原文阅读<br />不被打断。</h1>
+            <p class="eyebrow"><span>Chrome 英文阅读扩展</span></p>
+            <h1 id="hero-title">在英文网页上<br />显示生词的<br />中文释义。</h1>
             <p class="hero-lede">
-              启动 Glossa，生词上方显示中文释义。<br />释义贴合语境，阅读自然保持连贯。
+              开启 Glossa 后，生词旁会显示中文释义，方便对照原文阅读。想复习的词也可以加入 Anki。
             </p>
             <div class="hero-actions">
               <a
@@ -54,12 +54,12 @@
                 target="_blank"
                 rel="noreferrer"
               >
-                获取最新版
+                下载最新版
                 <span aria-hidden="true">↗</span>
               </a>
-              <a class="button button-text" href="#story">观看阅读演示 <span aria-hidden="true">↓</span></a>
+              <a class="button button-text" href="#story">查看演示 <span aria-hidden="true">↓</span></a>
             </div>
-            <p class="hero-meta">开源 · Chrome Manifest V3 · 使用您自己的 AI 服务</p>
+            <p class="hero-meta">开源扩展，使用前需要配置翻译服务。</p>
           </div>
 
           <div class="hero-visual" aria-label="Glossa 网页释义效果预览">
@@ -67,7 +67,7 @@
               <header class="browser-toolbar" aria-hidden="true">
                 <div class="traffic-lights"><i></i><i></i><i></i></div>
                 <div class="browser-tab">The shape of attention</div>
-                <div class="browser-status"><i></i> Glossa active</div>
+                <div class="browser-status"><i></i> Glossa 已开启</div>
               </header>
               <div class="hero-article">
                 <div class="article-heading">
@@ -100,22 +100,22 @@
                   </span>.
                 </p>
                 <aside class="margin-note">
-                  <span>CONTEXTUAL GLOSS</span>
-                  <p>结合整句语境，<br />给出此处词义。</p>
+                  <span>中文释义</span>
+                  <p>根据所在句子，<br />显示对应的词义。</p>
                 </aside>
               </div>
             </article>
             <div class="hero-caption" aria-hidden="true">
-              <p>释义贴近原词，<br />视线留在文章里。</p>
+              <p>释义显示在<br />生词上方。</p>
             </div>
           </div>
         </div>
 
-        <div class="hero-foot" aria-label="Glossa 核心能力">
-          <div><span>01</span><strong>语境释义</strong><p>结合整句语境，显示此处的简短中文义。</p></div>
-          <div><span>02</span><strong>熟词过滤</strong><p>根据词表和阅读记录，只标注可能陌生的词。</p></div>
-          <div><span>03</span><strong>Alt + Click</strong><p>按住 Alt 点击，将例句与当前词义写入 Anki。</p></div>
-          <div><span>04</span><strong>外观可调</strong><p>释义颜色、字号、字体和透明度均由您设置。</p></div>
+        <div class="hero-foot" aria-label="Glossa 主要功能">
+          <div><span>01</span><strong>中文释义</strong><p>根据单词所在的句子，显示对应的中文词义。</p></div>
+          <div><span>02</span><strong>跳过已掌握词汇</strong><p>根据所选词表和学习记录，过滤已经掌握的词。</p></div>
+          <div><span>03</span><strong>加入 Anki</strong><p>连接 Anki 后，按住 Alt 点击生词即可制卡。</p></div>
+          <div><span>04</span><strong>调整释义样式</strong><p>可以设置释义的颜色、字号、字体和透明度。</p></div>
         </div>
       </section>
 
@@ -123,22 +123,22 @@
         <div class="story-stage">
           <div class="story-shell">
             <div class="story-copy">
-              <p class="eyebrow eyebrow-light"><span>01 / Reading Flow</span><span>Three quiet moves</span></p>
+              <p class="eyebrow eyebrow-light"><span>使用演示</span></p>
               <div class="story-chapters">
                 <article class="story-chapter story-chapter-one">
                   <span class="chapter-number">01</span>
-                  <h2 id="story-title">打开英文文章，<br />启动 Glossa。</h2>
-                  <p>Glossa 识别可能陌生的词，<br />并读取它们所在的完整句子。</p>
+                  <h2 id="story-title">打开英文网页，<br />开启翻译。</h2>
+                  <p>点击工具栏中的 Glossa 图标，开启当前页面的翻译。也可以在设置中添加快捷键。</p>
                 </article>
                 <article class="story-chapter story-chapter-two">
                   <span class="chapter-number">02</span>
-                  <h2>生词上方，<br />显示语境释义。</h2>
-                  <p>陌生词上方会显示简短中文义。<br />看一眼释义，就能继续阅读原文。</p>
+                  <h2>在生词上方<br />查看中文释义。</h2>
+                  <p>Glossa 会根据句子选择词义，并跳过词表和学习记录中已掌握的词。</p>
                 </article>
                 <article class="story-chapter story-chapter-three">
                   <span class="chapter-number">03</span>
-                  <h2>Alt + 点击，<br />存入 Anki。</h2>
-                  <p>正面保留例句，背面写下当前词义。<br />卡片直接存入您的 Anki 牌组。</p>
+                  <h2>按住 Alt 点击，<br />加入 Anki。</h2>
+                  <p>连接 AnkiConnect 后，按住 Alt 点击生词，就能把例句和词义加入所选牌组。</p>
                 </article>
               </div>
               <div class="story-progress" aria-hidden="true">
@@ -148,7 +148,7 @@
             </div>
 
             <div class="story-visual">
-              <article class="browser-frame story-browser" aria-label="Glossa 阅读到 Anki 制卡的连续演示">
+              <article class="browser-frame story-browser" aria-label="查看中文释义并加入 Anki 的演示">
                 <header class="browser-toolbar" aria-hidden="true">
                   <div class="traffic-lights"><i></i><i></i><i></i></div>
                   <div class="browser-address">essays.example / attention</div>
@@ -156,7 +156,7 @@
                 </header>
 
                 <div class="story-article">
-                  <p class="story-article-kicker">THE READER · ESSAY</p>
+                  <p class="story-article-kicker">示例文章</p>
                   <h3>To read is to<br />remain with an idea.</h3>
                   <p class="story-article-copy">
                     A difficult paragraph often becomes clear when attention remains
@@ -184,20 +184,20 @@
                   <p class="story-article-copy secondary-copy">
                     Meaning accumulates quietly. One sentence prepares the next, and the page keeps its rhythm.
                   </p>
-                  <div class="article-folio"><span>42</span><i></i><span>GLOSSA READING ROOM</span></div>
+                  <div class="article-folio"><span>42</span><i></i><span>Glossa 阅读示例</span></div>
                 </div>
 
-                <div class="selection-hint" aria-hidden="true"><kbd>Alt</kbd><span>按住并点击</span></div>
+                <div class="selection-hint" aria-hidden="true"><kbd>Alt</kbd><span>按住并点击生词</span></div>
                 <div class="story-dim" aria-hidden="true"></div>
 
                 <section class="anki-memory-card" aria-label="Anki 卡片预览">
-                  <header><span>ANKI · NEW NOTE</span><i>✓</i></header>
+                  <header><span>Anki 新卡片</span><i>✓</i></header>
                   <div class="memory-word">
-                    <span>FRONT</span>
+                    <span>正面</span>
                     <p>Words that become <strong>indispensable</strong> to the argument.</p>
                   </div>
                   <div class="memory-meaning">
-                    <span>BACK</span>
+                    <span>背面</span>
                     <strong>不可或缺的</strong>
                   </div>
                   <footer><span>英语长文阅读</span><b>已加入</b></footer>
@@ -212,30 +212,30 @@
       <section class="details" id="details" aria-labelledby="details-title">
         <div class="details-shell">
           <div class="details-intro" data-reveal>
-            <p class="eyebrow"><span>02 / Built Around The Reader</span><span>Quiet by design</span></p>
-            <h2 id="details-title">释义知道何时出现，<br />也知道何时退场。</h2>
+            <p class="eyebrow"><span>功能与设置</span></p>
+            <h2 id="details-title">不再标注<br />已经掌握的词。</h2>
             <p>
-              Glossa 记住每个词的学习状态。快捷键、释义样式、AI 服务与 Anki 连接，都可以按您的阅读习惯调整。
+              在设置中选择适合自己的词表，管理已掌握词汇。翻译方式、快捷键、释义样式和 Anki 连接也在这里设置。
             </p>
           </div>
 
           <div class="details-grid">
-            <ol class="capability-list" aria-label="产品能力" data-reveal>
+            <ol class="capability-list" aria-label="可设置的功能" data-reveal>
               <li>
                 <span>01</span>
-                <div><strong>让熟词保持安静</strong><p>内置常见词表，并持续记住您已经掌握或忽略的词。</p></div>
+                <div><strong>管理已掌握词汇</strong><p>可按词表过滤，也可手动标记。显示过释义的词会自动记入已掌握词汇；加入 Anki 的词在设定天数内继续显示释义。</p></div>
               </li>
               <li>
                 <span>02</span>
-                <div><strong>使用您自己的 AI 服务</strong><p>连接 OpenAI 系列接口或 Glossa Backend，并保留您的自定义提示词。</p></div>
+                <div><strong>选择翻译方式</strong><p>可以使用普通 AI 翻译，也可以用 Jev 根据句子从本地词典中选择释义。</p></div>
               </li>
               <li>
                 <span>03</span>
-                <div><strong>按您的习惯调整释义</strong><p>颜色、字体、字号与透明度即时预览，让释义自然融入不同网页。</p></div>
+                <div><strong>调整释义样式</strong><p>修改颜色、字体、字号或透明度时，可以先在设置页查看效果。</p></div>
               </li>
               <li>
                 <span>04</span>
-                <div><strong>把词汇状态留在浏览器</strong><p>设置、熟词记录与释义缓存都留在您的浏览器里。</p></div>
+                <div><strong>在本地保存记录</strong><p>设置、词汇学习记录和释义缓存保存在当前浏览器中。</p></div>
               </li>
             </ol>
 
@@ -247,7 +247,7 @@
                   height="1100"
                   loading="lazy"
                   decoding="async"
-                  alt="Glossa 插件当前设置页，采用纸张底色、墨色排版和朱红操作按钮"
+                  alt="Glossa 设置页，可配置翻译方式、词汇过滤和释义样式"
                 />
               </div>
             </div>
@@ -259,9 +259,9 @@
         <div class="install-mark" aria-hidden="true">文</div>
         <div class="install-shell">
           <div class="install-heading" data-reveal>
-            <p class="eyebrow eyebrow-light"><span>03 / Install</span><span>Open source</span></p>
-            <h2 id="install-title">从下一篇<br />英文长文开始。</h2>
-            <p>最新版通过 GitHub Releases 提供。下载、解压、加载，三步完成安装。首次使用需配置并测试 AI，Anki 可选。</p>
+            <p class="eyebrow eyebrow-light"><span>安装说明</span></p>
+            <h2 id="install-title">安装<br /> Glossa</h2>
+            <p>从 GitHub 下载扩展，按这三个步骤安装。首次使用时，选择翻译方式并测试连接；需要制卡时再配置 Anki。</p>
             <a
               class="button button-light"
               href="https://github.com/JiaJunDeng5930/glossa/releases/latest"
@@ -273,16 +273,16 @@
           </div>
 
           <ol class="install-steps" data-reveal>
-            <li><span>01</span><div><strong>下载并解压</strong><p>从 Latest Release 下载扩展 ZIP，然后解压到固定目录。</p></div></li>
+            <li><span>01</span><div><strong>下载并解压</strong><p>从 GitHub 下载最新版扩展 ZIP，解压到之后不会移动或删除的文件夹。</p></div></li>
             <li><span>02</span><div><strong>打开扩展管理页</strong><p>在 Chrome 地址栏输入 <code>chrome://extensions</code>，开启开发者模式。</p></div></li>
-            <li><span>03</span><div><strong>加载扩展</strong><p>选择“加载已解压的扩展程序”，指向刚才解压的目录。</p></div></li>
+            <li><span>03</span><div><strong>加载扩展</strong><p>点击“加载已解压的扩展程序”，选择刚才解压的文件夹。</p></div></li>
           </ol>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p><strong>Glossa</strong><span>Contextual glosses for deep reading.</span></p>
+      <p><strong>Glossa</strong><span>英文网页生词释义扩展</span></p>
       <div><span>© 2026 Glossa</span><a href="https://github.com/JiaJunDeng5930/glossa" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </footer>
 

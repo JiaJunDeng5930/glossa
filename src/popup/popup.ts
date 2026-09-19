@@ -95,9 +95,9 @@ function renderAvailableState(): void {
   translateButton.disabled = false;
 }
 
-function renderUnavailable(message = "当前页面不支持扩展翻译"): void {
+function renderUnavailable(message = "这个页面不支持 Glossa 翻译"): void {
   currentTabId = undefined;
-  pageStateLabel.textContent = "此页面不可用";
+  pageStateLabel.textContent = "无法翻译此页面";
   pageStateMark.textContent = "不可用";
   pageStateMark.dataset.state = "unavailable";
   translateButtonLabel.textContent = "当前页面不可用";
@@ -153,7 +153,7 @@ function isTranslationBootingResponse(value: unknown): value is { phase: "bootin
 
 function messageFromControlResponse(value: unknown): string {
   if (hasControlError(value)) return userMessageForError(value.error, "runtime");
-  return "扩展运行时错误";
+  return "扩展暂时无法处理请求，请重新打开扩展或刷新页面。";
 }
 
 function hasControlError(value: unknown): value is { ok: false; error: Parameters<typeof userMessageForError>[0] } {
